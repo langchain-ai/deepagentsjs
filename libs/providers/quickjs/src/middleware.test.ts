@@ -340,6 +340,90 @@ describe("createCodeInterpreterMiddleware", () => {
   });
 
   describe("subagent primitive", () => {
+    it.each([0, -1, 1.5, Infinity, NaN, null, true, "40"])(
+      "rejects invalid concurrency %s",
+      (maxSubagentConcurrency) => {
+        expect(() =>
+          createCodeInterpreterMiddleware({ maxSubagentConcurrency } as any),
+        ).toThrow();
+      },
+    );
+
+    it.each([undefined, 2, 40])(
+      "limits dispatch concurrency to %s across evaluations",
+      async (maxSubagentConcurrency) => {
+        const limit = maxSubagentConcurrency ?? 32;
+        const releases: (() => void)[] = [];
+        const mockTaskTool = {
+          name: "task",
+          invoke: vi.fn(
+            () =>
+              new Promise<string>((resolve) => {
+                releases.push(() => resolve("ok"));
+              }),
+          ),
+        };
+        const middleware = createCodeInterpreterMiddleware({
+          maxSubagentConcurrency,
+        });
+        const handler = vi.fn().mockResolvedValue({ response: "ok" });
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "concurrency" } },
+            tools: [...(middleware.tools || []), mockTaskTool],
+          } as any,
+          handler,
+        );
+        expect(handler.mock.calls[0][0].systemMessage.text).toContain(
+          `above ${limit} concurrent subagent calls per REPL`,
+        );
+        const evalTool = middleware.tools![0] as any;
+        for (let round = 0; round < 2; round++) {
+          mockTaskTool.invoke.mockClear();
+          const result = evalTool.invoke(
+            {
+              code: `await Promise.all(Array.from({length: ${limit + 1}}, () => task({description: "work", subagentType: "worker"}))).then(r => r.length)`,
+            },
+            { configurable: { thread_id: "concurrency" } },
+          );
+          await vi.waitFor(() =>
+            expect(mockTaskTool.invoke).toHaveBeenCalledTimes(limit),
+          );
+          releases.shift()!();
+          await vi.waitFor(() =>
+            expect(mockTaskTool.invoke).toHaveBeenCalledTimes(limit + 1),
+          );
+          releases.splice(0).forEach((release) => release());
+          expect(await result).toContain(String(limit + 1));
+        }
+      },
+    );
+
+    it("keeps task disabled with a custom concurrency limit", async () => {
+      const middleware = createCodeInterpreterMiddleware({
+        subagents: false,
+        maxSubagentConcurrency: 40,
+      });
+      const handler = vi.fn().mockResolvedValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {},
+          tools: [...(middleware.tools || []), { name: "task" }],
+        } as any,
+        handler,
+      );
+      const result = await (middleware.tools![0] as any).invoke({
+        code: "typeof task",
+      });
+      expect(result).toContain("undefined");
+      expect(handler.mock.calls[0][0].systemMessage.text).not.toContain(
+        "Dispatching Subagents",
+      );
+    });
     beforeEach(() => {
       vi.clearAllMocks();
     });

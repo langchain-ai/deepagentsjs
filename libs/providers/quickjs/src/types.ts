@@ -82,13 +82,16 @@ export interface CodeInterpreterMiddlewareOptions {
    *
    * When `true` (default) and subagent specs are available, a `task()`
    * global is installed in the REPL that dispatches subagents
-   * programmatically with a fixed concurrency cap of 32.
+   * programmatically with the `maxSubagentConcurrency` cap.
    * Set to `false` to require subagent dispatch through the normal
    * `task` tool path.
    *
    * @default true
    */
   subagents?: boolean;
+
+  /** Maximum concurrent `task()` calls per REPL; positive integer, default 32. Higher limits increase host memory, downstream load, and cost; use external admission controls. */
+  maxSubagentConcurrency?: number;
 }
 
 /**

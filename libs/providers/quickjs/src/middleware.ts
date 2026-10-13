@@ -57,7 +57,10 @@ const DEFAULT_TOOL_NAME = "eval";
  * Render the subagent dispatch prompt section for the system message.
  * Ported from the Python `_SUBAGENT_SYSTEM_PROMPT_TEMPLATE`.
  */
-function renderSubagentPrompt(toolName: string): string {
+function renderSubagentPrompt(
+  toolName: string,
+  maxSubagentConcurrency: number,
+): string {
   return dedent`
 
     ### Dispatching Subagents with \`task\`
@@ -127,8 +130,9 @@ function renderSubagentPrompt(toolName: string): string {
     #### Fan out with bounded concurrency
 
     Dispatch independent work in parallel with \`Promise.all\`, but in explicit
-    batches around 10 so you do not launch hundreds of subagents at once. The bridge
-    enforces a hard per-REPL cap of 32 concurrent subagent calls.
+    batches around 10 as a starting recommendation, not a required limit. Adjust
+    batching to your workload and external admission controls. The bridge queues
+    excess calls above ${maxSubagentConcurrency} concurrent subagent calls per REPL.
 
     \`\`\`javascript
     const files = ["/src/a.ts", "/src/b.ts", "/src/c.ts"]; // found while exploring
@@ -399,11 +403,10 @@ export function createCodeInterpreterMiddleware(
     toolName = DEFAULT_TOOL_NAME,
     captureConsole = true,
     subagents = true,
+    maxSubagentConcurrency = DEFAULT_MAX_SUBAGENT_CONCURRENCY,
   } = options;
 
-  const maxSubagentConcurrency = subagents
-    ? DEFAULT_MAX_SUBAGENT_CONCURRENCY
-    : 0;
+  z.number().int().positive().parse(maxSubagentConcurrency);
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
     throw new Error("`maxPtcCalls` must be >= 1 or null");
@@ -488,7 +491,7 @@ export function createCodeInterpreterMiddleware(
         captureConsole,
         sessionId: threadId,
         subagentBridge:
-          taskTool && maxSubagentConcurrency > 0
+          taskTool && subagents
             ? {
                 dispatch: createBridgeDispatch(taskTool, config),
                 maxConcurrency: maxSubagentConcurrency,
@@ -496,7 +499,7 @@ export function createCodeInterpreterMiddleware(
             : undefined,
       });
 
-      if (taskTool && maxSubagentConcurrency > 0) {
+      if (taskTool && subagents) {
         session.updateBridgeDispatch(createBridgeDispatch(taskTool, config));
       }
 
@@ -528,7 +531,7 @@ export function createCodeInterpreterMiddleware(
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools);
 
-      if (!taskTool && maxSubagentConcurrency > 0) {
+      if (!taskTool && subagents) {
         taskTool = findTaskTool(agentTools);
       }
 
@@ -546,8 +549,8 @@ export function createCodeInterpreterMiddleware(
         });
 
       const subagentPrompt =
-        taskTool && maxSubagentConcurrency > 0
-          ? renderSubagentPrompt(toolName)
+        taskTool && subagents
+          ? renderSubagentPrompt(toolName, maxSubagentConcurrency)
           : "";
 
       const systemMessage = request.systemMessage
