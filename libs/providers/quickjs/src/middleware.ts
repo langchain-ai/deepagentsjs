@@ -406,7 +406,9 @@ export function createCodeInterpreterMiddleware(
     maxSubagentConcurrency = DEFAULT_MAX_SUBAGENT_CONCURRENCY,
   } = options;
 
-  z.number().int().positive().parse(maxSubagentConcurrency);
+  if (!Number.isInteger(maxSubagentConcurrency) || maxSubagentConcurrency < 1) {
+    throw new Error("`maxSubagentConcurrency` must be a positive integer");
+  }
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
     throw new Error("`maxPtcCalls` must be >= 1 or null");
