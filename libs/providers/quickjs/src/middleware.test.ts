@@ -377,7 +377,7 @@ describe("createCodeInterpreterMiddleware", () => {
           handler,
         );
         expect(handler.mock.calls[0][0].systemMessage.text).toContain(
-          `above ${limit} concurrent subagent calls per REPL`,
+          `cap of ${limit} concurrent subagent calls`,
         );
         const evalTool = middleware.tools![0] as any;
         for (let round = 0; round < 2; round++) {
