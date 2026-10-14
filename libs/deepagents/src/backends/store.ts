@@ -38,6 +38,7 @@ import {
   isFileDataV1,
   isTextMimeType,
   migrateToFileDataV2,
+  normalizePath,
   normalizeReadPagination,
   performStringReplacement,
   updateFileData,
@@ -408,6 +409,20 @@ export class StoreBackend implements BackendProtocolV2 {
     };
   }
 
+  /** Preserve exact legacy keys while storing newly created files canonically. */
+  private async getFileItem(
+    store: BaseStore,
+    namespace: string[],
+    filePath: string,
+  ): Promise<Item | null> {
+    const canonical = normalizePath(filePath);
+    if (canonical !== filePath) {
+      const legacy = await store.get(namespace, filePath);
+      if (legacy) return legacy;
+    }
+    return await store.get(namespace, canonical);
+  }
+
   /**
    * Search store with automatic pagination to retrieve all results.
    *
@@ -471,7 +486,8 @@ export class StoreBackend implements BackendProtocolV2 {
     const subdirs = new Set<string>();
 
     // Normalize path to have trailing slash for proper prefix matching
-    const normalizedPath = path.endsWith("/") ? path : path + "/";
+    const directory = normalizePath(path);
+    const normalizedPath = directory === "/" ? "/" : directory + "/";
 
     for (const item of items) {
       const itemKey = String(item.key);
@@ -602,7 +618,7 @@ export class StoreBackend implements BackendProtocolV2 {
   async readRaw(filePath: string): Promise<ReadRawResult> {
     const store = this.getStore();
     const namespace = this.getNamespace();
-    const item = await store.get(namespace, filePath);
+    const item = await this.getFileItem(store, namespace, filePath);
 
     if (!item) {
       return { error: `File '${filePath}' not found` };
@@ -618,20 +634,21 @@ export class StoreBackend implements BackendProtocolV2 {
     const store = this.getStore();
     const namespace = this.getNamespace();
 
-    const existing = await store.get(namespace, filePath);
+    const existing = await this.getFileItem(store, namespace, filePath);
+    const key = existing?.key ?? normalizePath(filePath);
     const existingFileData = existing
       ? this.convertStoreItemToFileData(existing)
       : undefined;
 
     const fileData = createWriteFileData(
-      filePath,
+      key,
       content,
       this.fileFormat,
       existingFileData,
     );
     const storeValue = this.convertFileDataToStoreValue(fileData);
-    await store.put(namespace, filePath, storeValue);
-    return { path: filePath, filesUpdate: null };
+    await store.put(namespace, key, storeValue);
+    return { path: key, filesUpdate: null };
   }
 
   /**
@@ -643,7 +660,14 @@ export class StoreBackend implements BackendProtocolV2 {
     const store = this.getStore();
     const namespace = this.getNamespace();
     const items = await this.searchStorePaginated(store, namespace);
-    const base = trimTrailingSlashes(filePath) || "/";
+    const rawBase = trimTrailingSlashes(filePath) || "/";
+    const rawPrefix = rawBase === "/" ? "/" : `${rawBase}/`;
+    const hasLegacyTarget = items.some(
+      (item) => item.key === rawBase || item.key.startsWith(rawPrefix),
+    );
+    const base = hasLegacyTarget
+      ? rawBase
+      : trimTrailingSlashes(normalizePath(filePath)) || "/";
     const prefix = base === "/" ? "/" : `${base}/`;
     const keys = items
       .map((item) => String(item.key))
@@ -689,7 +713,7 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
 
     // Get existing file
-    const item = await store.get(namespace, filePath);
+    const item = await this.getFileItem(store, namespace, filePath);
     if (!item) {
       return { error: `Error: File '${filePath}' not found` };
     }
@@ -713,8 +737,9 @@ export class StoreBackend implements BackendProtocolV2 {
 
       // Update file in store
       const storeValue = this.convertFileDataToStoreValue(newFileData);
-      await store.put(namespace, filePath, storeValue);
-      return { path: filePath, filesUpdate: null, occurrences: occurrences };
+      const key = item.key;
+      await store.put(namespace, key, storeValue);
+      return { path: key, filesUpdate: null, occurrences: occurrences };
     } catch (e: any) {
       return { error: `Error: ${e.message}` };
     }
@@ -805,8 +830,10 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
     const responses: FileUploadResponse[] = [];
 
-    for (const [path, content] of files) {
+    for (const [rawPath, content] of files) {
       try {
+        const existing = await this.getFileItem(store, namespace, rawPath);
+        const path = existing?.key ?? normalizePath(rawPath);
         const mimeType = getMimeType(path);
         const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
 
@@ -825,9 +852,9 @@ export class StoreBackend implements BackendProtocolV2 {
 
         const storeValue = this.convertFileDataToStoreValue(fileData);
         await store.put(namespace, path, storeValue);
-        responses.push({ path, error: null });
+        responses.push({ path: rawPath, error: null });
       } catch {
-        responses.push({ path, error: "invalid_path" });
+        responses.push({ path: rawPath, error: "invalid_path" });
       }
     }
 
@@ -845,11 +872,16 @@ export class StoreBackend implements BackendProtocolV2 {
     const namespace = this.getNamespace();
     const responses: FileDownloadResponse[] = [];
 
-    for (const path of paths) {
+    for (const rawPath of paths) {
+      const path = normalizePath(rawPath);
       try {
-        const item = await store.get(namespace, path);
+        const item = await this.getFileItem(store, namespace, rawPath);
         if (!item) {
-          responses.push({ path, content: null, error: "file_not_found" });
+          responses.push({
+            path: rawPath,
+            content: null,
+            error: "file_not_found",
+          });
           continue;
         }
 
@@ -858,12 +890,20 @@ export class StoreBackend implements BackendProtocolV2 {
 
         if (typeof fileDataV2.content === "string") {
           const content = new TextEncoder().encode(fileDataV2.content);
-          responses.push({ path, content, error: null });
+          responses.push({ path: rawPath, content, error: null });
         } else {
-          responses.push({ path, content: fileDataV2.content, error: null });
+          responses.push({
+            path: rawPath,
+            content: fileDataV2.content,
+            error: null,
+          });
         }
       } catch {
-        responses.push({ path, content: null, error: "file_not_found" });
+        responses.push({
+          path: rawPath,
+          content: null,
+          error: "file_not_found",
+        });
       }
     }
 
