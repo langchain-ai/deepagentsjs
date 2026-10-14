@@ -52,6 +52,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import type { ConfigurableModel } from "langchain/chat_models/universal";
 import {
   Command,
   Overwrite,
@@ -73,6 +74,7 @@ import {
   type StructuredToolParams,
 } from "@langchain/core/tools";
 import { isOpenAITool } from "@langchain/core/language_models/base";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { convertToOpenAIFunction } from "@langchain/core/utils/function_calling";
 import { toJsonSchema } from "@langchain/core/utils/json_schema";
 import { isInteropZodSchema } from "@langchain/core/utils/types";
@@ -88,6 +90,7 @@ import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
 import { ConfigurationError } from "../errors.js";
+import { getModelProvider } from "../utils.js";
 import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
@@ -1024,22 +1027,6 @@ export function validateModulePath(raw: unknown): string | undefined {
 /** Tool `extras` key (and provider field) that withholds a tool's schema until searched for. */
 const DEFER_LOADING = "defer_loading";
 
-/**
- * Model ID prefixes that accept an inline `tool_definition` mid-conversation.
- *
- * `@langchain/anthropic` sends any mid-conversation system message in place,
- * without gating on the model, so this list is the only guard.
- */
-const ANTHROPIC_INLINE_TOOL_MODELS = [
-  "claude-opus-5",
-  "claude-fable-5",
-  "claude-mythos-5",
-  "claude-opus-4-8",
-];
-
-/** Models whose Responses API accepts an `additional_tools` input item, matched with or without a `-` suffix such as a snapshot date. */
-const OPENAI_INLINE_TOOL_MODELS = ["gpt-6", "gpt-5.6"];
-
 /** Root `input_schema` keys the Anthropic API rejects, failing the whole request. */
 const ANTHROPIC_ROOT_COMBINATORS = ["oneOf", "anyOf", "allOf"] as const;
 
@@ -1253,7 +1240,7 @@ async function discloseSkillTools<TRequest extends ModelRequest<any, any>>(
   if (disclosed.size === 0) return { request, record: {} };
 
   const chatModel = await resolveChatModel(request.model, request.runtime);
-  if (llmType(chatModel) === "anthropic") {
+  if (chatModel && getModelProvider(chatModel) === "anthropic") {
     withholdRootCombinatorTools(disclosed);
   }
   const gatedNames = [...disclosed.keys()]
@@ -1263,7 +1250,7 @@ async function discloseSkillTools<TRequest extends ModelRequest<any, any>>(
     gatedNames.map((name) => [name, disclosed.get(name)!.includeName!]),
   );
   if (disclosed.size === 0) return { request, record };
-  const build = inlineBlockBuilder(chatModel);
+  const build = chatModel && inlineBlockBuilder(chatModel);
   if (build !== undefined) {
     return {
       request: {
@@ -1436,7 +1423,8 @@ function unwrapBinding(model: unknown): unknown {
 }
 
 /**
- * Return the concrete chat model a request will call.
+ * Return the concrete chat model a request will call, or `undefined` if it
+ * isn't a chat model.
  *
  * Resolves a `ConfigurableModel`, which a string `model` always becomes, to
  * the instance it will call with this run's `configurable`. Without
@@ -1445,34 +1433,49 @@ function unwrapBinding(model: unknown): unknown {
  * unconditionally would build one per thread.
  */
 async function resolveChatModel(
-  model: unknown,
+  model: ModelRequest["model"],
   runtime: Runtime<unknown>,
-): Promise<unknown> {
-  const current = unwrapBinding(model) as {
-    _queuedMethodOperations?: unknown;
-    _getModelInstance?: (config?: object) => Promise<unknown>;
-    _modelParams?: (config: object) => Record<string, unknown>;
-  };
-  // Duck-typed as langchain's own (unexported) `isConfigurableModel`.
-  if (
-    current?._queuedMethodOperations === undefined ||
-    typeof current._getModelInstance !== "function"
-  ) {
-    return current;
+): Promise<BaseChatModel | undefined> {
+  const current = unwrapBinding(model);
+  if (!isConfigurableModel(current)) {
+    return isBaseChatModel(current) ? current : undefined;
   }
   const configurable = runtime.configurable ?? {};
-  const overrides = current._modelParams?.({ configurable }) ?? {};
-  const instance =
+  const overrides = current._modelParams({ configurable });
+  const instance = unwrapBinding(
     Object.keys(overrides).length > 0
       ? await current._getModelInstance({ configurable })
-      : await current._getModelInstance();
-  return unwrapBinding(instance);
+      : await current._getModelInstance(),
+  );
+  return isBaseChatModel(instance) ? instance : undefined;
 }
 
-/** Return a chat model's `_llmType()`, which tells providers apart. */
-function llmType(model: unknown): string | undefined {
-  const fn = (model as { _llmType?: () => string } | null)?._llmType;
-  return typeof fn === "function" ? fn.call(model) : undefined;
+/**
+ * Duck-typed as langchain's own (unexported) `isConfigurableModel`, since an
+ * `instanceof` check fails across copies of the package.
+ */
+function isConfigurableModel(model: unknown): model is ConfigurableModel {
+  return (
+    typeof model === "object" &&
+    model !== null &&
+    "_queuedMethodOperations" in model &&
+    "_getModelInstance" in model &&
+    typeof model._getModelInstance === "function"
+  );
+}
+
+/**
+ * Duck-typed as langchain's own (unexported) `isBaseChatModel`, since an
+ * `instanceof` check fails across copies of `@langchain/core`.
+ */
+function isBaseChatModel(model: unknown): model is BaseChatModel {
+  return (
+    typeof model === "object" &&
+    model !== null &&
+    "_streamResponseChunks" in model &&
+    "_llmType" in model &&
+    typeof model._llmType === "function"
+  );
 }
 
 /** Builds the provider-native block that makes one tool callable from its position on. */
@@ -1482,36 +1485,21 @@ type BlockBuilder = (tool: StructuredToolParams) => Record<string, unknown>;
  * Return how `chatModel` is given a tool mid-conversation, or `undefined` if
  * it can't be.
  *
- * The one place that decides support, so a model-profile capability can
- * replace the allowlists later.
+ * The profile's `midConversationTools` decides whether, and the provider
+ * decides the block.
  */
-function inlineBlockBuilder(chatModel: unknown): BlockBuilder | undefined {
-  const { model: name, useResponsesApi } = chatModel as {
-    model?: unknown;
-    useResponsesApi?: unknown;
-  };
-  if (typeof name !== "string") return undefined;
-  const type = llmType(chatModel);
-  if (
-    type === "anthropic" &&
-    ANTHROPIC_INLINE_TOOL_MODELS.some((prefix) => name.startsWith(prefix))
-  ) {
-    return anthropicToolAddition;
+function inlineBlockBuilder(
+  chatModel: BaseChatModel,
+): BlockBuilder | undefined {
+  if (!chatModel.profile.midConversationTools) return undefined;
+  switch (getModelProvider(chatModel)) {
+    case "anthropic":
+      return anthropicToolAddition;
+    case "openai":
+      return openaiAdditionalTools;
+    default:
+      return undefined;
   }
-  // `_llmType()` tells `ChatOpenAI` apart from `AzureChatOpenAI`. Only an
-  // explicit `useResponsesApi`: a `ChatOpenAI` that routes to the Responses
-  // API on its own takes the fallback, which costs the cache but can't send
-  // `additional_tools` on Chat Completions.
-  if (
-    type === "openai" &&
-    useResponsesApi === true &&
-    OPENAI_INLINE_TOOL_MODELS.some(
-      (model) => name === model || name.startsWith(`${model}-`),
-    )
-  ) {
-    return openaiAdditionalTools;
-  }
-  return undefined;
 }
 
 /**
