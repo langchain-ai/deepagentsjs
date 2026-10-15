@@ -126,6 +126,22 @@ describe.skipIf(isWindows)("VfsBackend Integration", () => {
         "project/src/main.ts",
       ]);
 
+      const fromRoot = await sandbox.grep("target", "/", "project/src/*.ts");
+      expect(fromRoot.error).toBeUndefined();
+      expect(fromRoot.matches?.map((match) => match.path)).toEqual([
+        "project/src/main.ts",
+      ]);
+
+      const trailingSlash = await sandbox.grep(
+        "target",
+        "/project/",
+        "src/*.ts",
+      );
+      expect(trailingSlash.error).toBeUndefined();
+      expect(trailingSlash.matches?.map((match) => match.path)).toEqual([
+        "project/src/main.ts",
+      ]);
+
       const recursive = await sandbox.grep("target", "/project", "src/**/*.ts");
       expect(recursive.error).toBeUndefined();
       expect(recursive.matches?.map((match) => match.path).sort()).toEqual([
