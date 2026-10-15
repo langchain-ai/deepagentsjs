@@ -32,6 +32,7 @@ import { ConfigurationError } from "./errors.js";
 import type { SystemPromptConfig } from "./compat.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
+import { createParentNotifierMiddleware } from "./middleware/parent_notifier.js";
 import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import { mergeMiddleware, mergeMiddlewareStack } from "./middleware/utils.js";
 import {
@@ -518,6 +519,8 @@ export function createDeepAgent<
 
   // Runtime middleware array: combine core middleware, custom overrides, and tail middleware.
   const coreMiddleware: AgentMiddleware[] = [
+    // Wakes the agent that launched this one as an async subagent, when its run ends.
+    createParentNotifierMiddleware(),
     fsMiddleware,
     subagentMiddleware,
     summarizationMiddleware,

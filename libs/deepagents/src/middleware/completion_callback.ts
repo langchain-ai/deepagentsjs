@@ -3,6 +3,10 @@
  *
  * @experimental - this middleware is experimental and may change in future releases.
  *
+ * @deprecated Deep agents now notify the agent that launched them on their
+ * own, through the built-in parent notifier that `createDeepAgent` attaches.
+ * Using both sends the parent two notifications per task.
+ *
  * This middleware sends a notification to a callback thread when a subagent
  * completes successfully or raises an error. The callback agent can then
  * process that notification instead of relying only on polling via
@@ -241,6 +245,9 @@ export function extractLastMessage(
  *
  * If `callbackThreadId` is not present in state, the middleware does
  * nothing.
+ *
+ * @deprecated `createDeepAgent` now notifies the launching agent on its own;
+ * adding this middleware too sends the parent two notifications per task.
  *
  * @param options - Configuration options.
  * @returns An `AgentMiddleware` instance.
