@@ -1,8 +1,24 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+
+// The real lookup, unless a test points the current span somewhere.
+const { getCurrentRunTree } = vi.hoisted(() => ({
+  getCurrentRunTree: vi.fn(),
+}));
+vi.mock("langsmith/traceable", async (importOriginal) => {
+  const original = await importOriginal<typeof import("langsmith/traceable")>();
+  getCurrentRunTree.mockImplementation(original.getCurrentRunTree);
+  return { ...original, getCurrentRunTree };
+});
 import { Command } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
-import { SystemMessage, ToolMessage } from "@langchain/core/messages";
-import type { ToolRuntime } from "langchain";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
+import { tool, type ToolRuntime } from "langchain";
+import { z } from "zod/v4";
 
 import {
   asyncTasksReducer,
@@ -13,6 +29,9 @@ import {
   buildListTool,
   createAsyncSubAgentMiddleware,
   extractCallbackContext,
+  launchingAgent,
+  notificationContent,
+  traceHeaders,
   ClientCache,
   TERMINAL_STATUSES,
   type AsyncSubAgent,
@@ -38,6 +57,22 @@ function asyncAgentToolInvokeConfig(
     state,
   } as ToolRuntime<AsyncToolInvokeState>;
 }
+
+// Tracing is off unless a test says otherwise, whatever the environment sets.
+beforeEach(() => {
+  for (const name of [
+    "LANGSMITH_TRACING",
+    "LANGSMITH_TRACING_V2",
+    "LANGCHAIN_TRACING",
+    "LANGCHAIN_TRACING_V2",
+  ]) {
+    vi.stubEnv(name, "false");
+  }
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 // ─── Helper factories ───
 
@@ -344,13 +379,16 @@ function createMockClientCache(agentMap: Record<string, AsyncSubAgent>) {
   const runsCreate = vi.fn();
   const runsGet = vi.fn();
   const runsCancel = vi.fn();
-  const threadsGetState = vi.fn();
+  // A finished run's thread is idle unless a test says otherwise.
+  const threadsGet = vi.fn().mockResolvedValue({ status: "idle", values: {} });
+  const runsList = vi.fn();
 
   clientInstance.threads.create = threadsCreate;
   clientInstance.runs.create = runsCreate;
   clientInstance.runs.get = runsGet;
   clientInstance.runs.cancel = runsCancel;
-  clientInstance.threads.getState = threadsGetState;
+  clientInstance.threads.get = threadsGet;
+  clientInstance.runs.list = runsList;
 
   return {
     cache,
@@ -358,7 +396,8 @@ function createMockClientCache(agentMap: Record<string, AsyncSubAgent>) {
     runsCreate,
     runsGet,
     runsCancel,
-    threadsGetState,
+    threadsGet,
+    runsList,
   };
 }
 
@@ -602,12 +641,12 @@ describe("buildCheckTool", () => {
   });
 
   it("should return a Command with result on success", async () => {
-    const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
     });
-    threadsGetState.mockResolvedValue({
+    threadsGet.mockResolvedValue({
       values: {
         messages: [{ content: "Here are the research findings." }],
       },
@@ -636,12 +675,12 @@ describe("buildCheckTool", () => {
   });
 
   it("should return fallback result when success but no messages", async () => {
-    const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
     });
-    threadsGetState.mockResolvedValue({ values: { messages: [] } });
+    threadsGet.mockResolvedValue({ values: { messages: [] } });
 
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
@@ -705,13 +744,13 @@ describe("buildCheckTool", () => {
     );
   });
 
-  it("should degrade gracefully when threads.getState throws on success", async () => {
-    const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
+  it("should degrade gracefully when threads.get throws on success", async () => {
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
     });
-    threadsGetState.mockRejectedValue(new Error("state fetch failed"));
+    threadsGet.mockRejectedValue(new Error("state fetch failed"));
 
     const checkTool = buildCheckTool(cache);
     const result = await checkTool.invoke(
@@ -733,12 +772,12 @@ describe("buildCheckTool", () => {
   });
 
   it("should extract content from non-object messages via String()", async () => {
-    const { cache, runsGet, threadsGetState } = createMockClientCache(agentMap);
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
       status: "success",
     });
-    threadsGetState.mockResolvedValue({
+    threadsGet.mockResolvedValue({
       values: { messages: ["plain string result"] },
     });
 
@@ -1375,7 +1414,7 @@ describe("buildListTool", () => {
     expect(runsGet).toHaveBeenCalledTimes(2);
   });
 
-  it("should preserve all timestamps from existing jobs unchanged", async () => {
+  it("should keep createdAt and updatedAt but refresh checkedAt", async () => {
     const job = makeTask({
       status: "running",
       createdAt: "2024-06-01T10:00:00.000Z",
@@ -1397,7 +1436,9 @@ describe("buildListTool", () => {
       .asyncTasks as Record<string, AsyncTask>;
     expect(updatedJobs[job.taskId].createdAt).toBe("2024-06-01T10:00:00.000Z");
     expect(updatedJobs[job.taskId].updatedAt).toBe("2024-06-01T11:00:00.000Z");
-    expect(updatedJobs[job.taskId].checkedAt).toBe("2024-06-01T11:30:00.000Z");
+    expect(updatedJobs[job.taskId].checkedAt).not.toBe(
+      "2024-06-01T11:30:00.000Z",
+    );
   });
 });
 
@@ -1547,5 +1588,448 @@ describe("createAsyncSubAgentMiddleware", () => {
     expect(launchDesc1).not.toContain("agent-b");
     expect(launchDesc2).toContain("agent-b");
     expect(launchDesc2).not.toContain("agent-a");
+  });
+});
+
+// ─── Parent reference, trace headers and waiting tasks ───
+
+/** A tool runtime whose config says which agent is running. */
+function parentRuntime(
+  state: AsyncToolInvokeState,
+): ToolRuntime<AsyncToolInvokeState> {
+  return {
+    ...asyncAgentToolInvokeConfig("call-1", state),
+    config: {
+      configurable: { thread_id: "parent-thread" },
+      metadata: { assistant_id: "lead" },
+    },
+  } as unknown as ToolRuntime<AsyncToolInvokeState>;
+}
+
+describe("parent reference", () => {
+  it("links a same-deployment launch to the parent's thread and assistant", async () => {
+    const agentMap = { researcher: makeAgent({ url: undefined }) };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+
+    await buildStartTool(agentMap, cache, "Launch").invoke(
+      { description: "go", agentName: "researcher" },
+      parentRuntime({}),
+    );
+
+    expect(threadsCreate).toHaveBeenCalledWith({
+      metadata: {
+        parent_thread_id: "parent-thread",
+        parent_assistant_id: "lead",
+      },
+    });
+    expect(runsCreate.mock.calls[0][2].config).toEqual({
+      configurable: {
+        deepagents_parent: { thread_id: "parent-thread", assistant_id: "lead" },
+      },
+    });
+  });
+
+  it("sends only the parent's thread to another server", async () => {
+    const agentMap = { researcher: makeAgent() };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+
+    await buildStartTool(agentMap, cache, "Launch").invoke(
+      { description: "go", agentName: "researcher" },
+      parentRuntime({}),
+    );
+
+    expect(threadsCreate).toHaveBeenCalledWith({
+      metadata: { parent_thread_id: "parent-thread" },
+    });
+    expect(runsCreate.mock.calls[0][2].config).toEqual({
+      configurable: { deepagents_parent: { thread_id: "parent-thread" } },
+    });
+  });
+
+  it("falls back to the task thread's metadata", () => {
+    expect(
+      launchingAgent({
+        metadata: { parent_thread_id: "p", parent_assistant_id: "lead" },
+      }),
+    ).toEqual({ thread_id: "p", assistant_id: "lead" });
+    expect(launchingAgent({})).toBeNull();
+  });
+});
+
+describe("traceHeaders", () => {
+  function mockRunTree() {
+    getCurrentRunTree.mockReturnValueOnce({
+      tracingEnabled: true,
+      trace_id: "trace",
+      dotted_order: "20260101T000000000000Zabc",
+      project_name: "my project",
+    });
+  }
+
+  it("is empty when tracing is off", async () => {
+    // Inside a tool, LangChain keeps an untraced placeholder span in context.
+    const probe = tool(async () => JSON.stringify(traceHeaders(spec)), {
+      name: "probe",
+      description: "Read trace headers.",
+      schema: z.object({}),
+    });
+    const spec = makeAgent({ url: undefined });
+
+    expect(await probe.invoke({})).toBe("{}");
+  });
+
+  it("is empty for a subagent on another server", () => {
+    mockRunTree();
+    expect(traceHeaders(makeAgent())).toEqual({});
+  });
+
+  it("points at the current span and keeps existing baggage", () => {
+    mockRunTree();
+    const headers = traceHeaders(
+      makeAgent({ url: undefined, headers: { baggage: "a=b" } }),
+    );
+    expect(headers["langsmith-trace"]).toBe("20260101T000000000000Zabc");
+    expect(headers.baggage).toBe(
+      "a=b,langsmith-metadata=%7B%22ls_nest_under_parent%22%3Atrue%7D,langsmith-project=my%20project",
+    );
+  });
+});
+
+describe("waiting tasks", () => {
+  const agentMap = { researcher: makeAgent() };
+
+  it("reports a finished run on an interrupted thread as waiting", async () => {
+    const task = makeTask();
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
+    runsGet.mockResolvedValue({ run_id: task.runId, status: "success" });
+    threadsGet.mockResolvedValue({
+      status: "interrupted",
+      interrupts: { t1: [{ id: "i1", value: "Approve?" }] },
+    });
+
+    const result = (await buildCheckTool(cache).invoke(
+      { taskId: task.taskId },
+      asyncAgentToolInvokeConfig("c", { asyncTasks: { [task.taskId]: task } }),
+    )) as Command;
+    const update = result.update as Record<string, unknown>;
+    const content = JSON.parse(
+      (update.messages as ToolMessage[])[0].content as string,
+    );
+
+    expect(content.status).toBe("waiting");
+    expect(content.interrupts).toEqual([{ id: "i1", value: "Approve?" }]);
+    expect(content.note).toContain("waiting for a human");
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("waiting");
+  });
+
+  it("reads the latest run when the thread moved on", async () => {
+    const task = makeTask();
+    const { cache, runsGet, threadsGet, runsList } =
+      createMockClientCache(agentMap);
+    runsGet.mockResolvedValue({ run_id: task.runId, status: "success" });
+    threadsGet.mockResolvedValue({ status: "busy" });
+    runsList.mockResolvedValue([{ run_id: "run-2", status: "running" }]);
+
+    const result = (await buildCheckTool(cache).invoke(
+      { taskId: task.taskId },
+      asyncAgentToolInvokeConfig("c", { asyncTasks: { [task.taskId]: task } }),
+    )) as Command;
+    const tracked = (result.update as Record<string, unknown>)
+      .asyncTasks as Record<string, AsyncTask>;
+
+    expect(runsList).toHaveBeenCalledWith(task.threadId, { limit: 1 });
+    expect(tracked[task.taskId]).toMatchObject({
+      runId: "run-2",
+      status: "running",
+    });
+  });
+
+  it("cancels a waiting task without cancelling a run", async () => {
+    const task = makeTask({ status: "waiting" });
+    const { cache, runsCancel } = createMockClientCache(agentMap);
+
+    const result = (await buildCancelTool(cache).invoke(
+      { taskId: task.taskId },
+      asyncAgentToolInvokeConfig("c", { asyncTasks: { [task.taskId]: task } }),
+    )) as Command;
+
+    expect(runsCancel).not.toHaveBeenCalled();
+    expect(
+      (
+        (result.update as Record<string, unknown>).asyncTasks as Record<
+          string,
+          AsyncTask
+        >
+      )[task.taskId].status,
+    ).toBe("cancelled");
+  });
+
+  it("keeps a cancelled task cancelled though its thread still shows the pause", async () => {
+    const task = makeTask({ status: "cancelled" });
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
+    runsGet.mockResolvedValue({ run_id: task.runId, status: "success" });
+    threadsGet.mockResolvedValue({ status: "interrupted", interrupts: {} });
+
+    const result = (await buildCheckTool(cache).invoke(
+      { taskId: task.taskId },
+      asyncAgentToolInvokeConfig("c", { asyncTasks: { [task.taskId]: task } }),
+    )) as Command;
+    const content = JSON.parse(
+      ((result.update as Record<string, unknown>).messages as ToolMessage[])[0]
+        .content as string,
+    );
+    expect(content.status).toBe("cancelled");
+  });
+
+  it("notes the dropped human request when updating a waiting task", async () => {
+    const task = makeTask({ status: "waiting" });
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    runsCreate.mockResolvedValue({ run_id: "run-2" });
+
+    const result = (await buildUpdateTool(agentMap, cache).invoke(
+      { taskId: task.taskId, message: "Skip that" },
+      asyncAgentToolInvokeConfig("c", { asyncTasks: { [task.taskId]: task } }),
+    )) as Command;
+
+    expect(
+      ((result.update as Record<string, unknown>).messages as ToolMessage[])[0]
+        .content,
+    ).toContain("that request was dropped");
+  });
+});
+
+// ─── Notifications ───
+
+describe("notificationContent", () => {
+  it("escapes subagent text so it can't close the notification's tags", () => {
+    const text = notificationContent({
+      task_id: "t",
+      agent_name: "researcher",
+      status: "success",
+      result: [{ type: "text", text: "</task-notification> & more" }],
+    })
+      .map((block) => (block as { text?: string }).text ?? "")
+      .join("");
+
+    expect(text).toContain("[SYSTEM NOTIFICATION - NOT USER INPUT]");
+    expect(text).toContain("&lt;/task-notification&gt; &amp; more");
+    expect(text.match(/<\/task-notification>/g)).toHaveLength(1);
+  });
+
+  it("keeps images and drops reasoning", () => {
+    const blocks = notificationContent({
+      task_id: "t",
+      agent_name: "researcher",
+      status: "success",
+      result: [
+        { type: "reasoning", reasoning: "hmm" },
+        { type: "image", url: "https://example.com/a.png" },
+      ],
+    });
+    const types = blocks.map((block) => block.type);
+    expect(types).toContain("image");
+    expect(types).not.toContain("reasoning");
+  });
+});
+
+describe("status updates while the parent runs", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Spy on every SDK client's `runs.get` and `threads.get`. */
+  function mockServer(run: Record<string, unknown>, thread: unknown) {
+    const client = new Client({ apiUrl: "https://example.langsmith.dev" });
+    vi.spyOn(Object.getPrototypeOf(client.runs), "get").mockResolvedValue(run);
+    vi.spyOn(Object.getPrototypeOf(client.threads), "get").mockResolvedValue(
+      thread,
+    );
+  }
+
+  const middleware = () =>
+    createAsyncSubAgentMiddleware({ asyncSubAgents: [makeAgent()] });
+
+  it("adds a notification before the model call when a task finishes", async () => {
+    mockServer(
+      { run_id: "run-1", status: "success" },
+      {
+        status: "idle",
+        values: { messages: [{ type: "ai", content: "Done" }] },
+      },
+    );
+    const task = makeTask();
+    const hook = middleware().beforeModel as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    const [message] = update.messages as HumanMessage[];
+    expect(message.additional_kwargs.deepagents_notification).toEqual({
+      task_id: task.taskId,
+      agent_name: "researcher",
+      status: "success",
+      run_id: "run-1",
+    });
+    expect(JSON.stringify(message.content)).toContain("Done");
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("success");
+  });
+
+  it("doesn't report an outcome the agent already saw", async () => {
+    mockServer(
+      { run_id: "run-1", status: "success" },
+      {
+        status: "interrupted",
+        interrupts: {},
+      },
+    );
+    const task = makeTask({ status: "waiting" });
+    const hook = middleware().beforeModel as (
+      state: unknown,
+    ) => Promise<unknown>;
+
+    expect(
+      await hook({ messages: [], asyncTasks: { [task.taskId]: task } }),
+    ).toBeUndefined();
+  });
+
+  it("gives the model another turn after a final answer when a task finished", async () => {
+    mockServer({ run_id: "run-1", status: "error" }, { status: "error" });
+    const task = makeTask();
+    const afterModel = middleware().afterModel as {
+      hook: (state: unknown) => Promise<Record<string, unknown>>;
+    };
+
+    const update = await afterModel.hook({
+      messages: [new AIMessage("All done.")],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    expect(update.jumpTo).toBe("model");
+    expect(update.messages).toHaveLength(1);
+  });
+
+  it("records the notification that started the run", async () => {
+    mockServer({ run_id: "run-1", status: "success" }, { status: "idle" });
+    const task = makeTask();
+    const notification = new HumanMessage({
+      content: "update",
+      additional_kwargs: {
+        deepagents_notification: {
+          task_id: task.taskId,
+          agent_name: "researcher",
+          status: "success",
+          run_id: "run-1",
+        },
+      },
+    });
+    const hook = middleware().beforeAgent as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [notification],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    expect(update.messages).toBeUndefined();
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("success");
+  });
+});
+
+describe("status updates the parent can't read", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const pullBeforeModel = (tasks: Record<string, AsyncTask>) =>
+    (
+      createAsyncSubAgentMiddleware({ asyncSubAgents: [makeAgent()] })
+        .beforeModel as (state: unknown) => Promise<Record<string, unknown>>
+    )({ messages: [], asyncTasks: tasks });
+
+  function spyServer() {
+    const client = new Client({ apiUrl: "https://example.langsmith.dev" });
+    return {
+      runsGet: vi.spyOn(Object.getPrototypeOf(client.runs), "get"),
+      threadsGet: vi.spyOn(Object.getPrototypeOf(client.threads), "get"),
+    };
+  }
+
+  it("keeps the subagent's text when its message isn't a LangChain message", async () => {
+    const { runsGet, threadsGet } = spyServer();
+    runsGet.mockResolvedValue({ run_id: "run-1", status: "success" });
+    threadsGet.mockResolvedValue({
+      status: "idle",
+      values: { messages: [{ content: "plain answer" }] },
+    });
+    const task = makeTask();
+
+    const update = await pullBeforeModel({ [task.taskId]: task });
+
+    const [message] = update.messages as HumanMessage[];
+    expect(JSON.stringify(message.content)).toContain("plain answer");
+  });
+
+  it("checks again later when a finished run's thread can't be read", async () => {
+    const { runsGet, threadsGet } = spyServer();
+    runsGet.mockResolvedValue({ run_id: "run-1", status: "success" });
+    threadsGet.mockRejectedValue(new Error("unavailable"));
+    const task = makeTask({ status: "waiting" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(await pullBeforeModel({ [task.taskId]: task })).toBeUndefined();
+  });
+
+  it("keeps the task's description when its status changes", async () => {
+    const { runsGet } = spyServer();
+    runsGet.mockResolvedValue({ run_id: "run-1", status: "error" });
+    const task = makeTask({ description: "research X" });
+
+    const update = await pullBeforeModel({ [task.taskId]: task });
+
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId],
+    ).toMatchObject({ status: "error", description: "research X" });
+  });
+
+  it("keeps a cancelled task cancelled when its notification arrives", async () => {
+    const task = makeTask({ status: "cancelled" });
+    const notification = new HumanMessage({
+      content: "update",
+      additional_kwargs: {
+        deepagents_notification: {
+          task_id: task.taskId,
+          agent_name: "researcher",
+          status: "success",
+          run_id: task.runId,
+        },
+      },
+    });
+    const hook = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [makeAgent()],
+    }).beforeAgent as (state: unknown) => Promise<unknown>;
+
+    expect(
+      await hook({
+        messages: [notification],
+        asyncTasks: { [task.taskId]: task },
+      }),
+    ).toBeUndefined();
   });
 });
