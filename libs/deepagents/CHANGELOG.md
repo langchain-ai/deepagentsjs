@@ -1,5 +1,11 @@
 # deepagents
 
+## 1.15.1
+
+### Patch Changes
+
+- [#966](https://github.com/langchain-ai/deepagentsjs/pull/966) [`0e4d3ee`](https://github.com/langchain-ai/deepagentsjs/commit/0e4d3ee00d0ff8873f285833893db66738a66eee) Thanks [@casparb](https://github.com/casparb)! - `ContextHubBackend.glob` now only returns files under its `path` argument.
+
 ## 1.15.0
 
 ### Minor Changes
