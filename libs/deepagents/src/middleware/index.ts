@@ -74,6 +74,7 @@ export {
   type AsyncSubAgent,
   type AsyncTask,
   type AsyncTaskStatus,
+  type TaskEvent,
   ASYNC_TASK_TOOL_NAMES,
 } from "./async_subagents.js";
 
