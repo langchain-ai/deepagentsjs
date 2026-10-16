@@ -330,6 +330,18 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return path.replace(/^\/+/, "");
   }
 
+  /**
+   * `filePath` relative to the glob root `root`, or `null` when it is outside
+   * it. An exact file root yields the file's basename.
+   */
+  private static relativeToRoot(filePath: string, root: string): string | null {
+    if (!root) return filePath;
+    if (filePath === root) return filePath.slice(filePath.lastIndexOf("/") + 1);
+    return filePath.startsWith(`${root}/`)
+      ? filePath.slice(root.length + 1)
+      : null;
+  }
+
   private static toHubUnavailableError(error: unknown): string {
     return `Hub unavailable: ${getErrorMessage(error)}`;
   }
@@ -967,7 +979,9 @@ export class ContextHubBackend implements BackendProtocolV2 {
     return applyGrepMaxCount({ result: { matches }, maxCount });
   }
 
-  async glob(pattern: string, _path: string = "/"): Promise<GlobResult> {
+  async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
+    const root = ContextHubBackend.stripPrefix(path).replace(/\/+$/, "");
+
     let cache: Record<string, string>;
     try {
       cache = await this.ensureCache();
@@ -978,12 +992,15 @@ export class ContextHubBackend implements BackendProtocolV2 {
       throw error;
     }
 
+    const isMatch = (candidate: string) =>
+      micromatch.isMatch(`/${candidate}`, pattern, FNMATCH_OPTIONS) ||
+      micromatch.isMatch(candidate, pattern, FNMATCH_OPTIONS);
     const files: FileInfo[] = [];
     for (const filePath of Object.keys(cache)) {
-      if (
-        micromatch.isMatch(`/${filePath}`, pattern, FNMATCH_OPTIONS) ||
-        micromatch.isMatch(filePath, pattern, FNMATCH_OPTIONS)
-      ) {
+      const relative = ContextHubBackend.relativeToRoot(filePath, root);
+      // Also match the repo path, so patterns written from the repo root
+      // (the only way to scope a glob before `path` was honored) still work.
+      if (relative !== null && (isMatch(relative) || isMatch(filePath))) {
         files.push({ path: `/${filePath}`, is_dir: false });
       }
     }
