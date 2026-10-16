@@ -980,7 +980,7 @@ export class ContextHubBackend implements BackendProtocolV2 {
   }
 
   async glob(pattern: string, path: string = "/"): Promise<GlobResult> {
-    const root = ContextHubBackend.stripPrefix(path).replace(/\/+$/, "");
+    const root = trimTrailingSlashes(ContextHubBackend.stripPrefix(path));
 
     let cache: Record<string, string>;
     try {
@@ -998,8 +998,6 @@ export class ContextHubBackend implements BackendProtocolV2 {
     const files: FileInfo[] = [];
     for (const filePath of Object.keys(cache)) {
       const relative = ContextHubBackend.relativeToRoot(filePath, root);
-      // Also match the repo path, so patterns written from the repo root
-      // (the only way to scope a glob before `path` was honored) still work.
       if (relative !== null && (isMatch(relative) || isMatch(filePath))) {
         files.push({ path: `/${filePath}`, is_dir: false });
       }
