@@ -170,6 +170,31 @@ describe("summarization archive identity", () => {
     );
   });
 
+  it("preserves a legacy checkpoint ID and appends to its existing archive", async () => {
+    const legacyId = "session_0123abcd";
+    const legacyPath = `/conversation_history/${legacyId}.md`;
+    const write = await backend.write(legacyPath, "LEGACY_FACT\n\n");
+    expect(write.error).toBeUndefined();
+    const agent = makeAgent(backend);
+    const config = { configurable: { thread_id: "legacy-thread" } };
+    await agent.invoke(
+      { messages: [new HumanMessage("Start thread.")] },
+      config,
+    );
+    await agent.updateState(config, { _summarizationSessionId: legacyId });
+    const checkpoint: StateSnapshot = await agent.getState(config);
+    expect(checkpoint.values._summarizationSessionId).toBe(legacyId);
+    await agent.invoke({ messages: history("NEW_FACT") }, config);
+    const result = await archive(agent, "legacy-thread");
+    expect(result.id).toBe(legacyId);
+    expect(result.filePath).toBe(legacyPath);
+    expect(result.text).toContain("LEGACY_FACT");
+    expect(result.text).toContain("NEW_FACT");
+    expect(await readdir(path.join(root, "conversation_history"))).toHaveLength(
+      1,
+    );
+  });
+
   it("keeps concurrently invoked fresh threads in separate archives", async () => {
     const agent = makeAgent(backend);
     await Promise.all([
@@ -193,6 +218,7 @@ describe("summarization archive identity", () => {
       2,
     );
   });
+
   it("keeps one archive identity when overflow requires another summary attempt", async () => {
     const model = new OverflowOnceModel();
     const agent = makeAgent(backend, new MemorySaver(), model);

@@ -24,7 +24,8 @@
  *
  * ## Storage
  *
- * Offloaded messages are stored as markdown at `/conversation_history/{thread_id}.md`.
+ * Offloaded messages are stored as markdown at `/conversation_history/{session_id}.md`.
+ * The archive ID is stored in checkpoint state and reused within the same thread.
  *
  * Each summarization event appends a new section to this file, creating a running log
  * of all evicted messages.
@@ -393,7 +394,7 @@ export function createSummarizationMiddleware(
     if (state._summarizationSessionId) {
       return state._summarizationSessionId as string;
     }
-    return `session_${crypto.randomUUID().substring(0, 8)}`;
+    return `session_${crypto.randomUUID()}`;
   }
 
   /**
