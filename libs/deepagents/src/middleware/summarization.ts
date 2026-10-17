@@ -24,7 +24,8 @@
  *
  * ## Storage
  *
- * Offloaded messages are stored as markdown at `/conversation_history/{thread_id}.md`.
+ * Offloaded messages are stored as markdown at `/conversation_history/{session_id}.md`.
+ * The archive ID is stored in checkpoint state and reused within the same thread.
  *
  * Each summarization event appends a new section to this file, creating a running log
  * of all evicted messages.
@@ -379,9 +380,6 @@ export function createSummarizationMiddleware(
     }
   }
 
-  // Session ID for this middleware instance (fallback if no thread_id)
-  let sessionId: string | null = null;
-
   // Calibration multiplier for token estimation. countTokensApproximately
   // can significantly undercount (e.g. it ignores tool_use content blocks,
   // JSON structural overhead). After a ContextOverflowError we learn the
@@ -396,10 +394,7 @@ export function createSummarizationMiddleware(
     if (state._summarizationSessionId) {
       return state._summarizationSessionId as string;
     }
-    if (!sessionId) {
-      sessionId = `session_${crypto.randomUUID().substring(0, 8)}`;
-    }
-    return sessionId;
+    return `session_${crypto.randomUUID()}`;
   }
 
   /**
@@ -1110,6 +1105,11 @@ export function createSummarizationMiddleware(
       }
     }
 
+    // Keep one identity across both summary attempts and the persisted update.
+    const summarizationState = {
+      ...request.state,
+      _summarizationSessionId: getSessionId(request.state),
+    };
     const previousEvent = request.state._summarizationEvent;
     const previousCutoffIndex =
       previousEvent != null
@@ -1120,7 +1120,7 @@ export function createSummarizationMiddleware(
       await summarizeMessages(
         messagesToSummarize,
         resolvedModel,
-        request.state,
+        summarizationState,
         previousCutoffIndex,
         cutoffIndex,
       );
@@ -1154,7 +1154,7 @@ export function createSummarizationMiddleware(
       const reSumResult = await summarizeMessages(
         allMessages,
         resolvedModel,
-        request.state,
+        summarizationState,
         previousCutoffIndex,
         truncatedMessages.length,
       );
@@ -1175,7 +1175,7 @@ export function createSummarizationMiddleware(
           summaryMessage: finalSummaryMessage,
           filePath: finalFilePath,
         } satisfies SummarizationEvent,
-        _summarizationSessionId: getSessionId(request.state),
+        _summarizationSessionId: summarizationState._summarizationSessionId,
       },
     });
   }
