@@ -43,6 +43,7 @@
 import { z } from "zod";
 import {
   createMiddleware,
+  omitPayload,
   countTokensApproximately,
   HumanMessage,
   AIMessage,
@@ -1182,6 +1183,7 @@ export function createSummarizationMiddleware(
 
   return createMiddleware({
     name: "SummarizationMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: SummarizationStateSchema,
 
     async wrapModelCall(request, handler) {
