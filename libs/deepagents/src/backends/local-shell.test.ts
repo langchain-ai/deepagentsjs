@@ -172,6 +172,67 @@ describe("LocalShellBackend", () => {
       expect(result.output).toContain("Output truncated");
     });
 
+    it("should cap output by bytes, not UTF-16 code units", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        maxOutputBytes: 100,
+        inheritEnv: true,
+      });
+
+      // 200x "中" is 600 bytes but only 200 code units, so a code-unit cap
+      // would have returned ~336 bytes.
+      const result = await backend.execute(
+        `node -e "process.stdout.write('\\u4e2d'.repeat(200))"`,
+      );
+
+      expect(result.truncated).toBe(true);
+      expect(Buffer.byteLength(result.output, "utf8")).toBeLessThanOrEqual(100);
+    });
+
+    it("should not split a surrogate pair when truncating", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        maxOutputBytes: 101,
+        inheritEnv: true,
+      });
+
+      const result = await backend.execute(
+        `node -e "process.stdout.write('\\uD83D\\uDE00'.repeat(100))"`,
+      );
+
+      expect(result.truncated).toBe(true);
+      expect(Buffer.byteLength(result.output, "utf8")).toBeLessThanOrEqual(101);
+
+      // Every high surrogate must be followed by a low surrogate.
+      for (let i = 0; i < result.output.length; i++) {
+        const unit = result.output.charCodeAt(i);
+        if (unit >= 0xd800 && unit <= 0xdbff) {
+          expect(result.output.charCodeAt(i + 1)).toBeGreaterThanOrEqual(
+            0xdc00,
+          );
+        }
+      }
+    });
+
+    it.each([0, 1, 10, 35, 36, 37])(
+      "keeps the output within a %i-byte budget even when the notice does not fit",
+      async (maxOutputBytes) => {
+        const backend = new LocalShellBackend({
+          rootDir: tmpDir,
+          maxOutputBytes,
+          inheritEnv: true,
+        });
+        const result = await backend.execute(
+          `node -e "process.stdout.write('x'.repeat(100))"`,
+        );
+        expect(result.exitCode).toBe(0);
+        expect(result.truncated).toBe(true);
+        expect(Buffer.byteLength(result.output, "utf8")).toBeLessThanOrEqual(
+          maxOutputBytes,
+        );
+      },
+    );
+
     it("should prefix stderr lines with [stderr]", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
