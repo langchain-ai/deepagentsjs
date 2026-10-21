@@ -1732,6 +1732,62 @@ describe("parent reference", () => {
     expect(runsCreate.mock.calls[0][2].context).toBeUndefined();
   });
 
+  it.each(["start", "update"] as const)(
+    "sets the subagent's webhook on the runs it %ss",
+    async (tool) => {
+      const agentMap = {
+        researcher: makeAgent({ webhook: "https://app.example.com/done" }),
+      };
+      const { cache, threadsCreate, runsCreate } =
+        createMockClientCache(agentMap);
+      threadsCreate.mockResolvedValue({ thread_id: "t" });
+      runsCreate.mockResolvedValue({ run_id: "r" });
+
+      if (tool === "start") {
+        await buildStartTool(agentMap, cache, "Launch").invoke(
+          { description: "go", agentName: "researcher" },
+          parentRuntime({}),
+        );
+      } else {
+        const task = makeTask();
+        await buildUpdateTool(agentMap, cache).invoke(
+          { taskId: task.taskId, message: "more" },
+          parentRuntime({ asyncTasks: { [task.taskId]: task } }),
+        );
+      }
+
+      expect(runsCreate.mock.calls[0][2].webhook).toBe(
+        "https://app.example.com/done",
+      );
+    },
+  );
+
+  it("never lets a subagent that must not notify wake its parent", async () => {
+    const agentMap = {
+      researcher: makeAgent({ url: undefined, notifyParent: false }),
+    };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+
+    await buildStartTool(agentMap, cache, "Launch").invoke(
+      { description: "go", agentName: "researcher" },
+      parentRuntime({}),
+    );
+
+    // Without the parent's assistant, neither this run nor a later run on its thread can wake the parent.
+    expect(threadsCreate).toHaveBeenCalledWith({
+      metadata: {
+        subagent_name: "researcher",
+        parent_thread_id: "parent-thread",
+      },
+    });
+    expect(runsCreate.mock.calls[0][2].config).toEqual({
+      configurable: { deepagents_parent: { thread_id: "parent-thread" } },
+    });
+  });
+
   it("falls back to the task thread's metadata", () => {
     expect(
       launchingAgent({

@@ -64,6 +64,19 @@ export interface AsyncSubAgent {
 
   /** Additional headers to include in requests to the server (e.g. for custom auth). */
   headers?: Record<string, string>;
+
+  /** URL the Agent Server calls whenever a run of this subagent finishes. */
+  webhook?: string;
+
+  /**
+   * Whether this subagent may wake this agent when it finishes while this agent is idle. Defaults to `true`.
+   *
+   * Set it to `false` when the application delivers results itself, for example
+   * through `webhook`. This agent still sees the subagent's updates while it runs.
+   *
+   * @experimental `notifyParent` may change along with how subagents wake their parent.
+   */
+  notifyParent?: boolean;
 }
 
 /**
@@ -660,16 +673,16 @@ function parentReference(
 /**
  * The parent reference sent to `spec`'s runs.
  *
- * A subagent on another server (`url`) gets only the parent's thread, to know
- * what started it: the parent's assistant is only for waking the parent, which
- * it can't do from another deployment.
+ * A subagent on another server (`url`), or one with `notifyParent: false`, gets
+ * only the parent's thread, to know what started it: the parent's assistant is
+ * only for waking the parent, which it can't do from another deployment.
  */
 function referenceFor(
   spec: AsyncSubAgent,
   config: LangGraphRunnableConfig | undefined,
 ): ParentReference {
   const reference = parentReference(config);
-  if (spec.url) delete reference.assistant_id;
+  if (spec.url || spec.notifyParent === false) delete reference.assistant_id;
   return reference;
 }
 
@@ -695,7 +708,7 @@ function threadMetadata(
 }
 
 /**
- * The `runs.create` options that link a run to this agent.
+ * The `runs.create` options that link a run to this agent and set the subagent's webhook.
  *
  * A subagent on this deployment runs with this agent's context, like a sync
  * subagent. The Agent Server takes `context` or `configurable`, not both, so the
@@ -707,13 +720,15 @@ function runOptions(
 ): {
   config?: { configurable: Record<string, unknown> };
   context?: Record<string, unknown>;
+  webhook?: string;
 } {
+  const webhook = spec.webhook ? { webhook: spec.webhook } : {};
   const context = spec.url ? undefined : forwardedContext(runtime.context);
-  if (context) return { context };
+  if (context) return { ...webhook, context };
   const reference = referenceFor(spec, runtime.config);
   return Object.keys(reference).length > 0
-    ? { config: { configurable: { [PARENT_KEY]: reference } } }
-    : {};
+    ? { ...webhook, config: { configurable: { [PARENT_KEY]: reference } } }
+    : webhook;
 }
 
 /** A run context as JSON data for another run, without deepagents' parent reference. */
