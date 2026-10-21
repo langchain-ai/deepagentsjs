@@ -695,7 +695,7 @@ describe("buildCheckTool", () => {
       ((cmd.update as Record<string, unknown>).messages as ToolMessage[])[0]
         .content as string,
     );
-    expect(content.result).toBe("Completed with no output messages.");
+    expect(content.result).toBe("(completed with no output messages)");
   });
 
   it("should return a Command with error on error status", async () => {
@@ -790,6 +790,45 @@ describe("buildCheckTool", () => {
         .content as string,
     );
     expect(content.result).toBe("plain string result");
+  });
+
+  it("returns the answer without reasoning, and keeps an image as a block", async () => {
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
+    runsGet.mockResolvedValue({ run_id: trackedJob.runId, status: "success" });
+    threadsGet.mockResolvedValue({
+      status: "idle",
+      values: {
+        messages: [
+          {
+            type: "ai",
+            content: [
+              { type: "reasoning", reasoning: "private thoughts" },
+              { type: "text", text: "Here's the chart." },
+              { type: "image", url: "https://example.com/chart.png" },
+            ],
+          },
+        ],
+      },
+    });
+
+    const result = await buildCheckTool(cache).invoke(
+      { taskId: trackedJob.taskId },
+      asyncAgentToolInvokeConfig(toolCallId, {
+        asyncTasks: { [trackedJob.taskId]: trackedJob },
+      }),
+    );
+
+    const [message] = ((result as Command).update as Record<string, unknown>)
+      .messages as ToolMessage[];
+    const blocks = message.content as Array<Record<string, unknown>>;
+    expect(JSON.parse(blocks[0].text as string)).toMatchObject({
+      status: "success",
+    });
+    expect(blocks.slice(1)).toEqual([
+      { type: "text", text: "Here's the chart." },
+      expect.objectContaining({ type: "image" }),
+    ]);
+    expect(JSON.stringify(blocks)).not.toContain("private thoughts");
   });
 
   it("should set checkedAt to a valid ISO timestamp on the updated job", async () => {
@@ -2035,6 +2074,46 @@ describe("status updates the parent can't read", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
     expect(await pullBeforeModel({ [task.taskId]: task })).toBeUndefined();
+  });
+
+  it("reports a run cancelled on the server as cancelled", async () => {
+    const { runsGet } = spyServer();
+    const client = new Client({ apiUrl: "https://example.langsmith.dev" });
+    runsGet.mockResolvedValue({ run_id: "run-1", status: "interrupted" });
+    vi.spyOn(Object.getPrototypeOf(client.runs), "list").mockResolvedValue([
+      { run_id: "run-1", status: "interrupted" },
+    ]);
+    const task = makeTask({ runId: "run-1" });
+
+    const update = await pullBeforeModel({ [task.taskId]: task });
+
+    const [message] = update.messages as HumanMessage[];
+    expect(message.additional_kwargs.deepagents_notification).toMatchObject({
+      status: "cancelled",
+    });
+    expect(JSON.stringify(message.content)).toContain(
+      "cancelled before it finished",
+    );
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("cancelled");
+  });
+
+  it("follows a run another client's run replaced, without reporting it", async () => {
+    const { runsGet } = spyServer();
+    const client = new Client({ apiUrl: "https://example.langsmith.dev" });
+    runsGet.mockResolvedValue({ run_id: "run-1", status: "interrupted" });
+    vi.spyOn(Object.getPrototypeOf(client.runs), "list").mockResolvedValue([
+      { run_id: "run-newer", status: "running" },
+    ]);
+    const task = makeTask({ runId: "run-1" });
+
+    const update = await pullBeforeModel({ [task.taskId]: task });
+
+    expect(update.messages).toBeUndefined();
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].runId,
+    ).toBe("run-newer");
   });
 
   it("keeps the task's description when its status changes", async () => {

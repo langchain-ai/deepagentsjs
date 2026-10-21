@@ -153,8 +153,8 @@ interface CheckResult {
   /** The thread ID on the remote server. */
   threadId: string;
 
-  /** The last message content from the subagent, if the run succeeded. */
-  result?: string;
+  /** The subagent's answer as standard content blocks, if the run succeeded. */
+  result?: ContentBlock.Standard[];
 
   /** Error description, if the run errored. */
   error?: string;
@@ -299,8 +299,10 @@ const THREAD_TO_TASK_STATUS: Record<string, AsyncTaskStatus> = {
  * Return a task's status from its latest run, reading the thread to spot pauses.
  *
  * A run that hits `interrupt()` ends as `success`; only its thread shows the pause.
+ * A run cancelled on the server ends `interrupted`, which a task reports as `cancelled`.
  */
 function taskStatus(run: Run, thread: Thread | null): AsyncTaskStatus {
+  if (run.status === "interrupted") return "cancelled";
   if (run.status !== "success" || thread === null) {
     return run.status as AsyncTaskStatus;
   }
@@ -321,6 +323,10 @@ function needsLatestRun(run: Run, thread: Thread | null): boolean {
  *
  * The thread is `null` for an unfinished run. Throws if the thread can't be read,
  * since a paused run also ends as `success`.
+ *
+ * A tracked run that another client's run interrupted hands over to the newest run;
+ * the tracked run is reported `cancelled` only when nothing replaced it. A task the
+ * parent cancelled isn't followed, so another client's run can't revive it.
  */
 async function observe(
   client: Client,
@@ -329,6 +335,13 @@ async function observe(
 ): Promise<[Run, Thread | null]> {
   const options = signal ? [{ signal }] : [];
   let run = await client.runs.get(task.threadId, task.runId, ...options);
+  if (run.status === "interrupted" && task.status !== "cancelled") {
+    const [latest] = await client.runs.list(task.threadId, {
+      limit: 1,
+      signal,
+    });
+    run = latest ?? run;
+  }
   if (run.status !== "success") return [run, null];
   const thread = await client.threads.get(task.threadId, ...options);
   if (needsLatestRun(run, thread)) {
@@ -385,12 +398,7 @@ function buildCheckResult(
   const checkResult: CheckResult = { status, threadId };
 
   if (status === "success") {
-    const messages = threadMessages(thread?.values);
-    if (messages.length > 0) {
-      checkResult.result = messageText(messages[messages.length - 1]);
-    } else {
-      checkResult.result = "Completed with no output messages.";
-    }
+    checkResult.result = finalContent(thread?.values);
   } else if (status === "error") {
     checkResult.error = "The async subagent encountered an error.";
   } else if (status === WAITING) {
@@ -402,6 +410,31 @@ function buildCheckResult(
   }
 
   return checkResult;
+}
+
+/**
+ * A check result as tool output: JSON, with a text-only answer's text in `result`.
+ *
+ * An answer with media follows the JSON as its own blocks, in order, so each image stays by
+ * its text. Reasoning and tool-call blocks are dropped, as in notifications; the text isn't cut.
+ */
+function checkOutput(result: CheckResult): string | ContentBlock[] {
+  const blocks = result.result;
+  if (!blocks) return JSON.stringify(result);
+  const text = (block: ContentBlock.Standard) => String(block.text);
+  if (!blocks.some((block) => MEDIA_BLOCK_TYPES.has(block.type))) {
+    const answer = blocks.filter((block) => block.type === "text").map(text);
+    return JSON.stringify({ ...result, result: answer.join("") });
+  }
+  const { result: _answer, ...status } = result;
+  const answer: ContentBlock[] = blocks
+    .filter(
+      (block) => block.type === "text" || MEDIA_BLOCK_TYPES.has(block.type),
+    )
+    .map((block) =>
+      block.type === "text" ? textBlock(text(block)) : { ...block },
+    );
+  return [textBlock(JSON.stringify(status)), ...answer];
 }
 
 /** Keep a task cancelled while paused as cancelled; its thread still shows the old pause. */
@@ -741,8 +774,8 @@ export interface TaskEvent {
   task_id: string;
   /** The async subagent's name, as in the task's `AsyncTask.agentName`. */
   agent_name: string;
-  /** `waiting` means the subagent paused for input or approval. */
-  status: "success" | "error" | "timeout" | "waiting";
+  /** `waiting` means the subagent paused for input or approval; `cancelled`, that its run was cancelled on the server. */
+  status: "success" | "error" | "timeout" | "cancelled" | "waiting";
   /** The subagent run that ended. */
   run_id?: string;
 }
@@ -766,6 +799,8 @@ const NEXT_STEP: Record<TaskEvent["status"], string> = {
     "Use `check_async_task` for details, then decide whether to retry, try another approach, or tell the user.",
   timeout:
     "The task ran too long and was stopped. Decide whether to retry with a smaller task, or tell the user.",
+  cancelled:
+    "The task's run was cancelled before it finished, outside your tools. Decide whether to start it again, or tell the user.",
   waiting:
     "The subagent is waiting for the user, who answers it on the subagent's own thread; you can't answer or approve it. Keep working.",
 };
@@ -1145,7 +1180,7 @@ export function buildCheckTool(clients: ClientCache) {
         update: {
           messages: [
             new ToolMessage({
-              content: JSON.stringify(result),
+              content: checkOutput(result),
               tool_call_id: toolCallIdFromRuntime(runtime),
             }),
           ],
@@ -1389,7 +1424,7 @@ function checkEvent(
   const result = buildCheckResult(run, task.threadId, thread);
   const details: Partial<TaskUpdate> = {};
   if (result.interrupts) details.interrupts = result.interrupts;
-  if (status === "success") details.result = finalContent(thread?.values);
+  if (status === "success") details.result = result.result;
   if (status === "error") details.error = "The subagent failed.";
   return taskUpdate(
     {
@@ -1407,6 +1442,7 @@ const NOTIFIED_STATUSES = new Set<AsyncTaskStatus>([
   "success",
   "error",
   "timeout",
+  "cancelled",
   WAITING,
 ]);
 
