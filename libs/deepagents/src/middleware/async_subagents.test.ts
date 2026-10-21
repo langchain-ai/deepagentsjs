@@ -1616,6 +1616,7 @@ describe("parent reference", () => {
 
     expect(threadsCreate).toHaveBeenCalledWith({
       metadata: {
+        subagent_name: "researcher",
         parent_thread_id: "parent-thread",
         parent_assistant_id: "lead",
       },
@@ -1640,11 +1641,56 @@ describe("parent reference", () => {
     );
 
     expect(threadsCreate).toHaveBeenCalledWith({
-      metadata: { parent_thread_id: "parent-thread" },
+      metadata: {
+        subagent_name: "researcher",
+        parent_thread_id: "parent-thread",
+      },
     });
     expect(runsCreate.mock.calls[0][2].config).toEqual({
       configurable: { deepagents_parent: { thread_id: "parent-thread" } },
     });
+  });
+
+  it("runs a same-deployment subagent with the parent's context", async () => {
+    const agentMap = { researcher: makeAgent({ url: undefined }) };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+    const runtime = parentRuntime({});
+    (runtime as { context?: unknown }).context = {
+      team: "eng",
+      deepagents_parent: { thread_id: "grandparent" },
+    };
+
+    await buildStartTool(agentMap, cache, "Launch").invoke(
+      { description: "go", agentName: "researcher" },
+      runtime,
+    );
+
+    // The Agent Server takes `context` or `configurable`; the thread's metadata names the parent.
+    expect(runsCreate.mock.calls[0][2].context).toEqual({ team: "eng" });
+    expect(runsCreate.mock.calls[0][2].config).toBeUndefined();
+    expect(threadsCreate.mock.calls[0][0].metadata.parent_assistant_id).toBe(
+      "lead",
+    );
+  });
+
+  it("doesn't send the parent's context to another server", async () => {
+    const agentMap = { researcher: makeAgent() };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+    const runtime = parentRuntime({});
+    (runtime as { context?: unknown }).context = { team: "eng" };
+
+    await buildStartTool(agentMap, cache, "Launch").invoke(
+      { description: "go", agentName: "researcher" },
+      runtime,
+    );
+
+    expect(runsCreate.mock.calls[0][2].context).toBeUndefined();
   });
 
   it("falls back to the task thread's metadata", () => {

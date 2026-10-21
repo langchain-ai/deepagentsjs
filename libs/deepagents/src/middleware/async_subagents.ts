@@ -643,16 +643,17 @@ function referenceFor(
 /**
  * Metadata for a task's thread, so apps can find a parent's subagent threads with `threads.search`.
  *
- * For subagents on this deployment, it also keeps the parent's assistant, so
- * runs started elsewhere on the thread (such as the user answering the
- * subagent) can still notify the parent.
+ * It names the subagent as the parent knows it, so its notifications match the
+ * parent's tracked task. For subagents on this deployment, it also keeps the
+ * parent's assistant, so runs started elsewhere on the thread (such as the user
+ * answering the subagent) can still notify the parent.
  */
 function threadMetadata(
   spec: AsyncSubAgent,
   config: LangGraphRunnableConfig | undefined,
 ): Record<string, string> {
   const reference = referenceFor(spec, config);
-  const metadata: Record<string, string> = {};
+  const metadata: Record<string, string> = { subagent_name: spec.name };
   if (reference.thread_id) metadata.parent_thread_id = reference.thread_id;
   if (reference.assistant_id) {
     metadata.parent_assistant_id = reference.assistant_id;
@@ -660,15 +661,38 @@ function threadMetadata(
   return metadata;
 }
 
-/** The `runs.create` config that links a launched run to this agent. */
-function runConfig(
+/**
+ * The `runs.create` options that link a run to this agent.
+ *
+ * A subagent on this deployment runs with this agent's context, like a sync
+ * subagent. The Agent Server takes `context` or `configurable`, not both, so the
+ * parent reference then reaches the subagent through its thread's metadata.
+ */
+function runOptions(
   spec: AsyncSubAgent,
-  config: LangGraphRunnableConfig | undefined,
-): { config?: { configurable: Record<string, unknown> } } {
-  const reference = referenceFor(spec, config);
+  runtime: { config?: LangGraphRunnableConfig; context?: unknown },
+): {
+  config?: { configurable: Record<string, unknown> };
+  context?: Record<string, unknown>;
+} {
+  const context = spec.url ? undefined : forwardedContext(runtime.context);
+  if (context) return { context };
+  const reference = referenceFor(spec, runtime.config);
   return Object.keys(reference).length > 0
     ? { config: { configurable: { [PARENT_KEY]: reference } } }
     : {};
+}
+
+/** A run context as JSON data for another run, without deepagents' parent reference. */
+export function forwardedContext(
+  context: unknown,
+): Record<string, unknown> | undefined {
+  if (!context || typeof context !== "object" || Array.isArray(context)) {
+    return undefined;
+  }
+  // A run started without a context sees its `configurable` as one, parent reference included.
+  const entries = Object.entries(context).filter(([key]) => key !== PARENT_KEY);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 /**
@@ -933,6 +957,7 @@ async function awakeParent(
   parentThreadId: string,
   assistantId: string,
   update: TaskUpdate,
+  context?: Record<string, unknown>,
 ): Promise<void> {
   // No `apiUrl`: inside an Agent Server, the SDK calls this deployment in process.
   const client = new Client();
@@ -942,6 +967,7 @@ async function awakeParent(
     await client.runs.create(parentThreadId, assistantId, {
       input: { messages: [notificationMessage(update)] },
       multitaskStrategy: "reject",
+      ...(context ? { context } : {}),
     });
   } catch (e) {
     // 404: parent gone; 409 (422 on the JS dev server): it became busy and will pull the update itself.
@@ -960,15 +986,22 @@ async function awakeParent(
  * Wake the parent if it's idle; otherwise it finds out on its own.
  *
  * A busy parent sees the status update before its next model call or after its
- * final answer, a paused one after the user answers its approval. Never throws.
+ * final answer, a paused one after the user answers its approval. The parent's
+ * run gets this run's context back. Never throws.
  */
 export async function notifyParent(
   config: LangGraphRunnableConfig | undefined,
   update: TaskUpdate,
+  context?: unknown,
 ): Promise<void> {
   const parent = launchingAgent(config);
   if (parent?.thread_id && parent.assistant_id) {
-    await awakeParent(parent.thread_id, parent.assistant_id, update);
+    await awakeParent(
+      parent.thread_id,
+      parent.assistant_id,
+      update,
+      forwardedContext(context),
+    );
   }
 }
 
@@ -1031,7 +1064,7 @@ export function buildStartTool(
               messages: [{ role: "user", content: input.description }],
               ...callbackContext,
             },
-            ...runConfig(spec, runtime.config),
+            ...runOptions(spec, runtime),
           });
 
         const taskId = thread.thread_id;
@@ -1171,7 +1204,7 @@ export function buildUpdateTool(
             messages: [{ role: "user", content: input.message }],
           },
           multitaskStrategy: "interrupt",
-          ...runConfig(spec, runtime.config),
+          ...runOptions(spec, runtime),
         });
 
         const task: AsyncTask = {

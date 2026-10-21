@@ -53,6 +53,7 @@ export function createParentNotifierMiddleware() {
   async function report(
     status: "success" | "error",
     details: Parameters<typeof taskEvent>[3],
+    context: unknown,
   ): Promise<void> {
     const config = currentConfig();
     // Graphs nested in this run (e.g. a sync subagent that's a deep agent) inherit its config,
@@ -67,15 +68,22 @@ export function createParentNotifierMiddleware() {
     const metadata = (config.metadata ?? {}) as Record<string, unknown>;
     const configurable = (config.configurable ?? {}) as Record<string, unknown>;
     const name = String(
-      metadata.graph_id ?? configurable.graph_id ?? "subagent",
+      metadata.subagent_name ??
+        metadata.graph_id ??
+        configurable.graph_id ??
+        "subagent",
     );
-    await notifyParent(config, taskEvent(config, name, status, details));
+    await notifyParent(
+      config,
+      taskEvent(config, name, status, details),
+      context,
+    );
   }
 
   return createMiddleware({
     name: "parentNotifierMiddleware",
-    afterAgent: async (state) => {
-      await report("success", { result: finalContent(state) });
+    afterAgent: async (state, runtime) => {
+      await report("success", { result: finalContent(state) }, runtime.context);
     },
     wrapModelCall: async (request, handler) => {
       try {
@@ -85,7 +93,11 @@ export function createParentNotifierMiddleware() {
         // timed-out run aborts its signal; that isn't the subagent failing, and the
         // parent learns about it from the run's status instead.
         if (!isGraphBubbleUp(e) && !wasAborted(e, request.runtime.signal)) {
-          await report("error", { error: failureText(e) });
+          await report(
+            "error",
+            { error: failureText(e) },
+            request.runtime.context,
+          );
         }
         throw e;
       }

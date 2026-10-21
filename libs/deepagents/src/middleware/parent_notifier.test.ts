@@ -49,10 +49,16 @@ describe("createParentNotifierMiddleware", () => {
     getConfig.mockReset();
   });
 
-  const finish = (middleware = createParentNotifierMiddleware()) =>
-    (middleware.afterAgent as (state: unknown) => Promise<unknown>)({
-      messages: [new AIMessage("All done.")],
-    });
+  const finish = (
+    middleware = createParentNotifierMiddleware(),
+    context?: unknown,
+  ) =>
+    (
+      middleware.afterAgent as (
+        state: unknown,
+        runtime: unknown,
+      ) => Promise<unknown>
+    )({ messages: [new AIMessage("All done.")] }, { context });
 
   it("wakes an idle parent with the subagent's answer", async () => {
     getConfig.mockReturnValue(taskRunConfig());
@@ -99,6 +105,22 @@ describe("createParentNotifierMiddleware", () => {
     await finish(middleware);
 
     expect(runsCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the subagent as its parent knows it, and hands back the run's context", async () => {
+    getConfig.mockReturnValue({
+      ...taskRunConfig(),
+      metadata: { subagent_name: "researcher" },
+    });
+
+    await finish(undefined, { team: "eng", deepagents_parent: PARENT });
+
+    const [, , options] = runsCreate.mock.calls[0];
+    expect(
+      options.input.messages[0].additional_kwargs.deepagents_notification
+        .agent_name,
+    ).toBe("researcher");
+    expect(options.context).toEqual({ team: "eng" });
   });
 
   it("doesn't start a run on a busy or paused parent", async () => {
