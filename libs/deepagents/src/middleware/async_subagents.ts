@@ -319,7 +319,8 @@ function needsLatestRun(run: Run, thread: Thread | null): boolean {
 /**
  * Fetch a task's latest run and, when that run finished, its thread.
  *
- * The thread is `null` for an unfinished run, or when it couldn't be read.
+ * The thread is `null` for an unfinished run. Throws if the thread can't be read,
+ * since a paused run also ends as `success`.
  */
 async function observe(
   client: Client,
@@ -329,12 +330,7 @@ async function observe(
   const options = signal ? [{ signal }] : [];
   let run = await client.runs.get(task.threadId, task.runId, ...options);
   if (run.status !== "success") return [run, null];
-  let thread: Thread;
-  try {
-    thread = await client.threads.get(task.threadId, ...options);
-  } catch {
-    return [run, null];
-  }
+  const thread = await client.threads.get(task.threadId, ...options);
   if (needsLatestRun(run, thread)) {
     const [latest] = await client.runs.list(task.threadId, {
       limit: 1,
@@ -343,11 +339,6 @@ async function observe(
     run = latest ?? run;
   }
   return [run, thread];
-}
-
-/** Whether `observe` saw the run finish but couldn't read its thread, so the task's status is unknown. */
-function threadUnread(run: Run, thread: Thread | null): boolean {
-  return run.status === "success" && thread === null;
 }
 
 /** Flatten a thread's pending interrupts, including ones raised inside subgraphs. */
@@ -481,8 +472,6 @@ async function fetchLiveTaskStatus(
       clients.getClient(task.agentName),
       task,
     );
-    // A finished run whose thread couldn't be read may be waiting; keep the cached status.
-    if (threadUnread(run, thread)) return [task.status, task.runId];
     return [taskStatus(run, thread), run.run_id];
   } catch {
     return [task.status, task.runId];
@@ -1410,13 +1399,11 @@ async function observeTask(
   task: AsyncTask,
 ): Promise<[Run, Thread | null] | null> {
   try {
-    const found = await observe(
+    return await observe(
       clients.getClient(task.agentName),
       task,
       AbortSignal.timeout(PULL_TIMEOUT_MS),
     );
-    // A finished run whose thread couldn't be read may be waiting; check again next time.
-    return threadUnread(...found) ? null : found;
   } catch (e) {
     // oxlint-disable-next-line no-console
     console.warn(`Failed to check task ${task.taskId}:`, e);

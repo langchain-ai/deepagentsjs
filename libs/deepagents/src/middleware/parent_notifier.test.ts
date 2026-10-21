@@ -130,7 +130,7 @@ describe("createParentNotifierMiddleware", () => {
     ) => Promise<unknown>;
 
     await expect(
-      wrap({}, async () => {
+      wrap({ runtime: {} }, async () => {
         throw new TypeError("secret internals");
       }),
     ).rejects.toThrow("secret internals");
@@ -140,6 +140,30 @@ describe("createParentNotifierMiddleware", () => {
     expect(body).toContain("The subagent failed (TypeError).");
     expect(body).not.toContain("secret internals");
   });
+
+  it.each([
+    ["the run's signal aborted", "Error", true],
+    ["an AbortError", "AbortError", false],
+  ])(
+    "doesn't report a cancelled, replaced or timed-out run as a failure (%s)",
+    async (_case, errorName, abortSignal) => {
+      getConfig.mockReturnValue(taskRunConfig());
+      const wrap = createParentNotifierMiddleware().wrapModelCall as (
+        request: unknown,
+        handler: () => Promise<unknown>,
+      ) => Promise<unknown>;
+      const controller = new AbortController();
+      if (abortSignal) controller.abort();
+
+      await expect(
+        wrap({ runtime: { signal: controller.signal } }, async () => {
+          throw Object.assign(new Error("aborted"), { name: errorName });
+        }),
+      ).rejects.toThrow("aborted");
+
+      expect(runsCreate).not.toHaveBeenCalled();
+    },
+  );
 
   it("doesn't report an interrupt as a failure", async () => {
     getConfig.mockReturnValue(taskRunConfig());

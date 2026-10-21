@@ -20,6 +20,17 @@ function isTopLevelGraph(config: LangGraphRunnableConfig): boolean {
   return !String(configurable.checkpoint_ns ?? "").includes("|");
 }
 
+/** Whether `error` comes from the run being aborted rather than from the subagent failing. */
+function wasAborted(error: unknown, signal: AbortSignal | undefined): boolean {
+  return (
+    signal?.aborted === true ||
+    currentConfig()?.signal?.aborted === true ||
+    (typeof error === "object" &&
+      error !== null &&
+      (error as { name?: unknown }).name === "AbortError")
+  );
+}
+
 /** The current config, or `undefined` outside a graph run. */
 function currentConfig(): LangGraphRunnableConfig | undefined {
   try {
@@ -70,8 +81,10 @@ export function createParentNotifierMiddleware() {
       try {
         return await handler(request);
       } catch (e) {
-        // Interrupts pause the run rather than fail it.
-        if (!isGraphBubbleUp(e)) {
+        // Interrupts pause the run rather than fail it. A cancelled, replaced or
+        // timed-out run aborts its signal; that isn't the subagent failing, and the
+        // parent learns about it from the run's status instead.
+        if (!isGraphBubbleUp(e) && !wasAborted(e, request.runtime.signal)) {
           await report("error", { error: failureText(e) });
         }
         throw e;

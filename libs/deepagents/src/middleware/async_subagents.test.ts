@@ -744,7 +744,7 @@ describe("buildCheckTool", () => {
     );
   });
 
-  it("should degrade gracefully when threads.get throws on success", async () => {
+  it("should report a check failure, not success, when threads.get throws after a successful run", async () => {
     const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
     runsGet.mockResolvedValue({
       run_id: trackedJob.runId,
@@ -760,15 +760,10 @@ describe("buildCheckTool", () => {
       }),
     );
 
-    // Should still return a Command (not an error string)
-    expect(result).toBeInstanceOf(Command);
-    const cmd = result as Command;
-    const content = JSON.parse(
-      ((cmd.update as Record<string, unknown>).messages as ToolMessage[])[0]
-        .content as string,
+    // A paused run also ends as `success`, so without the thread the status is unknown.
+    expect((result as unknown as ToolMessage).content).toContain(
+      "Failed to get run status",
     );
-    expect(content.status).toBe("success");
-    expect(content.result).toBe("Completed with no output messages.");
   });
 
   it("should extract content from non-object messages via String()", async () => {
