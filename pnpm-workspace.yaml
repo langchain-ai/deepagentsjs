@@ -28,7 +28,7 @@ overrides:
   "source-map-js@>=1.0.0 <1.2.2": "1.2.2"
   "nanoid@<3.3.18": "3.3.18"
   "postcss@<=8.5.22": "8.5.23"
-  "follow-redirects@<1.16.0": "1.16.0"
+  "follow-redirects@<1.16.1": "1.16.1"
   "es-define-property": "npm:@socketregistry/es-define-property@^1"
   "es-set-tostringtag": "npm:@socketregistry/es-set-tostringtag@^1"
   "function-bind": "npm:@socketregistry/function-bind@^1"
