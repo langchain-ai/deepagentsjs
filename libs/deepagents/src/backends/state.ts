@@ -365,32 +365,39 @@ export class StateBackend implements BackendProtocolV2 {
       return { error: `Error: File '${filePath}' not found` };
     }
 
-    const content = fileDataToString(fileData);
-    const result = performStringReplacement(
-      content,
-      oldString,
-      newString,
-      replaceAll,
-    );
+    // `edit` is not defined for binary content: `fileDataToString` rejects
+    // Uint8Array payloads. Surface that through the result contract the same
+    // way `StoreBackend.edit` does, instead of throwing past the caller.
+    try {
+      const content = fileDataToString(fileData);
+      const result = performStringReplacement(
+        content,
+        oldString,
+        newString,
+        replaceAll,
+      );
 
-    if (typeof result === "string") {
-      return { error: result };
+      if (typeof result === "string") {
+        return { error: result };
+      }
+
+      const [newContent, occurrences] = result;
+      const newFileData = updateFileData(fileData, newContent);
+      const update = { [filePath]: newFileData };
+
+      if (!this.isLegacy) {
+        this.sendFilesUpdate(update);
+        return { path: filePath, occurrences };
+      }
+
+      return {
+        path: filePath,
+        filesUpdate: { [filePath]: newFileData },
+        occurrences: occurrences,
+      };
+    } catch (e: any) {
+      return { error: `Error: ${e.message}` };
     }
-
-    const [newContent, occurrences] = result;
-    const newFileData = updateFileData(fileData, newContent);
-    const update = { [filePath]: newFileData };
-
-    if (!this.isLegacy) {
-      this.sendFilesUpdate(update);
-      return { path: filePath, occurrences };
-    }
-
-    return {
-      path: filePath,
-      filesUpdate: { [filePath]: newFileData },
-      occurrences: occurrences,
-    };
   }
 
   /**
