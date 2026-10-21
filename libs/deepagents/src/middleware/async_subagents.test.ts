@@ -1798,6 +1798,115 @@ describe("parent reference", () => {
   });
 });
 
+describe("fork mode", () => {
+  async function launch(
+    agent: AsyncSubAgent,
+    state: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> {
+    const agentMap = { researcher: agent };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+    await buildStartTool(agentMap, cache, "Launch").invoke(
+      { description: "dig deeper", agentName: "researcher" },
+      parentRuntime(state as AsyncToolInvokeState),
+    );
+    return runsCreate.mock.calls[0][2].input.messages;
+  }
+
+  const history = [
+    new HumanMessage({ content: "find the bug", id: "h1" }),
+    new ToolMessage({
+      content: "file contents",
+      tool_call_id: "c1",
+      additional_kwargs: { lc_evicted_to: "/large_tool_results/c1" },
+    }),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "c2", name: "start_async_task", args: {} }],
+    }),
+  ];
+
+  it("sends the parent's conversation, without its in-flight call, then the task", async () => {
+    const messages = await launch(makeAgent({ mode: "fork" }), {
+      messages: history,
+    });
+
+    expect(messages.map((m) => m.type)).toEqual(["human", "tool", "human"]);
+    expect(messages[0]).toMatchObject({ content: "find the bug", id: "h1" });
+    // A parent-local eviction tag would make the child hide the full content.
+    expect(messages[1]).toMatchObject({
+      tool_call_id: "c1",
+      additional_kwargs: {},
+    });
+    expect(String(messages[2].content)).toMatch(
+      /background subagent[\s\S]*dig deeper$/,
+    );
+  });
+
+  it("sends the summary in place of what the parent summarized away", async () => {
+    const summary = new HumanMessage({ content: "summary so far" });
+    const messages = await launch(makeAgent({ mode: "fork" }), {
+      messages: history,
+      _summarizationEvent: { cutoffIndex: 1, summaryMessage: summary },
+    });
+
+    expect(messages.map((m) => m.content)).toEqual([
+      "summary so far",
+      "file contents",
+      expect.stringContaining("dig deeper"),
+    ]);
+  });
+
+  it("never sends a reference to media only the parent's backend holds", async () => {
+    const image = new ToolMessage({
+      content: [
+        {
+          type: "image",
+          mimeType: "image/png",
+          deepagents_blob: "a".repeat(64),
+        },
+      ] as never,
+      tool_call_id: "c1",
+      name: "read_file",
+    });
+
+    const messages = await launch(makeAgent({ mode: "fork" }), {
+      messages: [new HumanMessage("look at this"), image],
+    });
+
+    // Outside the filesystem middleware's tool call there's no blob storage to restore it from.
+    expect(JSON.stringify(messages[1].content)).toContain(
+      "no longer available",
+    );
+    expect(JSON.stringify(messages)).not.toContain("deepagents_blob");
+  });
+
+  it("sends only the task without fork mode", async () => {
+    const messages = await launch(makeAgent(), { messages: history });
+
+    expect(messages).toEqual([{ role: "user", content: "dig deeper" }]);
+  });
+
+  it("tells the model what a forked subagent inherits, and rejects unknown modes", () => {
+    const [start] = createAsyncSubAgentMiddleware({
+      asyncSubAgents: [makeAgent({ mode: "fork" })],
+    }).tools!;
+
+    expect(start.description).toContain(
+      "researcher: Research agent (inherits your conversation at launch",
+    );
+    expect(() =>
+      createAsyncSubAgentMiddleware({
+        asyncSubAgents: [
+          makeAgent({ mode: "copy" as unknown as AsyncSubAgent["mode"] }),
+        ],
+      }),
+    ).toThrow("invalid mode 'copy'");
+  });
+});
+
 describe("traceHeaders", () => {
   function mockRunTree() {
     getCurrentRunTree.mockReturnValueOnce({

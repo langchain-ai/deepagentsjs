@@ -18,14 +18,20 @@ import {
   type ToolRuntime,
 } from "langchain";
 import {
+  AIMessage,
   coerceMessageLikeToMessage,
+  HumanMessage,
+  ToolMessage as CoreToolMessage,
   type BaseMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
 import { getCurrentRunTree } from "langsmith/traceable";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
+import { hydrateToolMessages } from "./blobOffload.js";
 import { NUM_CHARS_PER_TOKEN } from "./fs.js";
+import { stripInFlightAIMessage } from "./subagents.js";
+import { getEffectiveMessages } from "./summarization.js";
 
 /**
  * Specification for an async subagent running on a remote [Agent Protocol](https://github.com/langchain-ai/agent-protocol)
@@ -77,6 +83,22 @@ export interface AsyncSubAgent {
    * @experimental `notifyParent` may change along with how subagents wake their parent.
    */
   notifyParent?: boolean;
+
+  /**
+   * What the subagent starts with. Defaults to `"isolated"`.
+   *
+   * - `"isolated"`: only the delegated task description.
+   * - `"fork"`: a snapshot of the parent's conversation at launch, followed by
+   *   the task description, for background work.
+   *
+   * Fork mode copies conversation history; it doesn't synchronize the parent's
+   * model, system prompt, tools or middleware. For prompt-cache reuse, configure
+   * the remote agent to match them; the rendered prefix must match, and cache hits
+   * depend on the provider.
+   *
+   * @experimental `mode: "fork"` may change in a future release.
+   */
+  mode?: "isolated" | "fork";
 }
 
 /**
@@ -707,6 +729,63 @@ function threadMetadata(
   return metadata;
 }
 
+const ASYNC_FORK_TASK_PREAMBLE =
+  "[The messages above are prior conversation inherited from the parent agent. " +
+  "You are the background subagent it has already invoked. Use the established " +
+  "context to complete the task below, not to repeat the prior delegation. " +
+  "You have your own tools and runtime; the parent's resources may not be available.]\n\n";
+
+/** A message as portable input for another run, without parent-local eviction tags. */
+function serializeForkMessage(message: BaseMessage): Record<string, unknown> {
+  // Eviction tags point to parent-local files; forwarding them would make the
+  // child's filesystem middleware hide the full content sent in this snapshot.
+  const { lc_evicted_to: _evicted, ...additionalKwargs } =
+    message.additional_kwargs ?? {};
+  const serialized: Record<string, unknown> = {
+    type: message.type,
+    content: message.content,
+    additional_kwargs: additionalKwargs,
+  };
+  if (message.id) serialized.id = message.id;
+  if (message.name) serialized.name = message.name;
+  if (AIMessage.isInstance(message)) serialized.tool_calls = message.tool_calls;
+  if (CoreToolMessage.isInstance(message)) {
+    serialized.tool_call_id = message.tool_call_id;
+    serialized.status = message.status;
+  }
+  return serialized;
+}
+
+/**
+ * The task's input messages: the parent's effective conversation for forks, or only the task.
+ *
+ * A fork's offloaded media is restored from the parent's blob storage, which the child can't read.
+ */
+async function startTaskMessages(
+  spec: AsyncSubAgent,
+  state: Record<string, unknown>,
+  description: string,
+): Promise<Record<string, unknown>[]> {
+  if (spec.mode !== "fork") return [{ role: "user", content: description }];
+  const history = stripInFlightAIMessage(
+    (state.messages as BaseMessage[] | undefined) ?? [],
+  );
+  const messages = await hydrateToolMessages([
+    ...getEffectiveMessages(history, state),
+    new HumanMessage({ content: ASYNC_FORK_TASK_PREAMBLE + description }),
+  ]);
+  return (messages as BaseMessage[]).map(serializeForkMessage);
+}
+
+/** Describe a subagent's context inheritance without promising shared tools. */
+function describeAsyncSubAgent(spec: AsyncSubAgent): string {
+  const suffix =
+    spec.mode === "fork"
+      ? " (inherits your conversation at launch; uses its own system prompt and tools)"
+      : "";
+  return `- ${spec.name}: ${spec.description}${suffix}`;
+}
+
 /**
  * The `runs.create` options that link a run to this agent and set the subagent's webhook.
  *
@@ -1111,7 +1190,11 @@ export function buildStartTool(
           .getClient(input.agentName, traceHeaders(spec))
           .runs.create(thread.thread_id, spec.graphId, {
             input: {
-              messages: [{ role: "user", content: input.description }],
+              messages: await startTaskMessages(
+                spec,
+                runtime.state as Record<string, unknown>,
+                input.description,
+              ),
               ...callbackContext,
             },
             ...runOptions(spec, runtime),
@@ -1635,11 +1718,20 @@ export function createAsyncSubAgentMiddleware(
     );
   }
 
+  for (const spec of asyncSubAgents) {
+    const mode = spec.mode ?? "isolated";
+    if (mode !== "isolated" && mode !== "fork") {
+      throw new Error(
+        `AsyncSubAgent '${spec.name}' has invalid mode '${mode}'; expected 'isolated' or 'fork'`,
+      );
+    }
+  }
+
   const agentMap = Object.fromEntries(asyncSubAgents.map((a) => [a.name, a]));
   const clients = new ClientCache(agentMap);
 
   const agentsDescription = asyncSubAgents
-    .map((a) => `- ${a.name}: ${a.description}`)
+    .map(describeAsyncSubAgent)
     .join("\n");
   const launchDescription = ASYNC_TASK_TOOL_DESCRIPTION.replace(
     "{available_agents}",

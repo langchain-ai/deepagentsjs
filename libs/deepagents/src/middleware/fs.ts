@@ -42,6 +42,7 @@ import {
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
+  withToolBlobStore,
 } from "./blobOffload.js";
 import {
   sanitizeToolCallId,
@@ -2578,7 +2579,21 @@ export function createFilesystemMiddleware(
     },
     wrapToolCall: async (request, handler) => {
       const toolName = request.toolCall?.name;
-      let result = await handler(request);
+      // Tools that send media elsewhere (such as forking an async subagent) can load it from here.
+      const toolBlobStore = blobCache
+        ? {
+            backend: () =>
+              resolveBackend(backend, {
+                ...request.runtime,
+                state: request.state,
+              }),
+            prefix: BLOBS_PREFIX,
+            cache: blobCache,
+          }
+        : undefined;
+      let result = await withToolBlobStore(toolBlobStore, async () =>
+        handler(request),
+      );
 
       if (blobCache && toolName === "read_file") {
         const resolvedBackend = await resolveBackend(backend, {
