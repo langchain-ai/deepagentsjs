@@ -935,3 +935,43 @@ describe("StateBackend", () => {
     });
   });
 });
+
+it("returns an error when the read offset is past the end of the file", () => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+
+  const writeRes = backend.write("/a.txt", "line1\nline2\n");
+  Object.assign(state.files, writeRes.filesUpdate ?? {});
+
+  // Regression: returned { content: "" } with no totalLines and no error,
+  // while FilesystemBackend reported the out-of-range offset.
+  const res = backend.read("/a.txt", 99, 500);
+  expect(res.error).toContain("Line offset 99 exceeds file length (2 lines)");
+  expect(res.content).toBeUndefined();
+});
+
+it("still returns the full first page for an in-range offset", () => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+
+  const writeRes = backend.write("/a.txt", "line1\nline2\n");
+  Object.assign(state.files, writeRes.filesUpdate ?? {});
+
+  const res = backend.read("/a.txt", 0, 500);
+  expect(res.error).toBeUndefined();
+  expect(res.content).toBe("line1\nline2\n");
+  expect(res.totalLines).toBe(2);
+});
+
+it.each([0, 500])("rejects an offset exactly at EOF with limit %i", (limit) => {
+  const { state, runtime } = makeConfig();
+  const backend = new StateBackend(runtime);
+  Object.assign(
+    state.files,
+    backend.write("/a.txt", "line1\nline2\n").filesUpdate,
+  );
+  expect(backend.read("/a.txt", 2, limit).error).toBe(
+    "Line offset 2 exceeds file length (2 lines)",
+  );
+  expect(backend.read("/a.txt", 0, 0).content).toBe("");
+});
