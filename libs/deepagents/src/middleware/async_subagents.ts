@@ -25,6 +25,7 @@ import {
   type BaseMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
+import { getContextVariable } from "@langchain/core/context";
 import { getCurrentRunTree } from "langsmith/traceable";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
@@ -65,7 +66,11 @@ export interface AsyncSubAgent {
   /** The graph name or assistant ID on the Agent Protocol server. */
   graphId: string;
 
-  /** URL of the Agent Protocol server. Defaults to the LangGraph SDK's default endpoint. */
+  /**
+   * URL of the Agent Protocol server. Omit for a subagent on the same Agent Server
+   * deployment, which gives running graphs its address; elsewhere, defaults to the
+   * LangGraph SDK's default endpoint.
+   */
   url?: string;
 
   /** Additional headers to include in requests to the server (e.g. for custom auth). */
@@ -559,6 +564,23 @@ function formatTaskEntry(task: AsyncTask, status: AsyncTaskStatus): string {
  * Agents that share the same URL and headers will reuse a single `Client`
  * instance, avoiding unnecessary connections.
  */
+/** Context variable in which an Agent Server gives a running JS graph its own deployment's address. */
+const DEPLOYMENT_URL_KEY = "langgraph_api:url";
+
+/**
+ * The address a subagent without a `url` is reached at: this deployment's, when an
+ * Agent Server provides it to the running graph, or else the SDK's default.
+ */
+export function deploymentUrl(spec?: AsyncSubAgent): string | undefined {
+  if (spec?.url) return spec.url;
+  try {
+    return getContextVariable<string>(DEPLOYMENT_URL_KEY);
+  } catch {
+    // Outside a run (or without async local storage) there's no address to read.
+    return undefined;
+  }
+}
+
 export class ClientCache {
   private agents: Record<string, AsyncSubAgent>;
   private clients = new Map<string, Client>();
@@ -588,7 +610,7 @@ export class ClientCache {
   private cacheKey(spec: AsyncSubAgent): string {
     const headers = this.resolveHeaders(spec);
     const headerStr = Object.entries(headers).sort().flat().join(":");
-    return `${spec.url ?? ""}|${headerStr}`;
+    return `${deploymentUrl(spec) ?? ""}|${headerStr}`;
   }
 
   /**
@@ -603,7 +625,7 @@ export class ClientCache {
     const spec = this.agents[name];
     if (Object.keys(extraHeaders).length > 0) {
       return new Client({
-        apiUrl: spec.url,
+        apiUrl: deploymentUrl(spec),
         defaultHeaders: { ...this.resolveHeaders(spec), ...extraHeaders },
       });
     }
@@ -614,7 +636,7 @@ export class ClientCache {
 
     const headers = this.resolveHeaders(spec);
     const client = new Client({
-      apiUrl: spec.url,
+      apiUrl: deploymentUrl(spec),
       defaultHeaders: headers,
     });
     this.clients.set(key, client);
@@ -1088,8 +1110,8 @@ async function awakeParent(
   update: TaskUpdate,
   context?: Record<string, unknown>,
 ): Promise<void> {
-  // No `apiUrl`: inside an Agent Server, the SDK calls this deployment in process.
-  const client = new Client();
+  // The parent runs on this deployment, so use the address the Agent Server gave this run.
+  const client = new Client({ apiUrl: deploymentUrl() });
   try {
     const thread = await client.threads.get(parentThreadId);
     if (!DELIVERABLE_THREAD_STATUSES.has(thread.status)) return;

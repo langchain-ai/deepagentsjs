@@ -37,7 +37,10 @@ import {
   type AsyncSubAgent,
   type AsyncTask,
   type AsyncTaskStatus,
+  deploymentUrl,
 } from "./async_subagents.js";
+import { setContextVariable } from "@langchain/core/context";
+import { AsyncLocalStorageProviderSingleton } from "@langchain/core/singletons";
 
 /**
  * Matches what LangChain `ToolNode` passes to `tool.invoke` (see `agents/nodes/ToolNode.js`):
@@ -1795,6 +1798,32 @@ describe("parent reference", () => {
       }),
     ).toEqual({ thread_id: "p", assistant_id: "lead" });
     expect(launchingAgent({})).toBeNull();
+  });
+});
+
+describe("subagents on this deployment", () => {
+  /** Run `fn` the way an Agent Server runs a JS graph: with the deployment's address in context. */
+  const inGraphRun = <T>(fn: () => T): Promise<T> =>
+    AsyncLocalStorageProviderSingleton.getInstance().run({}, async () => {
+      setContextVariable("langgraph_api:url", "http://localhost:5555/loopback");
+      return fn();
+    });
+
+  it("reach the deployment at the address the Agent Server gives the run", async () => {
+    const cache = new ClientCache({
+      local: makeAgent({ name: "local", url: undefined }),
+    });
+
+    const client = await inGraphRun(() => cache.getClient("local"));
+
+    expect(client.threads["apiUrl"]).toBe("http://localhost:5555/loopback");
+  });
+
+  it("keep their own url, and the SDK default outside a graph run", async () => {
+    expect(await inGraphRun(() => deploymentUrl(makeAgent()))).toBe(
+      "https://example.langsmith.dev",
+    );
+    expect(deploymentUrl(makeAgent({ url: undefined }))).toBeUndefined();
   });
 });
 
