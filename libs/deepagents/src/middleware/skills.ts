@@ -45,6 +45,7 @@ import yaml from "yaml";
 import {
   context,
   createMiddleware,
+  omitPayload,
   type ModelRequest,
   type Runtime,
   /**
@@ -1656,6 +1657,7 @@ export function createSkillsMiddleware<TContext = unknown>(
 
   return createMiddleware({
     name: "SkillsMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: SkillsStateSchema,
 
     async beforeModel(state) {

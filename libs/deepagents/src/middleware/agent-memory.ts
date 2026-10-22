@@ -35,6 +35,7 @@ import fs from "node:fs";
 import { z } from "zod";
 import {
   createMiddleware,
+  omitPayload,
   /**
    * required for type inference
    */
@@ -236,6 +237,7 @@ export function createAgentMemoryMiddleware(
 
   return createMiddleware({
     name: "AgentMemoryMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: AgentMemoryStateSchema as any,
 
     beforeAgent(state: any) {
