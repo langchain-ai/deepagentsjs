@@ -2347,3 +2347,302 @@ describe("status updates the parent can't read", () => {
     ).toBeUndefined();
   });
 });
+
+describe("queued follow-ups", () => {
+  const queued = makeAgent({ updateStrategy: "enqueue" });
+  const agentMap = { researcher: queued };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Send a follow-up to a tracked `run-1` task; the server returns it as `run-followup`, queued. */
+  async function sendUpdate(
+    spec: AsyncSubAgent,
+    task: AsyncTask = makeTask(),
+  ): Promise<Command | ToolMessage> {
+    const map = { researcher: spec };
+    const { cache, runsCreate } = createMockClientCache(map);
+    runsCreate.mockResolvedValue({ run_id: "run-followup", status: "pending" });
+    const result = await buildUpdateTool(map, cache).invoke(
+      { taskId: task.taskId, message: "Keep going" },
+      asyncAgentToolInvokeConfig("call-1", {
+        asyncTasks: { [task.taskId]: task },
+      }),
+    );
+    expect(runsCreate.mock.calls[0]?.[2].multitaskStrategy).toBe(
+      spec.updateStrategy ?? "interrupt",
+    );
+    return result;
+  }
+
+  function sent(result: Command | ToolMessage): [AsyncTask, string] {
+    const update = (result as Command).update as Record<string, unknown>;
+    const task = Object.values(
+      update.asyncTasks as Record<string, AsyncTask>,
+    )[0];
+    return [task, String((update.messages as ToolMessage[])[0].content)];
+  }
+
+  it.each([undefined, "interrupt" as const])(
+    "interrupts the current run by default (%s)",
+    async (updateStrategy) => {
+      const [task, confirmation] = sent(
+        await sendUpdate(makeAgent({ updateStrategy })),
+      );
+      expect(task).toMatchObject({ runId: "run-followup", status: "running" });
+      expect(task.supersededRunIds).toBeUndefined();
+      expect(confirmation).toMatch(/^Updated async subagent/);
+    },
+  );
+
+  it("queues behind the current run with enqueue", async () => {
+    const [task, confirmation] = sent(await sendUpdate(queued));
+    expect(task).toMatchObject({
+      runId: "run-followup",
+      status: "pending",
+      supersededRunIds: ["run-1"],
+    });
+    expect(confirmation).toContain("without interrupting");
+  });
+
+  it.each(["waiting", "success", "error"] as const)(
+    "is a plain update when the task has no active run (%s)",
+    async (status) => {
+      const [, confirmation] = sent(
+        await sendUpdate(queued, makeTask({ status })),
+      );
+      expect(confirmation).toMatch(/^Updated async subagent/);
+      expect(confirmation.includes("request was dropped")).toBe(
+        status === "waiting",
+      );
+    },
+  );
+
+  it("keeps earlier runs until the latest run finishes", async () => {
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    for (const id of ["run-first", "run-second", "run-third"]) {
+      runsCreate.mockResolvedValueOnce({ run_id: id, status: "pending" });
+    }
+    const update = buildUpdateTool(agentMap, cache);
+    let task = makeTask();
+    const send = async () => {
+      const result = await update.invoke(
+        { taskId: task.taskId, message: "More" },
+        asyncAgentToolInvokeConfig("call-1", {
+          asyncTasks: { [task.taskId]: task },
+        }),
+      );
+      [task] = sent(result);
+    };
+    await send();
+    await send();
+    expect(task.supersededRunIds).toEqual(["run-1", "run-first"]);
+    // Once the latest run has finished, the next follow-up leaves only that run behind.
+    task = { ...task, status: "success" };
+    await send();
+    expect(task.supersededRunIds).toEqual(["run-second"]);
+  });
+
+  it("names only the enqueue subagents in the tool description", () => {
+    const { cache } = createMockClientCache(agentMap);
+    const description = buildUpdateTool(
+      {
+        researcher: makeAgent(),
+        coder: makeAgent({ name: "coder", updateStrategy: "enqueue" }),
+      },
+      cache,
+    ).description;
+    const plain = buildUpdateTool(
+      { researcher: makeAgent() },
+      cache,
+    ).description;
+    expect(description.startsWith(plain)).toBe(true);
+    expect(description).toContain(
+      "for `coder`, follow-ups queue behind the current run without interrupting it",
+    );
+    expect(description).not.toContain("`researcher`");
+  });
+
+  it("check and list keep a queued task pending and its earlier runs", async () => {
+    const { cache, runsGet, threadsGet } = createMockClientCache(agentMap);
+    runsGet.mockResolvedValue({ run_id: "run-followup", status: "pending" });
+    const task = makeTask({
+      runId: "run-followup",
+      status: "pending",
+      supersededRunIds: ["run-1"],
+    });
+    const checked = await buildCheckTool(cache).invoke(
+      { taskId: task.taskId },
+      asyncAgentToolInvokeConfig("call-1", {
+        asyncTasks: { [task.taskId]: task },
+      }),
+    );
+    const [checkedTask, output] = sent(checked);
+    const result = JSON.parse(output);
+    expect(result.status).toBe("pending");
+    expect(result.note).toContain("earlier run");
+    expect(result.result).toBeUndefined();
+    expect(threadsGet).not.toHaveBeenCalled();
+
+    const listed = await buildListTool(cache).invoke(
+      { statusFilter: "pending" },
+      asyncAgentToolInvokeConfig("call-2", {
+        asyncTasks: { [task.taskId]: checkedTask },
+      }),
+    );
+    const [listedTask, entries] = sent(listed);
+    expect(entries).toContain("pending");
+    expect(listedTask.supersededRunIds).toEqual(["run-1"]);
+  });
+
+  it("sends only the first of parallel follow-ups to one task", async () => {
+    const turn = new AIMessage({
+      content: "",
+      tool_calls: ["first", "second"].map((m) => ({
+        name: "update_async_task",
+        args: { taskId: "thread-1", message: m },
+        id: `call-${m}`,
+      })),
+    });
+    const { cache, runsCreate } = createMockClientCache(agentMap);
+    runsCreate.mockResolvedValue({ run_id: "run-followup", status: "pending" });
+    const update = buildUpdateTool(agentMap, cache);
+    const task = makeTask();
+    const [first, second] = await Promise.all(
+      ["call-first", "call-second"].map((id) =>
+        update.invoke(
+          { taskId: task.taskId, message: "Keep going" },
+          asyncAgentToolInvokeConfig(id, {
+            asyncTasks: { [task.taskId]: task },
+            messages: [turn],
+          } as AsyncToolInvokeState),
+        ),
+      ),
+    );
+    expect(first).toBeInstanceOf(Command);
+    expect(String((second as ToolMessage).content)).toMatch(/^Not sent/);
+    expect(runsCreate).toHaveBeenCalledOnce();
+  });
+
+  it("cancel stops the queued run and earlier active runs, newest first", async () => {
+    const { cache, runsGet, runsCancel } = createMockClientCache(agentMap);
+    runsGet
+      .mockResolvedValueOnce({ status: "pending" })
+      .mockRejectedValueOnce(new Error("thread gone"))
+      .mockResolvedValueOnce({ status: "running" })
+      .mockResolvedValueOnce({ status: "success" });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const task = makeTask({
+      runId: "run-latest",
+      status: "pending",
+      supersededRunIds: ["run-done", "run-active", "run-stale", "run-queued"],
+    });
+    const result = await buildCancelTool(cache).invoke(
+      { taskId: task.taskId },
+      asyncAgentToolInvokeConfig("call-1", {
+        asyncTasks: { [task.taskId]: task },
+      }),
+    );
+    expect(sent(result)[0].status).toBe("cancelled");
+    expect(runsCancel.mock.calls.map((call) => call[1])).toEqual([
+      "run-latest",
+      "run-queued",
+      "run-active",
+    ]);
+  });
+
+  it("rejects an unknown updateStrategy", () => {
+    expect(() =>
+      createAsyncSubAgentMiddleware({
+        asyncSubAgents: [
+          makeAgent({ updateStrategy: "reject" as "enqueue" }),
+        ],
+      }),
+    ).toThrow(/invalid updateStrategy/);
+  });
+
+  describe("an earlier run's notification", () => {
+    function mockServer(run: Record<string, unknown>, thread: unknown) {
+      const client = new Client({ apiUrl: "https://example.langsmith.dev" });
+      vi.spyOn(Object.getPrototypeOf(client.runs), "get").mockResolvedValue(
+        run,
+      );
+      vi.spyOn(Object.getPrototypeOf(client.threads), "get").mockResolvedValue(
+        thread,
+      );
+    }
+
+    const event = {
+      task_id: "thread-1",
+      agent_name: "researcher",
+      status: "success" as const,
+      run_id: "run-1",
+    };
+    const queuedTask = makeTask({
+      runId: "run-followup",
+      status: "pending",
+      supersededRunIds: ["run-1"],
+    });
+    const beforeAgent = () =>
+      createAsyncSubAgentMiddleware({ asyncSubAgents: [queued] })
+        .beforeAgent as (state: unknown) => Promise<Record<string, unknown>>;
+
+    it("is rewritten, keeping its result, and doesn't complete the task", async () => {
+      mockServer({ run_id: "run-followup", status: "pending" }, null);
+      const notification = new HumanMessage({
+        id: "notification",
+        content: notificationContent({
+          ...event,
+          result: [{ type: "text", text: "FULL REPORT" }],
+        }),
+        additional_kwargs: { deepagents_notification: event },
+      });
+
+      const update = await beforeAgent()({
+        messages: [notification],
+        asyncTasks: { [queuedTask.taskId]: queuedTask },
+      });
+
+      expect(update.asyncTasks).toEqual({});
+      const [replaced] = update.messages as HumanMessage[];
+      expect(replaced.id).toBe("notification");
+      expect(replaced.additional_kwargs.deepagents_notification).toEqual(event);
+      expect(replaced.text).toMatch(/^\[SYSTEM NOTIFICATION - NOT USER INPUT\]/);
+      expect(replaced.text).toContain("FULL REPORT");
+      expect(replaced.text).toContain("not the result of the follow-up");
+      expect(replaced.text).not.toContain("Use the result to continue");
+      expect(replaced.text.split("</task-notification>")).toHaveLength(2);
+    });
+
+    it("is rewritten alongside the follow-up's own outcome", async () => {
+      mockServer(
+        { run_id: "run-followup", status: "success" },
+        {
+          status: "idle",
+          values: { messages: [{ type: "ai", content: "follow-up done" }] },
+        },
+      );
+      const notification = new HumanMessage({
+        id: "notification",
+        content: "old outcome",
+        additional_kwargs: { deepagents_notification: event },
+      });
+
+      const update = await beforeAgent()({
+        messages: [notification],
+        asyncTasks: { [queuedTask.taskId]: queuedTask },
+      });
+
+      const [replaced, completion] = update.messages as HumanMessage[];
+      expect(replaced.id).toBe("notification");
+      expect(replaced.text).toContain("not the result of the follow-up");
+      expect(
+        completion.additional_kwargs.deepagents_notification,
+      ).toMatchObject({ run_id: "run-followup", status: "success" });
+      expect(
+        (update.asyncTasks as Record<string, AsyncTask>)["thread-1"].status,
+      ).toBe("success");
+    });
+  });
+});

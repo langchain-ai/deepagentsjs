@@ -90,6 +90,18 @@ export interface AsyncSubAgent {
   notifyParent?: boolean;
 
   /**
+   * How `update_async_task` sends a follow-up while a run is active. Defaults to `"interrupt"`.
+   *
+   * - `"interrupt"`: stop the current run and start the follow-up.
+   * - `"enqueue"`: queue the follow-up behind the current run. The task is `pending`
+   *   until the follow-up starts. If the current run stops to ask its user for
+   *   approval or input, the follow-up still starts, and that request is dropped.
+   *
+   * @experimental `updateStrategy` may change along with how queued follow-ups are tracked.
+   */
+  updateStrategy?: UpdateStrategy;
+
+  /**
    * What the subagent starts with. Defaults to `"isolated"`.
    *
    * - `"isolated"`: only the delegated task description.
@@ -106,6 +118,9 @@ export interface AsyncSubAgent {
   mode?: "isolated" | "fork";
 }
 
+/** How a follow-up runs while the subagent is busy, as {@link AsyncSubAgent.updateStrategy}. */
+export type UpdateStrategy = "interrupt" | "enqueue";
+
 /**
  * Possible statuses for an async subagent task.
  *
@@ -114,6 +129,9 @@ export interface AsyncSubAgent {
  *
  * `"waiting"` means the subagent paused for its user (an approval or a
  * question), who answers it on the subagent's own thread.
+ *
+ * `"pending"` means the latest run hasn't started yet. After a queued follow-up,
+ * an earlier run may still be working.
  *
  * @experimental `"waiting"` is experimental and subject to change.
  */
@@ -144,8 +162,16 @@ export interface AsyncTask {
   /** Thread ID on the remote server. */
   threadId: string;
 
-  /** Run ID for the current execution on the thread. */
+  /** Run ID of the newest run this task knows of on its thread. A queued follow-up's run may not have started yet. */
   runId: string;
+
+  /**
+   * Earlier runs of this task, oldest first, from before a queued follow-up.
+   *
+   * Their notifications don't complete the task, and cancelling the task also
+   * cancels any that are still active. Set only with `updateStrategy: "enqueue"`.
+   */
+  supersededRunIds?: string[];
 
   /** Current task status. */
   status: AsyncTaskStatus;
@@ -174,6 +200,8 @@ export interface AsyncTask {
 type AsyncTaskState = {
   /** All tracked async subagent tasks, keyed by task ID. */
   asyncTasks?: Record<string, AsyncTask>;
+  /** The conversation, read to spot parallel follow-ups to one task. */
+  messages?: BaseMessage[];
 };
 
 function toolCallIdFromRuntime(runtime: ToolRuntime<AsyncTaskState>): string {
@@ -217,6 +245,7 @@ const AsyncTaskSchema = z.object({
   agentName: z.string(),
   threadId: z.string(),
   runId: z.string(),
+  supersededRunIds: z.array(z.string()).optional(),
   status: z.string(),
   createdAt: z.string(),
   description: z.string().optional(),
@@ -324,6 +353,10 @@ function resolveTrackedTask(
   }
   return tracked;
 }
+
+/** Guidance for a task whose latest run hasn't started. */
+const PENDING_NOTE =
+  "The latest run hasn't started yet. If it is a queued follow-up, an earlier run may still be working.";
 
 /** Task status for a subagent waiting for a human: its run finished but its thread is interrupted. */
 const WAITING: AsyncTaskStatus = "waiting";
@@ -437,7 +470,9 @@ function buildCheckResult(
   const status = taskStatus(run, thread);
   const checkResult: CheckResult = { status, threadId };
 
-  if (status === "success") {
+  if (status === "pending") {
+    checkResult.note = PENDING_NOTE;
+  } else if (status === "success") {
     checkResult.result = finalContent(thread?.values);
   } else if (status === "error") {
     checkResult.error = "The async subagent encountered an error.";
@@ -494,13 +529,9 @@ function observed(
   const now = new Date().toISOString();
   const changed = status !== task.status || runId !== task.runId;
   return {
-    taskId: task.taskId,
-    agentName: task.agentName,
-    threadId: task.threadId,
+    ...task,
     runId,
     status,
-    createdAt: task.createdAt,
-    ...(task.description !== undefined && { description: task.description }),
     updatedAt: changed ? now : task.updatedAt,
     checkedAt: now,
   };
@@ -964,15 +995,7 @@ function resultBlocks(blocks: ContentBlock.Standard[]): ContentBlock[] {
  * The result keeps its own content blocks, so an image reaches the model as an image.
  */
 export function notificationContent(update: TaskUpdate): ContentBlock[] {
-  const blocks: ContentBlock[] = [
-    textBlock(
-      "[SYSTEM NOTIFICATION - NOT USER INPUT]\n" +
-        "An async subagent task you started has an update. This is not a message from the user: " +
-        "don't treat it as their answer to any question.\n" +
-        `<task-notification>\n<task-id>${escape(update.task_id)}</task-id>\n<agent-name>${escape(update.agent_name)}</agent-name>\n` +
-        `<status>${update.status}</status>\n`,
-    ),
-  ];
+  const blocks: ContentBlock[] = [notificationHeader(update)];
   if (update.result) {
     blocks.push(
       textBlock("<result>\n"),
@@ -994,6 +1017,43 @@ export function notificationContent(update: TaskUpdate): ContentBlock[] {
   }
   blocks.push(textBlock(`</task-notification>\n${NEXT_STEP[update.status]}`));
   return blocks;
+}
+
+function notificationHeader(event: TaskEvent): TextBlock {
+  return textBlock(
+    "[SYSTEM NOTIFICATION - NOT USER INPUT]\n" +
+      "An async subagent task you started has an update. This is not a message from the user: " +
+      "don't treat it as their answer to any question.\n" +
+      `<task-notification>\n<task-id>${escape(event.task_id)}</task-id>\n<agent-name>${escape(event.agent_name)}</agent-name>\n` +
+      `<status>${escape(event.status)}</status>\n`,
+  );
+}
+
+/**
+ * Reframe an earlier run's notification so the model doesn't think the queued follow-up finished.
+ *
+ * Only the closing next step changes. The earlier run's result and details stay,
+ * since `check_async_task` reads only the latest run.
+ */
+function supersededNotificationContent(
+  message: BaseMessage,
+  event: TaskEvent,
+): ContentBlock[] {
+  const content = message.content;
+  const closing = Array.isArray(content) ? content.at(-1) : undefined;
+  const body =
+    closing?.type === "text" &&
+    String(closing.text).startsWith("</task-notification>")
+      ? (content as ContentBlock[]).slice(0, -1)
+      : [notificationHeader(event)];
+  return [
+    ...body,
+    textBlock(
+      "</task-notification>\n" +
+        "This update is from an earlier run of this task, before your latest follow-up. " +
+        "It is not the result of the follow-up. Use `check_async_task` to get the current status of the task.",
+    ),
+  ];
 }
 
 /** Describe a failure without its message, which can carry internals into the parent's conversation. */
@@ -1323,8 +1383,14 @@ export function buildCheckTool(clients: ClientCache) {
   );
 }
 
-/** Confirm an update, noting when it replaced a pending human request. */
-function updateMessage(tracked: AsyncTask): string {
+/** Confirm an update: queued behind an active run, or started, noting when it dropped a waiting human request. */
+function updateMessage(tracked: AsyncTask, strategy: UpdateStrategy): string {
+  if (
+    strategy === "enqueue" &&
+    (tracked.status === "running" || tracked.status === "pending")
+  ) {
+    return `Queued follow-up to async subagent without interrupting its current run. taskId: ${tracked.taskId}`;
+  }
   const msg = `Updated async subagent. taskId: ${tracked.taskId}`;
   return tracked.status === WAITING
     ? `${msg}. It was waiting for a human; that request was dropped.`
@@ -1332,12 +1398,90 @@ function updateMessage(tracked: AsyncTask): string {
 }
 
 /**
+ * Refuse every queued follow-up to a task after the first in one model turn.
+ *
+ * Parallel tool calls read the same state, so each would record its run as the only
+ * queued follow-up, and the task would lose track of the others.
+ */
+function parallelUpdateError(
+  taskId: string,
+  runtime: ToolRuntime<AsyncTaskState>,
+): string | null {
+  const messages = runtime.state.messages ?? [];
+  const turn = messages.findLast((m) => AIMessage.isInstance(m));
+  const ids = (turn?.tool_calls ?? [])
+    .filter(
+      (call) =>
+        call.name === "update_async_task" &&
+        String(call.args.taskId ?? "").trim() === taskId,
+    )
+    .map((call) => call.id);
+  if (!ids.slice(1).includes(toolCallIdFromRuntime(runtime))) return null;
+  return (
+    `Not sent: an earlier \`update_async_task\` call in this turn already queues a follow-up for task ${taskId}. ` +
+    "Send this follow-up in a later turn, or combine the two into one message."
+  );
+}
+
+/**
+ * The runs a queued follow-up leaves behind it.
+ *
+ * The list grows while the task is unfinished. Otherwise it restarts with the tracked
+ * run: enqueued runs start in order, so earlier runs ended before that run started.
+ * A follow-up cancelled before it started is the exception; an earlier run may still be active.
+ */
+function supersededAfterUpdate(tracked: AsyncTask): string[] {
+  const earlier = UNFINISHED_STATUSES.has(tracked.status)
+    ? (tracked.supersededRunIds ?? [])
+    : [];
+  return [...earlier, tracked.runId];
+}
+
+/** The tracked task after a follow-up created `run`, which may still be queued. */
+function updatedTask(
+  tracked: AsyncTask,
+  run: Run,
+  strategy: UpdateStrategy,
+  message: string,
+): AsyncTask {
+  const task: AsyncTask = {
+    ...tracked,
+    runId: run.run_id,
+    status: "running",
+    description: message,
+    updatedAt: new Date().toISOString(),
+  };
+  if (strategy === "enqueue") {
+    task.status = run.status as AsyncTaskStatus;
+    task.supersededRunIds = supersededAfterUpdate(tracked);
+  }
+  return task;
+}
+
+const UPDATE_TOOL_DESCRIPTION =
+  "send updated instructions to an async subagent. Interrupts the current run and starts a new one on the same thread so the subagent sees the full conversation history plus your new message. The taskId remains the same.";
+
+/** The update tool's description, naming the subagents whose follow-ups queue instead. */
+function updateToolDescription(agentMap: Record<string, AsyncSubAgent>): string {
+  const queued = Object.values(agentMap)
+    .filter((spec) => spec.updateStrategy === "enqueue")
+    .map((spec) => `\`${spec.name}\``);
+  if (queued.length === 0) return UPDATE_TOOL_DESCRIPTION;
+  return (
+    `${UPDATE_TOOL_DESCRIPTION}\n\nException: for ${queued.join(", ")}, follow-ups queue behind the current run without interrupting it. ` +
+    "A pending status means the latest follow-up is queued and earlier work may still be running. " +
+    "If the current run stops to ask the user something, the queued follow-up still starts and that request is dropped. " +
+    "Send one follow-up per task per turn; combine several into one message."
+  );
+}
+
+/**
  * Build the `update_async_task` tool.
  *
- * Sends a follow-up message to a running async subagent by creating a new
- * run on the same thread with `multitaskStrategy: "interrupt"`. The subagent
- * sees the full conversation history plus the new message. The `taskId`
- * remains the same; only the internal `runId` is updated.
+ * Sends a follow-up message to an async subagent by creating a new run on the
+ * same thread. The subagent sees the full conversation history plus the new
+ * message. The `taskId` remains the same. The subagent's `updateStrategy`
+ * decides whether the new run interrupts the current run or queues behind it.
  */
 export function buildUpdateTool(
   agentMap: Record<string, AsyncSubAgent>,
@@ -1352,37 +1496,36 @@ export function buildUpdateTool(
       if (typeof tracked === "string") return tracked;
 
       const spec = agentMap[tracked.agentName];
+      const strategy = spec.updateStrategy ?? "interrupt";
+      const refused =
+        strategy === "enqueue" && parallelUpdateError(tracked.taskId, runtime);
+      if (refused) return refused;
       try {
         const client = clients.getClient(tracked.agentName, traceHeaders(spec));
         const run = await client.runs.create(tracked.threadId, spec.graphId, {
           input: {
             messages: [{ role: "user", content: input.message }],
           },
-          multitaskStrategy: "interrupt",
+          multitaskStrategy: strategy,
           ...runOptions(spec, runtime),
         });
-
-        const task: AsyncTask = {
-          taskId: tracked.taskId,
-          agentName: tracked.agentName,
-          threadId: tracked.threadId,
-          runId: run.run_id,
-          status: "running",
-          createdAt: tracked.createdAt,
-          description: input.message,
-          updatedAt: new Date().toISOString(),
-          checkedAt: tracked.checkedAt,
-        };
 
         return new Command({
           update: {
             messages: [
               new ToolMessage({
-                content: updateMessage(tracked),
+                content: updateMessage(tracked, strategy),
                 tool_call_id: toolCallIdFromRuntime(runtime),
               }),
             ],
-            asyncTasks: { [tracked.taskId]: task },
+            asyncTasks: {
+              [tracked.taskId]: updatedTask(
+                tracked,
+                run,
+                strategy,
+                input.message,
+              ),
+            },
           },
         });
       } catch (e) {
@@ -1391,8 +1534,7 @@ export function buildUpdateTool(
     },
     {
       name: "update_async_task",
-      description:
-        "send updated instructions to an async subagent. Interrupts the current run and starts a new one on the same thread so the subagent sees the full conversation history plus your new message. The taskId remains the same.",
+      description: updateToolDescription(agentMap),
       schema: z.object({
         taskId: z
           .string()
@@ -1407,6 +1549,29 @@ export function buildUpdateTool(
       }),
     },
   );
+}
+
+/**
+ * Cancel earlier runs that are still pending or running, newest first.
+ *
+ * Newest first, so cancelling an active run doesn't let a queued run behind it start.
+ * A run that can't be read or cancelled is skipped, so one stale run doesn't fail the cancel.
+ */
+async function cancelEarlierRuns(client: Client, task: AsyncTask): Promise<void> {
+  for (const runId of [...(task.supersededRunIds ?? [])].reverse()) {
+    try {
+      const run = await client.runs.get(task.threadId, runId);
+      if (run.status === "running" || run.status === "pending") {
+        await client.runs.cancel(task.threadId, runId);
+      }
+    } catch (e) {
+      // oxlint-disable-next-line no-console
+      console.warn(
+        `Failed to cancel earlier run ${runId} of task ${task.taskId}:`,
+        e,
+      );
+    }
+  }
 }
 
 /**
@@ -1427,23 +1592,18 @@ export function buildCancelTool(clients: ClientCache) {
       // A paused subagent has no active run to cancel; marking the task is enough.
       if (tracked.status !== WAITING) {
         try {
-          await clients
-            .getClient(tracked.agentName)
-            .runs.cancel(tracked.threadId, tracked.runId);
+          const client = clients.getClient(tracked.agentName);
+          await client.runs.cancel(tracked.threadId, tracked.runId);
+          await cancelEarlierRuns(client, tracked);
         } catch (e) {
           return `Failed to cancel run: ${e}`;
         }
       }
 
       const updated: AsyncTask = {
-        taskId: tracked.taskId,
-        agentName: tracked.agentName,
-        threadId: tracked.threadId,
-        runId: tracked.runId,
+        ...tracked,
         status: "cancelled",
-        createdAt: tracked.createdAt,
         updatedAt: new Date().toISOString(),
-        checkedAt: tracked.checkedAt,
       };
 
       return new Command({
@@ -1461,7 +1621,7 @@ export function buildCancelTool(clients: ClientCache) {
     {
       name: "cancel_async_task",
       description:
-        "Cancel a running or waiting async subagent task. Use this to stop a task that is no longer needed.",
+        "Cancel a running, pending, or waiting async subagent task. Use this to stop a task that is no longer needed.",
       schema: z.object({
         taskId: z
           .string()
@@ -1520,13 +1680,13 @@ export function buildListTool(clients: ClientCache) {
     {
       name: "list_async_tasks",
       description:
-        "List tracked async subagent tasks with their current live statuses. By default shows all tasks. Use `statusFilter` to narrow by status (e.g., 'running', 'waiting', 'success', 'error', 'cancelled'). Use `check_async_task` to get the full result of a specific completed task, or what a `waiting` task is asking the user. Statuses shown earlier in the conversation are always stale, so call this to read current statuses rather than reporting one from a previous tool result.",
+        "List tracked async subagent tasks with their current live statuses. By default shows all tasks. Use `statusFilter` to narrow by status (e.g., 'running', 'pending', 'waiting', 'success', 'error', 'cancelled'). Use `check_async_task` to get the full result of a specific completed task, or what a `waiting` task is asking the user. Statuses shown earlier in the conversation are always stale, so call this to read current statuses rather than reporting one from a previous tool result.",
       schema: z.object({
         statusFilter: z
           .string()
           .nullish()
           .describe(
-            "Filter tasks by status. One of: 'running', 'waiting', 'success', 'error', 'cancelled', 'all'. Defaults to 'all'.",
+            "Filter tasks by status. One of: 'running', 'pending', 'waiting', 'success', 'error', 'cancelled', 'all'. Defaults to 'all'.",
           ),
       }),
     },
@@ -1637,20 +1797,42 @@ async function pull(
   return update;
 }
 
-/** When a task notification started this run, record the task's outcome so checks don't report it again. */
+/**
+ * When a task notification started this run, record the task's outcome so checks don't report it again.
+ *
+ * A notification from an earlier run that a queued follow-up replaced is rewritten
+ * instead, so the model doesn't take it as the task's outcome.
+ */
 function recordNotification(
   messages: BaseMessage[],
   tasks: Record<string, AsyncTask>,
-): Record<string, AsyncTask> {
-  const event = notificationEvent(messages[messages.length - 1]);
+): PullUpdate {
+  const last = messages[messages.length - 1];
+  const event = notificationEvent(last);
   const task = event ? tasks[event.task_id] : undefined;
   // A cancelled task stays cancelled: the outcome of a run the agent gave up on isn't news.
   // Pulls skip it too, since only unfinished tasks are checked.
   if (!event || !task || task.status === "cancelled") return {};
   const runId = event.run_id ?? task.runId;
-  // Answering a pause starts a new run; an update cancels the old run before it can report.
+  if (task.supersededRunIds?.includes(runId)) {
+    // Same ID, so the reducer replaces the original; same marker, so apps still see a notification.
+    const content = supersededNotificationContent(last, event);
+    return {
+      messages: [
+        new HumanMessage({
+          id: last.id,
+          content,
+          additional_kwargs: last.additional_kwargs,
+        }),
+      ],
+    };
+  }
+  // Answering a pause starts a new run, so a new run ID still counts while the task is unfinished.
+  // An interrupting update cancels the old run before it can report.
   if (runId !== task.runId && !UNFINISHED_STATUSES.has(task.status)) return {};
-  return { [task.taskId]: observed(task, event.status, runId) };
+  return {
+    asyncTasks: { [task.taskId]: observed(task, event.status, runId) },
+  };
 }
 
 /** The tasks tracked in state; the state schema stores `status` as a plain string. */
@@ -1741,6 +1923,12 @@ export function createAsyncSubAgentMiddleware(
   }
 
   for (const spec of asyncSubAgents) {
+    const strategy = spec.updateStrategy ?? "interrupt";
+    if (strategy !== "interrupt" && strategy !== "enqueue") {
+      throw new Error(
+        `AsyncSubAgent '${spec.name}' has invalid updateStrategy '${strategy}'; expected 'interrupt' or 'enqueue'`,
+      );
+    }
     const mode = spec.mode ?? "isolated";
     if (mode !== "isolated" && mode !== "fork") {
       throw new Error(
@@ -1780,10 +1968,14 @@ export function createAsyncSubAgentMiddleware(
       const messages = (state.messages ?? []) as BaseMessage[];
       const tasks = trackedTasks(state);
       const recorded = recordNotification(messages, tasks);
-      const updates = await pull(clients, { ...tasks, ...recorded });
-      const asyncTasks = { ...recorded, ...updates.asyncTasks };
-      if (Object.keys(asyncTasks).length === 0 && !updates.messages) return;
-      return { ...updates, asyncTasks };
+      const updates = await pull(clients, { ...tasks, ...recorded.asyncTasks });
+      const asyncTasks = { ...recorded.asyncTasks, ...updates.asyncTasks };
+      const notes = [...(recorded.messages ?? []), ...(updates.messages ?? [])];
+      if (Object.keys(asyncTasks).length === 0 && notes.length === 0) return;
+      return {
+        asyncTasks,
+        ...(notes.length > 0 && { messages: notes }),
+      };
     },
     beforeModel: async (state) => {
       const updates = await pull(clients, trackedTasks(state));
