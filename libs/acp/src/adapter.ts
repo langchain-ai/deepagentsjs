@@ -205,6 +205,10 @@ export function formatToolCallTitle(
   args: Record<string, unknown>,
 ): string {
   switch (toolName) {
+    case "execute":
+      return typeof args.command === "string"
+        ? `Execute: ${args.command}`
+        : "Execute command";
     case "read_file":
       return `Reading ${args.path ?? "file"}`;
     case "write_file":
