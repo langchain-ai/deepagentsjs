@@ -480,8 +480,7 @@ const TOOL_BLOB_STORE = "__deepagents_tool_blob_store";
 
 /**
  * Run a tool with `store` exposed, so tools that need portable media can load it.
- *
- * It's request-scoped rather than graph state: the backend never lands in a checkpoint.
+ * It's request-scoped, so the backend never lands in a checkpoint.
  */
 export async function withToolBlobStore<T>(
   store: ToolBlobStore | undefined,

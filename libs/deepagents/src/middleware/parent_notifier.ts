@@ -60,8 +60,7 @@ export function createParentNotifierMiddleware() {
     details: Parameters<typeof taskEvent>[3],
   ): Promise<void> {
     const config = currentConfig();
-    // Graphs nested in this run (e.g. a sync subagent that's a deep agent) inherit its config,
-    // parent reference included; only the top-level graph reports, so the parent gets this agent's answer.
+    // Nested graphs (e.g. a deep agent as a sync subagent) inherit the parent reference; only the top-level graph reports.
     if (!config || !launchingAgent(config) || !isTopLevelGraph(config)) return;
     const runKey = currentRunId(config);
     if (runKey === undefined || reported.has(runKey)) return;
@@ -93,9 +92,8 @@ export function createParentNotifierMiddleware() {
       try {
         return await handler(request);
       } catch (e) {
-        // Interrupts pause the run rather than fail it. A cancelled, replaced or
-        // timed-out run aborts its signal; that isn't the subagent failing, and the
-        // parent learns about it from the run's status instead.
+        // Interrupts pause the run, and an aborted run (cancelled, replaced, timed out)
+        // reaches the parent through its run status; neither is a failure.
         if (!isGraphBubbleUp(e) && !wasAborted(e, request.runtime.signal)) {
           await report("error", { error: failureText(e) });
         }

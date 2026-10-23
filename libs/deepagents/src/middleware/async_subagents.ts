@@ -47,12 +47,9 @@ import { getEffectiveMessages } from "./summarization.js";
  * via environment variables (`LANGGRAPH_API_KEY`, `LANGSMITH_API_KEY`, or
  * `LANGCHAIN_API_KEY`). For self-hosted servers, pass custom auth via `headers`.
  *
- * When tracing is on, launches and updates of subagents on this deployment
- * (no `url`) send the parent's LangSmith trace headers, so a receiver can nest
- * the subagent's run under the parent's trace. Each task's thread is created
- * with `metadata: { parent_thread_id }`, so apps can find a parent's subagent
- * threads with `threads.search`, and a subagent's graph can read it from its
- * run's `config.metadata`.
+ * Subagents on this deployment (no `url`) nest under the parent's trace when tracing is on.
+ * Each task's thread has `parent_thread_id` metadata, so apps can find a parent's
+ * subagent threads with `threads.search`.
  *
  * @experimental Trace headers and the parent's thread metadata are experimental and subject to change.
  */
@@ -108,10 +105,8 @@ export interface AsyncSubAgent {
    * - `"fork"`: a snapshot of the parent's conversation at launch, followed by
    *   the task description, for background work.
    *
-   * Fork mode copies conversation history; it doesn't synchronize the parent's
-   * model, system prompt, tools or middleware. For prompt-cache reuse, configure
-   * the remote agent to match them; the rendered prefix must match, and cache hits
-   * depend on the provider.
+   * Fork mode copies conversation history, not the parent's model, prompt, tools
+   * or middleware; match them on the remote agent for prompt-cache reuse.
    *
    * @experimental `mode: "fork"` may change in a future release.
    */
@@ -392,14 +387,11 @@ function needsLatestRun(run: Run, thread: Thread | null): boolean {
 }
 
 /**
- * Fetch a task's latest run and, when that run finished, its thread.
+ * Fetch a task's latest run and, when that run finished, its thread (else `null`).
  *
- * The thread is `null` for an unfinished run. Throws if the thread can't be read,
- * since a paused run also ends as `success`.
- *
- * A tracked run that another client's run interrupted hands over to the newest run;
- * the tracked run is reported `cancelled` only when nothing replaced it. A task the
- * parent cancelled isn't followed, so another client's run can't revive it.
+ * Throws if the thread can't be read, since a paused run also ends as `success`.
+ * A run replaced by another client's run hands over to the newest one, except for
+ * a task the parent cancelled.
  */
 async function observe(
   client: Client,
@@ -490,8 +482,8 @@ function buildCheckResult(
 /**
  * A check result as tool output: JSON, with a text-only answer's text in `result`.
  *
- * An answer with media follows the JSON as its own blocks, in order, so each image stays by
- * its text. Reasoning and tool-call blocks are dropped, as in notifications; the text isn't cut.
+ * An answer with media follows the JSON as its own blocks, in order. Reasoning and
+ * tool-call blocks are dropped; the text isn't cut.
  */
 function checkOutput(result: CheckResult): string | ContentBlock[] {
   const blocks = result.result;
@@ -647,10 +639,8 @@ export class ClientCache {
   /**
    * Get or create a `Client` for the named agent.
    *
-   * With `extraHeaders` (such as trace headers for one launch), returns a new,
-   * uncached client that also sends them, since the SDK has no per-request headers.
-   * Trace headers name the current span, so they differ on every call and can't
-   * be cached; building a `Client` is cheap (it holds no connections of its own).
+   * With `extraHeaders` (such as one launch's trace headers), returns a new,
+   * uncached client: the SDK has no per-request headers, and a `Client` is cheap.
    */
   getClient(name: string, extraHeaders: Record<string, string> = {}): Client {
     const spec = this.agents[name];
@@ -686,10 +676,9 @@ const NEST_UNDER_PARENT = "ls_nest_under_parent";
 /**
  * Build LangSmith headers pointing at the current span, or `{}` when tracing is off.
  *
- * Only sent to subagents on this deployment (no `url`), so the parent's trace
- * details don't reach another server. The baggage carries the project and the
- * `NEST_UNDER_PARENT` flag, not the caller's run metadata, so a receiver can't
- * copy that onto the subagent's runs. Any `baggage` in the spec's headers is kept.
+ * Only sent to subagents on this deployment (no `url`). The baggage carries the
+ * project and `NEST_UNDER_PARENT`, not the caller's run metadata. Any `baggage`
+ * in the spec's headers is kept.
  */
 export function traceHeaders(spec: AsyncSubAgent): Record<string, string> {
   if (spec.url) return {};
@@ -748,9 +737,8 @@ function parentReference(
 /**
  * The parent reference sent to `spec`'s runs.
  *
- * A subagent on another server (`url`), or one with `notifyParent: false`, gets
- * only the parent's thread, to know what started it: the parent's assistant is
- * only for waking the parent, which it can't do from another deployment.
+ * A subagent on another server (`url`) or with `notifyParent: false` gets only the
+ * parent's thread: the assistant is for waking the parent, which it can't do.
  */
 function referenceFor(
   spec: AsyncSubAgent,
@@ -764,9 +752,8 @@ function referenceFor(
 /**
  * Metadata for a task's thread, so apps can find a parent's subagent threads with `threads.search`.
  *
- * It names the subagent as the parent knows it, so its notifications match the
- * parent's tracked task. For subagents on this deployment, it also keeps the
- * parent's assistant, so runs started elsewhere on the thread (such as the user
+ * It names the subagent as the parent knows it, and for subagents on this deployment
+ * keeps the parent's assistant, so other runs on the thread (such as the user
  * answering the subagent) can still notify the parent.
  */
 function threadMetadata(
@@ -842,9 +829,9 @@ function describeAsyncSubAgent(spec: AsyncSubAgent): string {
 /**
  * The `runs.create` options that link a run to this agent and set the subagent's webhook.
  *
- * A subagent on this deployment runs with this agent's context, like a sync
- * subagent. The Agent Server takes `context` or `configurable`, not both, so the
- * parent reference then reaches the subagent through its thread's metadata.
+ * A subagent on this deployment runs with this agent's context. The Agent Server
+ * takes `context` or `configurable`, not both, so the parent reference then goes
+ * through the thread's metadata.
  */
 function runOptions(
   spec: AsyncSubAgent,
@@ -878,9 +865,8 @@ export function forwardedContext(
 /**
  * The agent that launched this run's task, or `null` if no async subagent tool did.
  *
- * Read from the run's config, or else from its task thread's metadata, which
- * the Agent Server copies into every run on the thread, including runs that
- * deepagents didn't start (such as the user answering the subagent).
+ * Read from the run's config, or else from the task thread's metadata, which the
+ * Agent Server copies into every run on the thread (such as the user's answer).
  */
 export function launchingAgent(
   config: LangGraphRunnableConfig | undefined,
@@ -1160,9 +1146,9 @@ const DELIVERABLE_THREAD_STATUSES = new Set(["idle", "error"]);
 /**
  * Start a notification run on the parent's thread only while it's idle (or its last run failed).
  *
- * A new run on a thread waiting for a human would cancel that approval; `reject`
- * covers a thread that just became busy. A busy parent picks the update up
- * itself, before its next model call or after its final answer. Never throws.
+ * A run on a thread waiting for a human would cancel that approval, and `reject`
+ * covers one that just became busy; a busy parent picks the update up itself.
+ * Never throws.
  */
 async function awakeParent(
   parentThreadId: string,
@@ -1194,11 +1180,8 @@ async function awakeParent(
 }
 
 /**
- * Wake the parent if it's idle; otherwise it finds out on its own.
- *
- * A busy parent sees the status update before its next model call or after its
- * final answer, a paused one after the user answers its approval. The parent's
- * run gets this run's context back. Never throws.
+ * Wake the parent if it's idle, with this run's context; otherwise it finds out
+ * on its own. Never throws.
  */
 export async function notifyParent(
   config: LangGraphRunnableConfig | undefined,
@@ -1400,8 +1383,7 @@ function updateMessage(tracked: AsyncTask, strategy: UpdateStrategy): string {
 /**
  * Refuse every queued follow-up to a task after the first in one model turn.
  *
- * Parallel tool calls read the same state, so each would record its run as the only
- * queued follow-up, and the task would lose track of the others.
+ * Parallel calls read the same state, so the task would lose track of all but one.
  */
 function parallelUpdateError(
   taskId: string,
@@ -1426,9 +1408,8 @@ function parallelUpdateError(
 /**
  * The runs a queued follow-up leaves behind it.
  *
- * The list grows while the task is unfinished. Otherwise it restarts with the tracked
- * run: enqueued runs start in order, so earlier runs ended before that run started.
- * A follow-up cancelled before it started is the exception; an earlier run may still be active.
+ * The list grows while the task is unfinished, and otherwise restarts with the
+ * tracked run, since enqueued runs start in order.
  */
 function supersededAfterUpdate(tracked: AsyncTask): string[] {
   const earlier = UNFINISHED_STATUSES.has(tracked.status)
@@ -1768,9 +1749,8 @@ async function observeTask(
 /**
  * Check unfinished tasks; return their updated records and a notification per new outcome.
  *
- * Outcomes the agent already saw (through a check, a list, or an earlier
- * notification) aren't reported again. A task that can't be checked is
- * skipped until the next check.
+ * Outcomes the agent already saw aren't reported again; a task that can't be
+ * checked is skipped until the next check.
  */
 async function pull(
   clients: ClientCache,
@@ -1816,7 +1796,6 @@ function recordNotification(
   const event = notificationEvent(last);
   const task = event ? tasks[event.task_id] : undefined;
   // A cancelled task stays cancelled: the outcome of a run the agent gave up on isn't news.
-  // Pulls skip it too, since only unfinished tasks are checked.
   if (!event || !task || task.status === "cancelled") return {};
   const runId = event.run_id ?? task.runId;
   if (task.supersededRunIds?.includes(runId)) {
@@ -1832,8 +1811,7 @@ function recordNotification(
       ],
     };
   }
-  // Answering a pause starts a new run, so a new run ID still counts while the task is unfinished.
-  // An interrupting update cancels the old run before it can report.
+  // Answering a pause starts a new run, so a new run ID counts while the task is unfinished.
   if (runId !== task.runId && !UNFINISHED_STATUSES.has(task.status)) return {};
   return {
     asyncTasks: { [task.taskId]: observed(task, event.status, runId) },
@@ -1876,10 +1854,8 @@ export interface AsyncSubAgentMiddlewareOptions {
  * Works with any Agent Protocol-compliant server — LangGraph Platform (managed)
  * or self-hosted (e.g. a Hono/Express server implementing the Agent Protocol spec).
  *
- * On an Agent Server, the agent is told when its async subagent tasks finish,
- * fail or wait for the user: before each model call and after its final answer
- * while it runs, and through a new run when a deep agent subagent on this
- * deployment ends while it's idle.
+ * On an Agent Server, the agent is told when its tasks finish, fail or wait for
+ * the user: by checking while it runs, and through a new run when it's idle.
  *
  * @experimental Task notifications are experimental and subject to change.
  *
@@ -1988,8 +1964,7 @@ export function createAsyncSubAgentMiddleware(
     },
     afterModel: {
       canJumpTo: ["model"],
-      // After a final answer, check tasks once more; on a status update, give the model another turn.
-      // Each extra turn needs a new status update, so the tasks themselves bound how many there are.
+      // After a final answer, check tasks once more; a status update gives the model another turn.
       hook: async (state) => {
         const messages = (state.messages ?? []) as BaseMessage[];
         if (!isFinalAnswer(messages)) return;
