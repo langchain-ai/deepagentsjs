@@ -1462,7 +1462,9 @@ const UPDATE_TOOL_DESCRIPTION =
   "send updated instructions to an async subagent. Interrupts the current run and starts a new one on the same thread so the subagent sees the full conversation history plus your new message. The taskId remains the same.";
 
 /** The update tool's description, naming the subagents whose follow-ups queue instead. */
-function updateToolDescription(agentMap: Record<string, AsyncSubAgent>): string {
+function updateToolDescription(
+  agentMap: Record<string, AsyncSubAgent>,
+): string {
   const queued = Object.values(agentMap)
     .filter((spec) => spec.updateStrategy === "enqueue")
     .map((spec) => `\`${spec.name}\``);
@@ -1557,7 +1559,10 @@ export function buildUpdateTool(
  * Newest first, so cancelling an active run doesn't let a queued run behind it start.
  * A run that can't be read or cancelled is skipped, so one stale run doesn't fail the cancel.
  */
-async function cancelEarlierRuns(client: Client, task: AsyncTask): Promise<void> {
+async function cancelEarlierRuns(
+  client: Client,
+  task: AsyncTask,
+): Promise<void> {
   for (const runId of [...(task.supersededRunIds ?? [])].reverse()) {
     try {
       const run = await client.runs.get(task.threadId, runId);

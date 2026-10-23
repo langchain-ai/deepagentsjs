@@ -49,16 +49,15 @@ describe("createParentNotifierMiddleware", () => {
     getConfig.mockReset();
   });
 
-  const finish = (
-    middleware = createParentNotifierMiddleware(),
-    context?: unknown,
-  ) =>
+  // Hooks get an empty `runtime.context` (the middleware declares no context schema),
+  // so the run's context must come from its config.
+  const finish = (middleware = createParentNotifierMiddleware()) =>
     (
       middleware.afterAgent as (
         state: unknown,
         runtime: unknown,
       ) => Promise<unknown>
-    )({ messages: [new AIMessage("All done.")] }, { context });
+    )({ messages: [new AIMessage("All done.")] }, { context: {} });
 
   it("wakes an idle parent with the subagent's answer", async () => {
     getConfig.mockReturnValue(taskRunConfig());
@@ -111,9 +110,10 @@ describe("createParentNotifierMiddleware", () => {
     getConfig.mockReturnValue({
       ...taskRunConfig(),
       metadata: { subagent_name: "researcher" },
+      context: { team: "eng", deepagents_parent: PARENT },
     });
 
-    await finish(undefined, { team: "eng", deepagents_parent: PARENT });
+    await finish();
 
     const [, , options] = runsCreate.mock.calls[0];
     expect(

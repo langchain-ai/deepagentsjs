@@ -2360,7 +2360,7 @@ describe("queued follow-ups", () => {
   async function sendUpdate(
     spec: AsyncSubAgent,
     task: AsyncTask = makeTask(),
-  ): Promise<Command | ToolMessage> {
+  ): Promise<unknown> {
     const map = { researcher: spec };
     const { cache, runsCreate } = createMockClientCache(map);
     runsCreate.mockResolvedValue({ run_id: "run-followup", status: "pending" });
@@ -2376,7 +2376,7 @@ describe("queued follow-ups", () => {
     return result;
   }
 
-  function sent(result: Command | ToolMessage): [AsyncTask, string] {
+  function sent(result: unknown): [AsyncTask, string] {
     const update = (result as Command).update as Record<string, unknown>;
     const task = Object.values(
       update.asyncTasks as Record<string, AsyncTask>,
@@ -2521,7 +2521,9 @@ describe("queued follow-ups", () => {
       ),
     );
     expect(first).toBeInstanceOf(Command);
-    expect(String((second as ToolMessage).content)).toMatch(/^Not sent/);
+    expect(String((second as unknown as ToolMessage).content)).toMatch(
+      /^Not sent/,
+    );
     expect(runsCreate).toHaveBeenCalledOnce();
   });
 
@@ -2555,9 +2557,7 @@ describe("queued follow-ups", () => {
   it("rejects an unknown updateStrategy", () => {
     expect(() =>
       createAsyncSubAgentMiddleware({
-        asyncSubAgents: [
-          makeAgent({ updateStrategy: "reject" as "enqueue" }),
-        ],
+        asyncSubAgents: [makeAgent({ updateStrategy: "reject" as "enqueue" })],
       }),
     ).toThrow(/invalid updateStrategy/);
   });
@@ -2608,7 +2608,9 @@ describe("queued follow-ups", () => {
       const [replaced] = update.messages as HumanMessage[];
       expect(replaced.id).toBe("notification");
       expect(replaced.additional_kwargs.deepagents_notification).toEqual(event);
-      expect(replaced.text).toMatch(/^\[SYSTEM NOTIFICATION - NOT USER INPUT\]/);
+      expect(replaced.text).toMatch(
+        /^\[SYSTEM NOTIFICATION - NOT USER INPUT\]/,
+      );
       expect(replaced.text).toContain("FULL REPORT");
       expect(replaced.text).toContain("not the result of the follow-up");
       expect(replaced.text).not.toContain("Use the result to continue");
