@@ -316,12 +316,7 @@ export const ASYNC_TASK_TOOL_NAMES = [
   "list_async_tasks",
 ] as const;
 
-/**
- * Task statuses that will never change, so live-status fetches can be skipped.
- *
- * `interrupted` is a run cancelled or replaced on the server. A subagent paused
- * by `interrupt()` is `waiting`, which isn't terminal.
- */
+/** Task statuses that never change, so live-status fetches can be skipped; `waiting` can still resume. */
 export const TERMINAL_STATUSES = new Set<AsyncTaskStatus>([
   "cancelled",
   "success",
@@ -552,8 +547,7 @@ function filterTasks(
 /**
  * Fetch a task's current status and run ID.
  *
- * Returns the cached values immediately for terminal tasks (avoiding
- * unnecessary API calls). Falls back to the cached values on SDK errors.
+ * Returns the cached values for terminal tasks and on SDK errors.
  */
 async function fetchLiveTaskStatus(
   clients: ClientCache,
@@ -639,8 +633,7 @@ export class ClientCache {
   /**
    * Get or create a `Client` for the named agent.
    *
-   * With `extraHeaders` (such as one launch's trace headers), returns a new,
-   * uncached client: the SDK has no per-request headers, and a `Client` is cheap.
+   * With `extraHeaders` (such as one launch's trace headers), returns a new, uncached client.
    */
   getClient(name: string, extraHeaders: Record<string, string> = {}): Client {
     const spec = this.agents[name];
@@ -777,8 +770,7 @@ const ASYNC_FORK_TASK_PREAMBLE =
 
 /** A message as portable input for another run, without parent-local eviction tags. */
 function serializeForkMessage(message: BaseMessage): Record<string, unknown> {
-  // Eviction tags point to parent-local files; forwarding them would make the
-  // child's filesystem middleware hide the full content sent in this snapshot.
+  // Eviction tags point to parent-local files the child can't read.
   const { lc_evicted_to: _evicted, ...additionalKwargs } =
     message.additional_kwargs ?? {};
   const serialized: Record<string, unknown> = {
@@ -897,8 +889,7 @@ const MAX_RESULT_CHARS = NUM_CHARS_PER_TOKEN * 20_000;
  * How an async subagent's task ended or paused, as reported to the agent that started it.
  *
  * A notification message carries it in `additional_kwargs.deepagents_notification`,
- * so apps can tell these messages from the user's. Fields are snake_case to
- * match the Python SDK, since notifications cross between deployments.
+ * so apps can tell these messages from the user's. Fields are snake_case, as in Python.
  *
  * @experimental This shape is experimental and subject to change.
  */
@@ -1018,8 +1009,7 @@ function notificationHeader(event: TaskEvent): TextBlock {
 /**
  * Reframe an earlier run's notification so the model doesn't think the queued follow-up finished.
  *
- * Only the closing next step changes. The earlier run's result and details stay,
- * since `check_async_task` reads only the latest run.
+ * Only the closing next step changes; the earlier run's result and details stay.
  */
 function supersededNotificationContent(
   message: BaseMessage,
@@ -1146,9 +1136,7 @@ const DELIVERABLE_THREAD_STATUSES = new Set(["idle", "error"]);
 /**
  * Start a notification run on the parent's thread only while it's idle (or its last run failed).
  *
- * A run on a thread waiting for a human would cancel that approval, and `reject`
- * covers one that just became busy; a busy parent picks the update up itself.
- * Never throws.
+ * A run on a thread waiting for a human would cancel that approval. Never throws.
  */
 async function awakeParent(
   parentThreadId: string,
@@ -1408,8 +1396,7 @@ function parallelUpdateError(
 /**
  * The runs a queued follow-up leaves behind it.
  *
- * The list grows while the task is unfinished, and otherwise restarts with the
- * tracked run, since enqueued runs start in order.
+ * The list grows while the task is unfinished, and otherwise restarts with the tracked run.
  */
 function supersededAfterUpdate(tracked: AsyncTask): string[] {
   const earlier = UNFINISHED_STATUSES.has(tracked.status)
@@ -1537,8 +1524,8 @@ export function buildUpdateTool(
 /**
  * Cancel earlier runs that are still pending or running, newest first.
  *
- * Newest first, so cancelling an active run doesn't let a queued run behind it start.
- * A run that can't be read or cancelled is skipped, so one stale run doesn't fail the cancel.
+ * Newest first, so a queued run doesn't start when the run ahead of it is cancelled.
+ * A run that can't be read or cancelled is skipped.
  */
 async function cancelEarlierRuns(
   client: Client,
