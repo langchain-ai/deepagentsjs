@@ -24,7 +24,7 @@ function isTopLevelGraph(config: LangGraphRunnableConfig): boolean {
 function wasAborted(error: unknown, signal: AbortSignal | undefined): boolean {
   return (
     signal?.aborted === true ||
-    getConfig().signal?.aborted === true ||
+    getConfig()?.signal?.aborted === true ||
     (typeof error === "object" &&
       error !== null &&
       (error as { name?: unknown }).name === "AbortError")

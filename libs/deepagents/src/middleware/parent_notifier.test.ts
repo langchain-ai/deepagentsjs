@@ -140,15 +140,12 @@ describe("createParentNotifierMiddleware", () => {
     expect(runsCreate).not.toHaveBeenCalled();
   });
 
-  it("stays quiet when the parent became busy", async () => {
-    runsCreate.mockRejectedValue(
-      Object.assign(new Error("busy"), { status: 409 }),
-    );
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  it("doesn't fail the run when the parent can't be woken", async () => {
+    runsCreate.mockRejectedValue(new Error("unreachable"));
 
-    await subagent().invoke(ask, taskRunConfig());
-
-    expect(warn).not.toHaveBeenCalled();
+    await expect(
+      subagent().invoke(ask, taskRunConfig()),
+    ).resolves.toBeDefined();
   });
 
   it("reports a failed model call by error type only, and rethrows", async () => {

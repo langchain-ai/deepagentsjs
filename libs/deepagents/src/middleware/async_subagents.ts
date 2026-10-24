@@ -1153,16 +1153,8 @@ async function awakeParent(
       multitaskStrategy: "reject",
       ...(context ? { context } : {}),
     });
-  } catch (e) {
-    // 404: parent gone; 409 (422 on the JS dev server): it became busy and will pull the update itself.
-    const status = (e as { status?: number })?.status;
-    if (status !== 404 && status !== 409 && status !== 422) {
-      // oxlint-disable-next-line no-console
-      console.warn(
-        `Didn't deliver the notification for task ${update.task_id}:`,
-        e,
-      );
-    }
+  } catch {
+    // Best effort: a parent that's gone, busy or unreachable finds out when it next checks its tasks.
   }
 }
 
