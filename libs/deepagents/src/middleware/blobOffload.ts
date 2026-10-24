@@ -8,6 +8,10 @@
  */
 
 import { createHash } from "node:crypto";
+import {
+  getContextVariable,
+  setContextVariable,
+} from "@langchain/core/context";
 import { Command } from "@langchain/langgraph";
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "langchain";
 import type {
@@ -463,4 +467,55 @@ export async function hydrateMessages(
     }
   }
   return restorePayloads(messages, payloads);
+}
+
+/** Blob storage a filesystem middleware exposes while one of its agent's tools runs. */
+interface ToolBlobStore {
+  backend: () => Promise<AnyBackendProtocol>;
+  prefix: string;
+  cache: Map<string, string>;
+}
+
+const TOOL_BLOB_STORE = "__deepagents_tool_blob_store";
+
+/**
+ * Run a tool with `store` exposed, so tools that need portable media can load it.
+ * It's request-scoped, so the backend never lands in a checkpoint.
+ */
+export async function withToolBlobStore<T>(
+  store: ToolBlobStore | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = getContextVariable<ToolBlobStore>(TOOL_BLOB_STORE);
+  if (store === previous) return run();
+  try {
+    setContextVariable(TOOL_BLOB_STORE, store);
+  } catch {
+    // No async local storage (e.g. a browser): tools see offloaded media as unavailable.
+    return run();
+  }
+  try {
+    return await run();
+  } finally {
+    setContextVariable(TOOL_BLOB_STORE, previous);
+  }
+}
+
+/**
+ * Restore offloaded media in `messages` from the enclosing tool's blob storage.
+ *
+ * Without it, references become a notice that the content is unavailable.
+ */
+export async function hydrateToolMessages(
+  messages: readonly unknown[],
+): Promise<unknown[]> {
+  if (!messages.some(messageHasRefs)) return [...messages];
+  const store = getContextVariable<ToolBlobStore>(TOOL_BLOB_STORE);
+  if (!store) return restorePayloads(messages, new Map());
+  return hydrateMessages(
+    messages,
+    await store.backend(),
+    store.prefix,
+    store.cache,
+  );
 }

@@ -491,7 +491,7 @@ function returnCommandWithStateUpdate(
 }
 
 /** Drop the trailing in-flight AIMessage with unresolved tool_calls. */
-function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
+export function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
   const last = messages.at(-1);
   const hasPendingToolCalls =
     AIMessage.isInstance(last) && (last.tool_calls?.length ?? 0) > 0;
