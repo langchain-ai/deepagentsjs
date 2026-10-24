@@ -1314,7 +1314,11 @@ describe("buildListTool", () => {
       }),
     );
 
-    expect(runsGet).toHaveBeenCalledWith(job.threadId, job.runId);
+    expect(runsGet).toHaveBeenCalledWith(
+      job.threadId,
+      job.runId,
+      expect.anything(),
+    );
     const messages = ((result as Command).update as Record<string, unknown>)
       .messages as ToolMessage[];
     // The live status should appear in the formatted output

@@ -15,14 +15,15 @@ import {
   tool,
   ToolMessage,
   SystemMessage,
+  type BuiltInState,
   type ToolRuntime,
 } from "langchain";
 import {
   AIMessage,
+  BaseMessage,
   coerceMessageLikeToMessage,
   HumanMessage,
   ToolMessage as CoreToolMessage,
-  type BaseMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
 import { getContextVariable } from "@langchain/core/context";
@@ -48,11 +49,11 @@ import { getEffectiveMessages } from "./summarization.js";
  * `LANGCHAIN_API_KEY`). For self-hosted servers, pass custom auth via `headers`.
  *
  * Subagents on this deployment (no `url`) nest under the parent's trace when tracing is on.
- * Each task's thread has `parent_thread_id` metadata, so apps can find a parent's
- * subagent threads with `threads.search`.
- *
- * @experimental Trace headers and the parent's thread metadata are experimental and subject to change.
+ * Each task's thread has `parent_thread_id` metadata naming the parent's thread, so
+ * an app can list a parent's subagent threads with the LangGraph SDK:
+ * `client.threads.search({ metadata: { parent_thread_id } })`.
  */
+// TODO(2027-01-31): revisit the `@experimental` tags on async subagent notifications, `notifyParent`, `updateStrategy`, fork mode and `"waiting"`.
 export interface AsyncSubAgent {
   /** Unique identifier for the async subagent. */
   name: string;
@@ -192,11 +193,9 @@ export interface AsyncTask {
  * Declared as a `type` (not `interface`) so `ToolRuntime<AsyncTaskState>` narrows
  * `runtime.state` correctly (see `@langchain/core` `ToolRuntime` conditional).
  */
-type AsyncTaskState = {
+type AsyncTaskState = Partial<Pick<BuiltInState, "messages">> & {
   /** All tracked async subagent tasks, keyed by task ID. */
   asyncTasks?: Record<string, AsyncTask>;
-  /** The conversation, read to spot parallel follow-ups to one task. */
-  messages?: BaseMessage[];
 };
 
 function toolCallIdFromRuntime(runtime: ToolRuntime<AsyncTaskState>): string {
@@ -348,9 +347,6 @@ function resolveTrackedTask(
 const PENDING_NOTE =
   "The latest run hasn't started yet. If it is a queued follow-up, an earlier run may still be working.";
 
-/** Task status for a subagent waiting for a human: its run finished but its thread is interrupted. */
-const WAITING: AsyncTaskStatus = "waiting";
-
 /** Task status implied by the thread when the tracked run finished but the thread moved on. */
 const THREAD_TO_TASK_STATUS: Record<string, AsyncTaskStatus> = {
   interrupted: "waiting",
@@ -388,13 +384,12 @@ function needsLatestRun(run: Run, thread: Thread | null): boolean {
  * A run replaced by another client's run hands over to the newest one, except for
  * a task the parent cancelled.
  */
-async function observe(
+async function observeTaskRun(
   client: Client,
   task: AsyncTask,
   signal?: AbortSignal,
 ): Promise<[Run, Thread | null]> {
-  const options = signal ? [{ signal }] : [];
-  let run = await client.runs.get(task.threadId, task.runId, ...options);
+  let run = await client.runs.get(task.threadId, task.runId, { signal });
   if (run.status === "interrupted" && task.status !== "cancelled") {
     const [latest] = await client.runs.list(task.threadId, {
       limit: 1,
@@ -403,7 +398,7 @@ async function observe(
     run = latest ?? run;
   }
   if (run.status !== "success") return [run, null];
-  const thread = await client.threads.get(task.threadId, ...options);
+  const thread = await client.threads.get(task.threadId, { signal });
   if (needsLatestRun(run, thread)) {
     const [latest] = await client.runs.list(task.threadId, {
       limit: 1,
@@ -435,6 +430,7 @@ function threadMessages(values: unknown): unknown[] {
 
 /** A thread message's content as text, whatever shape the server sent it in. */
 function messageText(message: unknown): string {
+  if (BaseMessage.isInstance(message)) return message.text;
   const content =
     typeof message === "object" && message !== null && "content" in message
       ? (message as Record<string, unknown>).content
@@ -463,7 +459,7 @@ function buildCheckResult(
     checkResult.result = finalContent(thread?.values);
   } else if (status === "error") {
     checkResult.error = "The async subagent encountered an error.";
-  } else if (status === WAITING) {
+  } else if (status === "waiting") {
     checkResult.interrupts = pendingInterrupts(thread).map((item) => ({
       id: item.id ?? "",
       value: item.value,
@@ -501,7 +497,7 @@ function checkOutput(result: CheckResult): string | ContentBlock[] {
 
 /** Keep a task cancelled while paused as cancelled; its thread still shows the old pause. */
 function keepCancelled(task: AsyncTask, result: CheckResult): CheckResult {
-  if (task.status === "cancelled" && result.status === WAITING) {
+  if (task.status === "cancelled" && result.status === "waiting") {
     return { status: "cancelled", threadId: result.threadId };
   }
   return result;
@@ -558,7 +554,7 @@ async function fetchLiveTaskStatus(
   }
 
   try {
-    const [run, thread] = await observe(
+    const [run, thread] = await observeTaskRun(
       clients.getClient(task.agentName),
       task,
     );
@@ -737,9 +733,12 @@ function referenceFor(
   spec: AsyncSubAgent,
   config: LangGraphRunnableConfig | undefined,
 ): ParentReference {
-  const reference = parentReference(config);
-  if (spec.url || spec.notifyParent === false) delete reference.assistant_id;
-  return reference;
+  const { thread_id, assistant_id } = parentReference(config);
+  const wakesParent = !spec.url && spec.notifyParent !== false;
+  return {
+    ...(thread_id && { thread_id }),
+    ...(wakesParent && assistant_id && { assistant_id }),
+  };
 }
 
 /**
@@ -1316,7 +1315,10 @@ export function buildCheckTool(clients: ClientCache) {
       let run: Run;
       let thread: Thread | null;
       try {
-        [run, thread] = await observe(clients.getClient(task.agentName), task);
+        [run, thread] = await observeTaskRun(
+          clients.getClient(task.agentName),
+          task,
+        );
       } catch (e) {
         return `Failed to get run status: ${e}`;
       }
@@ -1363,7 +1365,7 @@ function updateMessage(tracked: AsyncTask, strategy: UpdateStrategy): string {
     return `Queued follow-up to async subagent without interrupting its current run. taskId: ${tracked.taskId}`;
   }
   const msg = `Updated async subagent. taskId: ${tracked.taskId}`;
-  return tracked.status === WAITING
+  return tracked.status === "waiting"
     ? `${msg}. It was waiting for a human; that request was dropped.`
     : msg;
 }
@@ -1563,7 +1565,7 @@ export function buildCancelTool(clients: ClientCache) {
       if (typeof tracked === "string") return tracked;
 
       // A paused subagent has no active run to cancel; marking the task is enough.
-      if (tracked.status !== WAITING) {
+      if (tracked.status !== "waiting") {
         try {
           const client = clients.getClient(tracked.agentName);
           await client.runs.cancel(tracked.threadId, tracked.runId);
@@ -1696,7 +1698,7 @@ const NOTIFIED_STATUSES = new Set<AsyncTaskStatus>([
   "error",
   "timeout",
   "cancelled",
-  WAITING,
+  "waiting",
 ]);
 
 /** How long the parent waits on one task's status before skipping it until the next check. */
@@ -1706,7 +1708,7 @@ const PULL_TIMEOUT_MS = 5_000;
 const UNFINISHED_STATUSES = new Set<AsyncTaskStatus>([
   "running",
   "pending",
-  WAITING,
+  "waiting",
 ]);
 
 /** State update from a pull: changed task records and a notification per new outcome. */
@@ -1721,7 +1723,7 @@ async function observeTask(
   task: AsyncTask,
 ): Promise<[Run, Thread | null] | null> {
   try {
-    return await observe(
+    return await observeTaskRun(
       clients.getClient(task.agentName),
       task,
       AbortSignal.timeout(PULL_TIMEOUT_MS),

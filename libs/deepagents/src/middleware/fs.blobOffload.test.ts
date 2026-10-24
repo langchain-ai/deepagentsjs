@@ -7,7 +7,11 @@ import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "langchain";
 import { Command } from "@langchain/langgraph";
 
 import { createFilesystemMiddleware } from "./fs.js";
-import { BLOB_REF_KEY, hydrateToolMessages } from "./blobOffload.js";
+import {
+  BLOB_REF_KEY,
+  hydrateToolMessages,
+  withToolBlobStore,
+} from "./blobOffload.js";
 import { StateBackend } from "../backends/state.js";
 import { FilesystemBackend } from "../backends/filesystem.js";
 import { CompositeBackend } from "../backends/composite.js";
@@ -285,6 +289,27 @@ describe("blob storage for tools", () => {
     expect((restored[0] as ToolMessage).content).toEqual([
       { type: "image", mimeType: "image/png", data: PNG_BASE64 },
     ]);
+  });
+
+  it("runs tools where there's no async local storage, e.g. in a browser", async () => {
+    const key = Symbol.for("ls:tracing_async_local_storage");
+    const storage = (globalThis as Record<symbol, unknown>)[key];
+    delete (globalThis as Record<symbol, unknown>)[key];
+    const store = {
+      backend: async () => ({}) as never,
+      prefix: "/blobs",
+      cache: new Map(),
+    };
+    try {
+      await expect(
+        withToolBlobStore(undefined, async () => "ok"),
+      ).resolves.toBe("ok");
+      await expect(withToolBlobStore(store, async () => "ok")).resolves.toBe(
+        "ok",
+      );
+    } finally {
+      (globalThis as Record<symbol, unknown>)[key] = storage;
+    }
   });
 
   it("marks media as unavailable outside a filesystem tool call", async () => {

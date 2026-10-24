@@ -24,20 +24,11 @@ function isTopLevelGraph(config: LangGraphRunnableConfig): boolean {
 function wasAborted(error: unknown, signal: AbortSignal | undefined): boolean {
   return (
     signal?.aborted === true ||
-    currentConfig()?.signal?.aborted === true ||
+    getConfig().signal?.aborted === true ||
     (typeof error === "object" &&
       error !== null &&
       (error as { name?: unknown }).name === "AbortError")
   );
-}
-
-/** The current config, or `undefined` outside a graph run. */
-function currentConfig(): LangGraphRunnableConfig | undefined {
-  try {
-    return getConfig();
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -59,9 +50,9 @@ export function createParentNotifierMiddleware() {
     status: "success" | "error",
     details: Parameters<typeof taskEvent>[3],
   ): Promise<void> {
-    const config = currentConfig();
+    const config = getConfig();
     // Nested graphs (e.g. a deep agent as a sync subagent) inherit the parent reference; only the top-level graph reports.
-    if (!config || !launchingAgent(config) || !isTopLevelGraph(config)) return;
+    if (!launchingAgent(config) || !isTopLevelGraph(config)) return;
     const runKey = currentRunId(config);
     if (runKey === undefined || reported.has(runKey)) return;
     reported.add(runKey);

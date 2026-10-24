@@ -487,7 +487,13 @@ export async function withToolBlobStore<T>(
   run: () => Promise<T>,
 ): Promise<T> {
   const previous = getContextVariable<ToolBlobStore>(TOOL_BLOB_STORE);
-  setContextVariable(TOOL_BLOB_STORE, store);
+  if (store === previous) return run();
+  try {
+    setContextVariable(TOOL_BLOB_STORE, store);
+  } catch {
+    // No async local storage (e.g. a browser): tools see offloaded media as unavailable.
+    return run();
+  }
   try {
     return await run();
   } finally {
