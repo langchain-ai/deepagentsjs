@@ -330,9 +330,9 @@ export class DenoSandbox extends BaseSandbox {
           await mkdirChild.output();
         }
 
-        // Write the file content
-        const textContent = new TextDecoder().decode(content);
-        await sandbox.fs.writeTextFile(path, textContent);
+        // Write the bytes as-is: going through a UTF-8 string would replace
+        // every non-UTF-8 byte (images, PDFs, archives) with U+FFFD.
+        await sandbox.fs.writeFile(path, new Uint8Array(content));
         results.push({ path, error: null });
       } catch (error) {
         results.push({ path, error: this.#mapError(error) });
@@ -375,7 +375,7 @@ export class DenoSandbox extends BaseSandbox {
           stderr: "piped",
         });
 
-        const { status, stdoutText } = await child.output();
+        const { status, stdout } = await child.output();
 
         if (!status.success) {
           results.push({
@@ -384,10 +384,10 @@ export class DenoSandbox extends BaseSandbox {
             error: "file_not_found",
           });
         } else {
-          const content = new TextEncoder().encode(stdoutText ?? "");
+          // `stdout` is the raw bytes; `stdoutText` would be lossy for binary files.
           results.push({
             path,
-            content,
+            content: stdout ?? new Uint8Array(),
             error: null,
           });
         }
