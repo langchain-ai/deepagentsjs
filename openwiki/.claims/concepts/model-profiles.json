@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:35916e5537c390c502b43c4f296874a38afe731ac27c262ebb5d091c2af96347",
+  "claims": [
+    {
+      "id": "claim_b8f290d6d8264663908aae0206f31320",
+      "statement": "Harness profiles are stored in a process-global registry under the versioned Symbol.for key deepagents.harness-profiles.v1; the registry tracks profiles, the built-in-key baseline, and whether built-ins have loaded. Lookups and public registrations lazily bootstrap built-ins, and the built-in loader snapshots its keys after registration.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/builtins/index.ts#L8-L25",
+          "version": "repo-lines-v1:sha256:d00ff3f26addb9cf51a21be01e4ee993a8dccef7fbad8d4ce3b86e6efca7abf4:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5YjA5YjFmYmFiNDE5Nzk3NzJkMGYwYjQ4OGIxNzlkYzM0YTJiNTUzYjM5MjkwNGQ2MGZiNzlhYzhhNmY1ZmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.ts#L75-L103",
+          "version": "repo-lines-v1:sha256:93697e00bc625bfda97723a46c80c4896e26613f2e5616248e1d035dd8fe339a:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFiYTE0ZTM0MDU3ODExZjUwNzc5MTVlOGUzYTE5MmNjNmMyOGQ4ZjIzNzY3ZDA2OGUzNDA5M2Q4NzkzMjI0M2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlkZGMyODc3MWM2ZGUyMmM0YWRkNWY3ZjNiNWNiOGZlODE5YzA0NzYwYTk2ODgzYjQ0Y2E1Yzg2MGQwMWNjOWIifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.ts#L9-L50",
+          "version": "repo-lines-v1:sha256:2f7315dc1ef1d06328b5a6ab9d10dbede0ff7ebf2f1fa250af6155fbffd89ea1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0NWNhZWY3ZTM2ZjliOWUyZGUzNzBmYzU4YmU2YTBhMTg0Nzk4ODA1YjIwZDhhYzM0OWNjNjJmNzJkMTMyZDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNhNWRkYjc5NTBiMDFkODQ2ZjBmYjg0NWRmZDBiOTlmMzM4NWY2ZmRjOGU1ODI0NGJlMmE3NjI2Yjg2NDNlNmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNmMTAxZGRiYzM4ZWUyZjRjZmY1ZGNiOTZjYTczNmU1NGE2MDFmMzAzZGU0ODEwMWViM2Y2NjY4NDYwMmZmNmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_1e7fa8b224c64cb3a91645593d94d006",
+      "statement": "For a valid provider:model lookup, getHarnessProfile checks the exact model key and the bare provider key; when both exist it merges the provider profile as base with the exact profile as override, otherwise it returns whichever match exists. Empty halves and specs with multiple colons return undefined without consulting the registry.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.ts#L169-L212",
+          "version": "repo-lines-v1:sha256:17d4eaf504bc5b3c104677e2a63de8dcee711e8f8e2fb6de913f140d623f2619:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5MmExMmI4Y2ZjYjlhZmZkZTY4NzMyZjI4MWVjYWU0NGQ1ZTgxMzllZTViNWNhNjA4ZmRmM2NlNDExZjAwYzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmZDliMzM4NDllOTZkMmVjZThhNTM2ZjE2OGY4YWY4ZjZiYzQ4MmY3NjcwZjU3MjYyZDBhYTkwYWE0NjM1NzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/keys.ts#L20-L41",
+          "version": "repo-lines-v1:sha256:0a4647a2f9ad62818aab1f07134a2445ac6274abd05a308c4ae05f8888801545:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyNzc1NTEwOThiY2ExZTUwNzkzODZiNzZhYjI2OTk2ODg1YjE1MTFjYWIxZGZjZWE0YjNkYmVkNTI4NjBiZWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUzZTNhNjQ3Yzc3NzRhNDkwOTRkYmY0YWFkMTJiYzI3MWFhZDk2OTk4Njk2M2JlZWJmZDJmY2M0Njc0ODRhOTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJiZDU4ZWIzMTg2OGJiNjMwMDA5NzczZmRmM2M1ZjA0YTllZTY2ODAwN2E0Yjc2ZjZjNmRiNzk1N2FlMzM3YTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_01040af921134af5a8acb1252c0b1560",
+      "statement": "resolveHarnessProfile is total: an explicit spec drives direct lookup, while a model instance without a spec is tried as provider:identifier, then as a colon-containing identifier, then by provider alone; unmatched resolution returns the shared EMPTY_HARNESS_PROFILE.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.test.ts#L158-L217",
+          "version": "repo-lines-v1:sha256:a246f9aa33048b94dc2f464453996e9ddfd0c3bfa06f8eb36b048b8354050fdb:eyJzZWxlY3RlZExpbmVDb3VudCI6NjAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc0ZGE1YTdlMjY0NzA0ZmU0NTc0NDQ3MGZhOWY3OWIzM2NkNGMwMTQyODE3NDNiOWEwMjZjMDlkNDFiNWFiYzEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFiZGY0OGMyNDg2NTk0NzFjZTViYzEwM2M1NWU0NmU2YzMxMTM1NmNmZDNjOWU0MmQ3NTRmNTI1ZWI0NTQwNzMifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.ts#L215-L256",
+          "version": "repo-lines-v1:sha256:9cd64fd7b8b284ca5ec694e41459f56713f8781ccf57cb6721ebd941246fb3f5:eyJzZWxlY3RlZExpbmVDb3VudCI6NDIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3YTA0NzA1OGYzM2M0NjFlZTQ2MWNiZWFlMmVkYWVjOGNjNzA3ZDE2NmIxMDBhZjZkMGE0Mjg1YjJmMTcxNmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM2YmI4Zjg2NzkyMzRkYzMyZGU2MjZkZDlkYWQ5MmFjZmE2Mjc0ZDIxZmYxZmU0ZjFmNmUxMWY4ZTE3Mjc4NzUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_dfc88d2b0a194cdea6227aedf9e256a2",
+      "statement": "User profile registration is additive. registerHarnessProfile accepts raw options or a constructed profile, validates and normalizes raw options, and merges a new registration over an existing key instead of replacing it; scalar fields take the incoming value, while collection and middleware fields use merge semantics.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.test.ts#L83-L110",
+          "version": "repo-lines-v1:sha256:2ae4368fb38b0113e40eefd7bddcc0a2699c06657b2237de1d74cd3da8518946:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0YTExNjJhYzY0YmU4NjBlNjI3MjdjNGE2MzE0NWY3ZDY2MWZkZTc3MjUwNTdmYzcxZWYwNmM4YzE0YjEzYzUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZjZWE5MTliMGFjOTA3NWUyMDczOGNjMWQ5ODIyYjc1MzVmM2JmZDk4M2YzMWYzNDA1ZmI3ZGI0N2Q5YTVhZTcifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/registry.ts#L105-L167",
+          "version": "repo-lines-v1:sha256:10fe28c205d4ae532ae7f61725573530b6ceb33a7753580270d84b2d5708f2db:eyJzZWxlY3RlZExpbmVDb3VudCI6NjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJmZTIwZTRhMDc2OGI5YjVkODkxNmI1ODcxY2VlZTAzNDczZGNiNTViYjU2ZmNiNThlY2YyODdiZTM2MTgwNDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxNDc0YmYxMTRjMjA3NWYzN2ZlNWIzMzViMDE0OGViZGFkMzJlZDU4Y2MwYTZjYWU0NjY3YjI0MzAzZDI0ZjEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2f435e3ce90f4bcfb880ca2ea852448c",
+      "statement": "createHarnessProfile produces a frozen, normalized profile: tool-description overrides use a null-prototype object, exclusion arrays become Sets, general-purpose settings are copied and frozen, and middleware remains a static runtime array or factory. It validates excludedMiddleware names and rejects empty names, class-path syntax, private underscore names, and required FilesystemMiddleware or SubAgentMiddleware scaffolding.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/create.test.ts#L18-L108",
+          "version": "repo-lines-v1:sha256:b3e7c65efd2fb63f62b0a76f9c4d52acd8758172ed7a844e2a44be53c888ff62:eyJzZWxlY3RlZExpbmVDb3VudCI6OTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxYmI5MjdiMzAyN2I2M2RkZjBlZGZkYjAxMmIwMDdiYmU0MjcxMjFmNTcyMjQ2Njc5MzVlN2U4MzUxMjE1NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQ2ZjlhZTgyZTEzOTU1ZThjYjdhMjNjZWIxN2VkYWVmODY5ODBiNWJjM2FkMTg3NjNlMWNmMmI2MGY2ZmQwNjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxYWI0ZDAzNTRiZWVjNTNmYzhiODFlNDY0Mzg3ZTRmMTNkZWJhOWM3Mjg5MjQ2NjFlMTQ5OTE3NTlhZmJkMzQifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/create.ts#L19-L97",
+          "version": "repo-lines-v1:sha256:fff48e0f4c5aaba2a273021e65672c230d427f23621850fc301d5925755ea595:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRiOTUyMjgyN2EzMDBmZGMwZjUxNTlkMmE0MjVkYWVhYWJkZWY5ZDZhNTVlZGI4NmYzOTBkYTE2N2M3ZjJiMTkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJlMjMxYzdiOWFiMWJlNWExNDU3NDg2OTI0OTg5ZmVlN2MwZGZlMDYyYjMxNjhjMWFiNTI3OTc1MTVjZTdiZTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc0ZDMwN2ZjMzY0Y2E0ZmFjNTE0ODM1ZTlhNTg3NzZjZTcxZGVmNWM5OWUyNWQwMjRjMWRiMDYwZjdkYzkwOGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/types.ts#L6-L14",
+          "version": "repo-lines-v1:sha256:3c12fea31bc119409af77ef721813e31fa52e908b230049aa706d7deea38d324:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjIzY2I0YzEzZDY3NzU5ZDU0Zjc2NzFkNDQwMzQ5NzJkMDkwM2EzOWQwOGFmYWU3M2JiOTgxZWI5YWIwZGNmMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNTVlMjZjZDkyMzY2ZjYwZDhlZDkyZDAyMzlmMDdmZWY3NGNhYzE0YWE2OWFkZGY5YzJjYzBkMTFlYjAwYTQ2MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiY2Q4MDNmNTA3MmM1YjMzOTI4ZTI3MDliNjBhYWFiMDQyYjY1NjQ0OWFkNWRhMDg0Njk1ODMxMTNkYzJhYjMwOCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiOWMyNDI3ZDUzYjE2MjM4YjU2MjE2MWQwNjNmMjFiOWRhMDRkMGFmMzViNmJkYWJmZDNjMjliNmZmZDUzMzE1NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_9c9fa75baa4849649e54a93a93d83222",
+      "statement": "mergeProfiles layers an override over a base by field: prompt scalars use defined override values, tool-description maps shallow-merge with override precedence, tool and middleware exclusions union, generalPurposeSubagent merges per sub-field, and extraMiddleware replaces same-name base entries in place while appending novel names. Middleware factories are resolved afresh by the merged factory.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/merge.test.ts#L96-L205",
+          "version": "repo-lines-v1:sha256:cb6b7027a79e080a84a616b92e97041900eb1480930491ab54f7df315e038204:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI5YmFiOGY4MzI3MzM3OTcwMGYyZDY5YzE3YjcwMTMyNTM1NzQzMDExNGE1MjcwNmU3NDE2ZmNkMDliYjdkMGI5IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiJmNmY1YjQwYjE1ODQ1N2QxNzg2NGYyMTc5MDc4NmRkNWEyZWNkYjY0YjY2YTY1MWY3ODhkNGUyNWNkMzMwM2QyIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiNzc5ZDExOGQ2ZTNjYmY0NTA1Mzk3NDhkZWU3YTQzMDdhY2JlNjQ0NmNiYTI5N2YyNzYwZmE1ZDBiYmExYmMyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI4MWY0ZmQwYjMwMWRiZDQ4OWJmZGM5ZWZiNDZhYWIyODQ0MTNjYzE1MWQ0YmZjNTIxZDFkZDM1Mjk1YjgzYWU0In0"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/merge.ts#L6-L59",
+          "version": "repo-lines-v1:sha256:a7e34485a994b5acb3bafa54a57f172c1341ddbb3f21a6a3dc7d3e88e809d899:eyJzZWxlY3RlZExpbmVDb3VudCI6NTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiMTc2OTg5ZjUyYmIzZDVhZGQwMmJlOWEyMmNlMGVlZTljOTJmMWJlNGI2MzY2ZGQzYzQ1YzM5NmJjMmFiNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkyOTk3OTNhMDdjNzQyMjFhZmIzOGU0MzYxM2ZmMGNiMGEzMmM1ZGE5NmZkMTc2OWQxOTdhYmQwMDk0MmM0ZmQifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/merge.ts#L61-L130",
+          "version": "repo-lines-v1:sha256:955bc7c291b7d51afef0056f73cb16a8c7ee450351005dd7d73945619b454566:eyJzZWxlY3RlZExpbmVDb3VudCI6NzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkyMDQwZTA5NWE5NGUyYWRhNzRlNDIxZjM3MTg3NTFhOTFhODEwYmZkNjZmNDhmNGU5MzljN2I3NDgwZWI2NzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a4116677ec644895bfe4083eb670379f",
+      "statement": "createDeepAgent resolves a parent harness profile before assembly, applies profile prompt fields to the final system prompt, replaces matching main-tool descriptions, computes profile-specific filesystem tools, adds profile middleware after core/custom ordering, applies middleware exclusions after custom replacement, and adds tool-exclusion middleware after tool-injecting middleware.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L178-L254",
+          "version": "repo-lines-v1:sha256:57832533ff8142718e67193861c97f09f67fb03f7c84bf1c3ce63fa2253b399a:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYwNDlmY2NmZDBiNDc4MjAyNDhlMWFlMDIxZmY4NTcyMjZmOTdlNGRjMDcwNDQwYThmNzZhMTJhMDk1Y2JhNzQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0NGI2ZWM3M2Q2MmQ4MDRiYjE5MGM0YmJmY2VjNTMyMWJhYmYyZWRkZTA2MjQ0NGY1ZDc3YjIzMWQyZTIwZmYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4NWMwYmEyZWU3NTZhNWI2ZDAzZjlmNjBhMDYyYzQ2ZDIzYjQ1OTM3MGNjMTFhMmQ5YzBiMjNjYmIzZTk1ODciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjMwZGI0Mzk5ZGYyN2ExZDFlYTgxMTE4YWVkMWU5N2QzMjg0ODViYTBiMjFlYWY2MjJhODAxYjc5NzMxN2QwMGIifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L289-L300",
+          "version": "repo-lines-v1:sha256:06e5b39d857345004667314f731a5e86fc429a709204a22e39d0e736ed19ca25:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJhZWIxZTU0NDM0M2U5MDZkNmUxZTcxZDJkZmQ4Y2U4MGEyNDhkMjc3MDI1M2Y5OWFhM2FmYzlhNjYzMmU5N2MiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFmOWRiYzdmMmYyNGI1Mjg0MzU3Zjk4NjMwNmZlZjA0MTdjYzZmODFhODNhMDJiZjgxNTBmNzExMmY4ODNiMDkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMyNjE3MDZmOWE1NzgwYzQ5NDQzNmE3MzBlNzY0NjdkMTk3YjYwM2EwM2Y2YWMxZTM5MGJhZjhmM2M1ODllY2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFlMTEyYzVhY2E4Y2RhNjNkZDNhMmNiYjVlOTg1Nzg2OTEyZTViM2FjMjA4MGFlNjE0Njk4YjIyMGJjMDVlNzcifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L489-L531",
+          "version": "repo-lines-v1:sha256:0600072560bae2970fd52d855091279083f45dcea8ca9e449bdf101cd320a66c:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBjZDk0Y2EwMzBiYTkwMzcwNDA1ZTE3YWM0MzE0NmY5ODYwMzY0ZDE0MTc3MmFiNzUzOWNlZTIxMmI2MjkyMjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE2NmUyY2EwMDgzYzNhYzI3NTAxZjA1NWRlYjJiOGFiNTFiNzVlOGU4Y2Q0Y2ZmYzgxMWU3OWIzMzM0Y2UyOTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY5Y2YyNjY0Y2QzM2Y4YmFhOTJiZDEyNzM0MDkxZTY0OGU5NTI3NmFhYjFkZmE4NDdmNGQwZDkzMjY5OGRkMzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c2731c7f205d4e1390a8908196544060",
+      "statement": "Tool exclusions hide matching tools from model requests and return an error ToolMessage for excluded calls, but the implementation explicitly treats exclusions as model calibration rather than a security boundary.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/middleware/tool_exclusion.ts#L13-L45",
+          "version": "repo-lines-v1:sha256:a923611ee765a256015cf4212ed8941672dd2613f47849b0d4cd5bef9200b6a7:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5NGZjMGMxNzNkMWVjM2ZjNTAxZDdkZmE5Mjg1NTAxYzUyN2NmYjQ3MTI1ODNkYTNjYzM2MTgwNTY2YjRiZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/types.ts#L96-L107",
+          "version": "repo-lines-v1:sha256:8e265518410f85565940f8c3d95cc622e6eece1ca4ba0fcb195f8a067b9b0573:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZmZjQ0MThkN2ZjYTFjZjY2ZGM3MGMxNGI4YmUwZTYzNTE5NDg0OWIzZWYwYzg1YzdmYjE1NTJkNzFhNDkxZDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhlMzdhNTg0OTc2ZTYxMzJhZjAyMDU5MGQ3ZmQ1NTg2ZWM5NzMxZTQ5YmMyMDE5ZmMyMzAyZmFiMWIwMTFmMDMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwNmMzOTA1YmRmYjUxZGQwYmRhZjkxNTE3NTllYjkzNTU1OTMxM2RjZDY1ZTdmYTY4NmQ4MDcyOWNlNjIwOWEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cd1711410d3d4c659ba7edb680ceb579",
+      "statement": "Subagent profile resolution is model-specific: a distinct subagent model is resolved independently, while a missing or identical model reuses the parent profile; the resolved subagent profile affects its filesystem tools, extra middleware, middleware exclusions, and tool exclusions. The automatically added general-purpose subagent can be disabled, customized by description or systemPrompt, and otherwise receives the parent model, effective tools, skills, and profile prompt behavior.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L232-L242",
+          "version": "repo-lines-v1:sha256:b3d590ee5ec4d76eddfed21e353ba0a90c14ea6b3702a5db69565359e8648e1e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE3NTg1N2IwYjFiNWFhOWRmZDAyNDAzZDc0NjZlMGQ0MzRjOTNhMjE1MTZmMDcxYjkwODQ5ZjI3YTlmYzQ5NDciLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyYTJjYjI1YTEyMmI0NDIyMWE2MjM0ZWM2NjBhN2I1ZmI3ZjliZGU3YjNiOWUyYjNjNTU5YTBkOTZmYWM3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3OTgwNjkwZjBmYzQyODFjMmYwOTM2NjlhNjBhNTIzMmQ1NjhkNGJiYTMxOGNlZTY2ZWYzYWI4N2VmY2NlMDAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQwNjYzOWQ5MzNhZTYzNDViOTY3YzA4YWE2ZWVkNTYyYzdlYmEyMzNlNTIwMWFhNWNmYTFiMTI1MDMzNGRiZmEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L342-L392",
+          "version": "repo-lines-v1:sha256:149ab2968c65bf51873e53c4555cf0a88048d6938397bfc779f4e95ff7f3f2aa:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ0ZDM5NzYwZTkzNTFiN2Q5Y2RhZDA2ZGIyMTJiMThmNWU3NzY0MmM3ZmVkYzdlMzE2NzJlNjc0MWZmZjQ5YjAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFiYzA0NTg1YmRkNWY2MDAyZTQ0Y2NlMDNhYzY1ZDkxNDhlMmEwZWMyYzhhYjg1NzAxOTlmM2M1MTk5Yzc3NTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImEwZTUyYmZiNWIyYzQwYzFkODBmZGQ3MTRhOTVhMGYyZGMzYjFiYTExYjVmN2ZkYTlkYTNkZjRlNzAxNmVhZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjIyZTRhMDc5YTVhMTg2Mjc3ZGU2MTk5NDU0N2E2MmVmY2NkMTBkMzUxNDE3MTEwNTlmYTdmYThjYTBkYjBkN2IifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/agent.ts#L419-L447",
+          "version": "repo-lines-v1:sha256:330378d3753860d7dd2d82b588ce60f93859795ce3eb19f352b94c4b1b60fe5d:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQ4OTE5MzJjNGI4OTczZGU5MDFkODdiNDliYzdlZWQ5NTkwMWI1OWNiMDVkMjQ1NDliYzY1YzMwNjdkZmFjMDgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY1NTUyNjNjM2I5NTQ2ZDg5MmZmY2VkODc5MTVjNzFlY2U5NTQ3Y2RhMDQyYjNjOTc0ZWQ0ZjM4MzIzOTU1ZWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjkzNDc4MWNkNzMyODFiMTkzMzRhYzlkNmYzMmI3MTgxMzRmYTM1ZmU5YWI3NzE2NGY4NWExOWNlZmFlNjRmYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhjYTI2NmNmM2Y4MDk1YmE2Y2E1YjZjZjU0ODk2NTkwMjk3OTkwNTlmY2I0YTQyMTg0NGU3OTNkMjQwY2MyZjcifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/types.ts#L16-L51",
+          "version": "repo-lines-v1:sha256:6cdaf7e5516d2ec8179b328a315ac5f305993181782c0fc035a37f6ddd6f3a34:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk4MWRlZjdhYjAwZmU0NDBlZjhkOGJkMjE2Zjk0NjBiYjE1ZjIyN2NjMWYyZmE3OTVlMjQ2NDhkNGU4NmZjYTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAxM2Y1ZDhkOTBhNGY4ODJiNTZiOGZlNGRlN2IxMTkwOGEyMTNmOTYxOGMxYjE3MDUyMjY1MGZhZjE4ZTk2NzQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ad7910cb56048a1be5b21976d3b72e5",
+      "statement": "parseHarnessProfileConfig is the validation boundary for already parsed JSON/YAML data: it recursively rejects __proto__, constructor, and prototype object keys before strict Zod validation, rejects unknown or mistyped fields, and then applies profile-construction validation including required-middleware checks.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/serialization.test.ts#L38-L89",
+          "version": "repo-lines-v1:sha256:964eebff67c0ed28c44a1a3d07bf8d663ac4240d108f1791f145a1720bb64711:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI1YjdjZGZkZDYwMDcwYjY1MDA3NjA2Y2Y4YzkxZDczMzNjYzE5NWRkOTY5MjVkN2Q2MzY2ZDczZTM4NDE1YzIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImU1MWFjMTViYzg0MDJlMDg5ZjExOTE3NTUzMDAwM2ZlMWZhNGMyNjdhMDU2ZDlkYjUwNmU2YjEzOTY3ZDJhNmUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVmOTFiMjIzZGNkODZhOGMyZjIwOTRkZTFmNzUwNTk5MmU3Mzk0YmRlYzBkY2ZkMjcyMmI4N2I3MDE2ZmZmMjIifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/serialization.ts#L20-L51",
+          "version": "repo-lines-v1:sha256:2dd6bf8a6912cbbe245cce1365110457909effca7a0380f84b50a567070c1342:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3OTI1YzJiMTg0OWJhZTcwNjVjZDM2Y2Y5NzYwZWVjOGMyODY0N2NlMDc3MmU1NTU3NWY3OWU3NDdiY2I2NzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZkMzRjZWYxOTg0NDJhMzViZjM5NDU2ZTdlNTA3NTFiOGE5YjlhZDU2ZjQ0ZTRhY2VmMjcxYzdlYzIwNjdjOWQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImVjYjkzYWE1YjUzNmRhZDlmNTQwMGZkZTM1MjJhNGJlOTlhMjUwNWE5MGYxZmI5ZDk1YmYzMjcyZWI0OWUxNzkifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/serialization.ts#L6-L18",
+          "version": "repo-lines-v1:sha256:9478df79b75b21c5c058a4062f2bb9c5350a152ba6a4b9b45a8e469bf2a752ce:eyJzZWxlY3RlZExpbmVDb3VudCI6MTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZkYWEyZGY1YjU2MDRhMDRmYjVkZjA1YmYxZDRmYWI0YmJiM2Q1ZmRkNDI2YjAzOGRhNGM0ODBiNTdhNWM2N2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY3OTI1YzJiMTg0OWJhZTcwNjVjZDM2Y2Y5NzYwZWVjOGMyODY0N2NlMDc3MmU1NTU3NWY3OWU3NDdiY2I2NzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNiMTc2OTg5ZjUyYmIzZDVhZGQwMmJlOWEyMmNlMGVlZTljOTJmMWJlNGI2MzY2ZGQzYzQ1YzM5NmJjMmFiNzMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImNiYjJjMjY2NjE0ZTMwMDkyNzZhZDc0YTA4NTQ5NzAzODljYTFlOGQ3MzFhNDc3NTQzMTg4Y2NkNWU2ZTA5ZWMifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/serialization.ts#L63-L106",
+          "version": "repo-lines-v1:sha256:5d32a9139c04ae5291fbd5ff9fbd874131584930db92e96b3acfa05d95aebb18:eyJzZWxlY3RlZExpbmVDb3VudCI6NDQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhODU1YzNjYjNmMzRiYmZjZGM0M2FmZmVjZmM0MDc5ZGUwOWNlN2E5OGU4ZmJjMjdkYjc5MmU5Mzg5ODY0N2UiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjExZGQ3Mjk4MjFhYTI4ZWJiODgxZGM0ZjQwM2Y0ZDRlNjJmODllZTJhNDA2ZTc4ODZjZWJmYTE2NjVjZWMyNzAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e97a5bdf54724236b740f7bdfc98e68c",
+      "statement": "extraMiddleware is runtime-only and cannot be represented in JSON/YAML: serializeProfile resolves it and throws if it is non-empty, otherwise emits only populated portable fields, converts Sets to arrays, and omits undefined or empty sections. The serialized object can be parsed back through parseHarnessProfileConfig for a validated round trip.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/serialization.test.ts#L92-L195",
+          "version": "repo-lines-v1:sha256:c589b74925b4eb75a526d547adfb34e98e5fa81c9f55c9f986eaf068df7b2a92:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwYzVkZDg3YzZiYzZlZDg2MDY0MmIzYmE3NDBlN2M5YWFhNWZiNjhiNjE5OGE1NWE1N2NlOWJhOTZjZDkxOTE0IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiNzc5ZDExOGQ2ZTNjYmY0NTA1Mzk3NDhkZWU3YTQzMDdhY2JlNjQ0NmNiYTI5N2YyNzYwZmE1ZDBiYmExYmMyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJiODVhYWQ3MWM2MzY5MDNlOWI0YjVlZTA5ZWI5Zjk5NTE3ZmJjMmRhNzBjM2I4N2Q2MTRlMjdkYjVlYzlmMmU3In0"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/serialization.ts#L108-L173",
+          "version": "repo-lines-v1:sha256:89c3d47788dcd42c68edb0d2c3d4870f0e7e716ae222146c224680480977645a:eyJzZWxlY3RlZExpbmVDb3VudCI6NjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImNlZTUxMzBiZTVlMDNiNDU5MDk2Y2Y2OTdkZjc5YzA3OWJlODdlZTlmMTc1MDAxY2ExMmExZDdmYzA1MjQ0YTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_9200bd67f0be4e0da3dae17d6ab54755",
+      "statement": "The built-in loader registers model-specific profiles for Claude Opus 4.7, Sonnet 4.6, Haiku 4.5, and three OpenAI Codex variants; the Codex variants share a prompt suffix and a todoListMiddleware factory, and there is no provider-wide built-in profile for otherwise unknown Anthropic or non-Codex OpenAI models.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/builtins.test.ts#L118-L128",
+          "version": "repo-lines-v1:sha256:e19b26e0eb9f661fa07597d81577c3598ebe8417d735e9a47f8584defeaa5d44:eyJzZWxlY3RlZExpbmVDb3VudCI6MTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJkYmU4NjA1ZDhiNzI0YTRkNjM4NDQyMGQyNWJhMmMyMGViMGM3NTJlMzRhNjgxNmYyZTRkY2VhOTczOTdjMTgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3NzlkMTE4ZDZlM2NiZjQ1MDUzOTc0OGRlZTdhNDMwN2FjYmU2NDQ2Y2JhMjk3ZjI3NjBmYTVkMGJiYTFiYzIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjViODU2MGI5YTk1MGVkMGU4OGYxYzE1MWNhN2I4MjE1MjNhOTQ5ZjJiZWNhNGMyNGJlNDM0NTZhMzY0MTkxM2YifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/builtins/index.ts#L3-L25",
+          "version": "repo-lines-v1:sha256:4bb8dfd82df1861604f4cf77c1e0d635ee32034c16a542f097e68a8deb5b6e9b:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY3M2I1NjI1MzUzMTdiZmY5YzU3ZjY0YzY3NmYzZjc0MzcwZjNmNDZmZjAyZWJkZDNmMzQ4NzJiMzdlOGVmZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoyLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzODgzMGIyNWFhNGY4ZmY5MDkwOGYxMjk4Mjg5NDI1Y2NiYTM1YzkzYWEwMmM5NTc3ZjAwZDk1YTdmNDkyN2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/builtins/openai-codex.ts#L45-L65",
+          "version": "repo-lines-v1:sha256:75cf3617256d7e8137bc740aca1f19db1067b7284c2817565435186055ce3aa6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkzNTY0YmM3NDRkMDgxNzUzODA2MjI2NmY3NWEwNmYyMGYxNWU0N2M3MDQwMDc0MzlhNDk4NTNlMWU1Yjg4NjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjRiYzg1ZGVjMGViZTMxOGQ5ZTAyODI4NDM4N2ZhNmNmNjk1NDc5M2UzYjY0NThiMWU2YjM3ODM4NWMzMjdlN2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/profiles/harness/builtins/openai-codex.ts#L7-L16",
+          "version": "repo-lines-v1:sha256:50f7a30507deaa27406d233ccaaf80062538eda40a7528f27a44725efd7e69c9:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRkZmU4NjgzMGEyNDc5ZWViMWMzZjhmNDQ2NzUwMDQ4OTc3MGY0ZWQ2MWU2NTM3MmMyOWNiNjVjMjIyMmFkZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIwMmQyYzBkNmRjNWU3NGQ5MmZhMTRiOTFkYmVhMjY0MDkwYmViMzVmZGI5MTg4ZDliMzQxMTgxZGNlOWY0Y2UiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg5NGE2NTczY2YyMTk2OTMxN2NlZTdjNDVhOGZkODZkZjg2NDdmZmUwMTdjNmNhNGVhMGY3OTNiNDUwYjkzYjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0NTFmY2M0Y2RjOWY0MmVlZGE5OWYwMDU2MTVkZTQ4MzJhY2VkOTI0MDFlNzAxZDRmN2Y0Yzg3Zjc4MDIwZjMifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}
