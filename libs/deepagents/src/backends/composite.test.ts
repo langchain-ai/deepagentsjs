@@ -1393,3 +1393,109 @@ describe.skipIf(process.platform === "win32")(
     });
   },
 );
+
+describe("CompositeBackend.ls with nested mounts", () => {
+  const makeNested = () => {
+    const store = new InMemoryStore();
+    return new CompositeBackend(
+      new StoreBackend({ store, namespace: ["listing-default"] }),
+      {
+        "/workspace/memories/": new StoreBackend({
+          store,
+          namespace: ["listing-mounted"],
+        }),
+      },
+    );
+  };
+  const paths = (result: LsResult) => result.files!.map((fi) => fi.path).sort();
+
+  it("lists a nested mount as a directory of its parent", async () => {
+    const backend = makeNested();
+    await backend.write("/workspace/local.txt", "local");
+    await backend.write("/workspace/memories/note.txt", "mounted");
+
+    const result = await backend.ls("/workspace");
+
+    expect(result.error).toBeUndefined();
+    expect(paths(result)).toEqual([
+      "/workspace/local.txt",
+      "/workspace/memories/",
+    ]);
+    expect(
+      result.files!.find((fi) => fi.path === "/workspace/memories/")?.is_dir,
+    ).toBe(true);
+  });
+
+  it("lists only the first segment of a nested mount at the root", async () => {
+    const backend = makeNested();
+    await backend.write("/workspace/local.txt", "local");
+    await backend.write("/workspace/memories/note.txt", "mounted");
+
+    const result = await backend.ls("/");
+
+    expect(paths(result)).toEqual(["/workspace/"]);
+  });
+
+  it("lists a mount that exists only as a path prefix when nothing else is there", async () => {
+    const backend = makeNested();
+    await backend.write("/workspace/memories/note.txt", "mounted");
+
+    expect(paths(await backend.ls("/workspace/"))).toEqual([
+      "/workspace/memories/",
+    ]);
+  });
+
+  it("still lists the contents of the mount itself", async () => {
+    const backend = makeNested();
+    await backend.write("/workspace/memories/note.txt", "mounted");
+
+    expect(paths(await backend.ls("/workspace/memories"))).toEqual([
+      "/workspace/memories/note.txt",
+    ]);
+  });
+
+  it("does not duplicate a directory the default backend already reports", async () => {
+    const backend = makeNested();
+    // Lives in the default backend under the same directory name.
+    await backend.write("/workspace/memories-old/a.txt", "x");
+    await backend.write("/workspace/memories/note.txt", "mounted");
+
+    const root = paths(await backend.ls("/"));
+    const workspace = paths(await backend.ls("/workspace"));
+
+    expect(root).toEqual(["/workspace/"]);
+    expect(workspace).toEqual([
+      "/workspace/memories-old/",
+      "/workspace/memories/",
+    ]);
+  });
+
+  it("lists a mount nested inside another mount", async () => {
+    const store = new InMemoryStore();
+    const backend = new CompositeBackend(
+      new StoreBackend({ store, namespace: ["default"] }),
+      {
+        "/a/": new StoreBackend({ store, namespace: ["a"] }),
+        "/a/b/": new StoreBackend({ store, namespace: ["b"] }),
+      },
+    );
+    await backend.write("/a/file.txt", "x");
+
+    expect(paths(await backend.ls("/a"))).toEqual(["/a/b/", "/a/file.txt"]);
+  });
+
+  it("returns the default backend's error instead of hiding it", async () => {
+    const failing = {
+      ls: async () => ({ error: "backend unavailable" }),
+    } as unknown as BackendProtocolV2;
+    const backend = new CompositeBackend(failing, {
+      "/workspace/memories/": new StoreBackend({
+        store: new InMemoryStore(),
+        namespace: ["m"],
+      }),
+    });
+
+    expect((await backend.ls("/workspace")).error).toBe("backend unavailable");
+    expect((await backend.ls("/")).error).toBe("backend unavailable");
+  });
+});

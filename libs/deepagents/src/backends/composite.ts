@@ -201,41 +201,83 @@ export class CompositeBackend implements BackendProtocolV2 {
             path: routePrefix.slice(0, -1) + fi.path,
           });
         }
-        return { files: prefixed };
+        return { files: this.withMountDirs(path, prefixed) };
       }
     }
 
-    // At root, aggregate default and all routed backends
-    if (path === "/") {
-      const results: FileInfo[] = [];
-      const defaultResult = await this.default.ls(path);
+    // Path is outside every route: the default backend owns it, and mounts
+    // below it show up as child directories.
+    const defaultResult = await this.default.ls(path);
 
-      if (defaultResult.error) {
-        return defaultResult;
-      }
-
-      // Loop instead of spread: push(...files) passes each entry as a
-      // separate argument and overflows the call stack on huge listings.
-      for (const fi of defaultResult.files || []) {
-        results.push(fi);
-      }
-
-      // Add the route itself as a directory (e.g., /memories/)
-      for (const [routePrefix] of this.sortedRoutes) {
-        results.push({
-          path: routePrefix,
-          is_dir: true,
-          size: 0,
-          modified_at: "",
-        });
-      }
-
-      results.sort((a, b) => a.path.localeCompare(b.path));
-      return { files: results };
+    if (defaultResult.error) {
+      return defaultResult;
     }
 
-    // Path doesn't match a route: query only default backend
-    return await this.default.ls(path);
+    // Loop instead of spread: push(...files) passes each entry as a
+    // separate argument and overflows the call stack on huge listings.
+    const results: FileInfo[] = [];
+    for (const fi of defaultResult.files || []) {
+      results.push(fi);
+    }
+    return { files: this.withMountDirs(path, results, path === "/") };
+  }
+
+  /**
+   * Immediate child directories of `path` that exist only because a route is
+   * mounted at or below them.
+   *
+   * Route `/workspace/memories/` contributes `/workspace/` when listing `/`,
+   * and `/workspace/memories/` when listing `/workspace`. A route equal to
+   * `path` is not a child of it.
+   */
+  private mountChildDirs(path: string): FileInfo[] {
+    const normalizedPath = path.endsWith("/") ? path : `${path}/`;
+    const childPaths = new Set<string>();
+    for (const [routePrefix] of this.sortedRoutes) {
+      const normalizedRoute = routePrefix.endsWith("/")
+        ? routePrefix
+        : `${routePrefix}/`;
+      if (
+        normalizedRoute === normalizedPath ||
+        !normalizedRoute.startsWith(normalizedPath)
+      ) {
+        continue;
+      }
+      const segment = normalizedRoute
+        .substring(normalizedPath.length)
+        .split("/")[0];
+      childPaths.add(`${normalizedPath}${segment}/`);
+    }
+    return [...childPaths].map((childPath) => ({
+      path: childPath,
+      is_dir: true,
+      size: 0,
+      modified_at: "",
+    }));
+  }
+
+  /**
+   * Add the mount child directories of `path` to a listing, skipping paths
+   * the backend already reported. Sorts by path when anything was added or
+   * when `forceSort` is set (the root listing has always been sorted).
+   */
+  private withMountDirs(
+    path: string,
+    files: FileInfo[],
+    forceSort = false,
+  ): FileInfo[] {
+    const known = new Set(files.map((fi) => fi.path));
+    let added = false;
+    for (const dir of this.mountChildDirs(path)) {
+      if (!known.has(dir.path)) {
+        files.push(dir);
+        added = true;
+      }
+    }
+    if (added || forceSort) {
+      files.sort((a, b) => a.path.localeCompare(b.path));
+    }
+    return files;
   }
 
   /**
