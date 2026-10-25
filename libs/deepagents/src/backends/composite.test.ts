@@ -1393,3 +1393,82 @@ describe.skipIf(process.platform === "win32")(
     });
   },
 );
+
+describe("CompositeBackend.glob with a mount below the searched path", () => {
+  const makeNested = async () => {
+    const store = new InMemoryStore();
+    const backend = new CompositeBackend(
+      new StoreBackend({ store, namespace: ["glob-default"] }),
+      {
+        "/workspace/memories/": new StoreBackend({
+          store,
+          namespace: ["glob-mounted"],
+        }),
+      },
+    );
+    await backend.write("/workspace/local.txt", "local");
+    await backend.write("/workspace/memories/note.txt", "mounted");
+    await backend.write("/workspace/memories/nested/deep.txt", "nested");
+    return backend;
+  };
+  const globPaths = async (
+    backend: CompositeBackend,
+    pattern: string,
+    path: string,
+  ) => {
+    const result = await backend.glob(pattern, path);
+    expect(result.error).toBeUndefined();
+    return result.files!.map((fi) => fi.path).sort();
+  };
+
+  it("matches a pattern that spells out the mount directory", async () => {
+    const backend = await makeNested();
+
+    expect(await globPaths(backend, "memories/*.txt", "/workspace")).toEqual([
+      "/workspace/memories/note.txt",
+    ]);
+  });
+
+  it("matches a recursive pattern inside the mount", async () => {
+    const backend = await makeNested();
+
+    expect(await globPaths(backend, "**/*.txt", "/workspace")).toEqual([
+      "/workspace/local.txt",
+      "/workspace/memories/nested/deep.txt",
+      "/workspace/memories/note.txt",
+    ]);
+    expect(await globPaths(backend, "memories/**", "/workspace")).toEqual([
+      "/workspace/memories/nested/deep.txt",
+      "/workspace/memories/note.txt",
+    ]);
+  });
+
+  it("matches wildcard and brace patterns for the mount directory", async () => {
+    const backend = await makeNested();
+
+    expect(await globPaths(backend, "mem*/*.txt", "/workspace")).toEqual([
+      "/workspace/memories/note.txt",
+    ]);
+    expect(
+      await globPaths(backend, "{memories,other}/*.txt", "/workspace"),
+    ).toEqual(["/workspace/memories/note.txt"]);
+  });
+
+  it("measures patterns from the searched path, including the root", async () => {
+    const backend = await makeNested();
+
+    expect(await globPaths(backend, "workspace/memories/*.txt", "/")).toEqual([
+      "/workspace/memories/note.txt",
+    ]);
+    // Measured from `/`, the mount is `workspace/memories`, not `memories`.
+    expect(await globPaths(backend, "memories/*.txt", "/")).toEqual([]);
+  });
+
+  it("still globs relative to the mount when the search path is inside it", async () => {
+    const backend = await makeNested();
+
+    expect(await globPaths(backend, "*.txt", "/workspace/memories")).toEqual([
+      "/workspace/memories/note.txt",
+    ]);
+  });
+});

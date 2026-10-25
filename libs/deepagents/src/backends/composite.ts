@@ -2,6 +2,7 @@
  * CompositeBackend: Route operations to different backends based on path prefix.
  */
 
+import micromatch from "micromatch";
 import type {
   AnyBackendProtocol,
   BackendProtocolV2,
@@ -400,7 +401,7 @@ export class CompositeBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const result = await backend.glob(pattern, "/");
+      const result = await this.globMount(routePrefix, backend, pattern, path);
       if (result.error) {
         continue; // Skip backends that error
       }
@@ -413,6 +414,57 @@ export class CompositeBackend implements BackendProtocolV2 {
     // Deterministic ordering
     results.sort((a, b) => a.path.localeCompare(b.path));
     return { files: results, truncated };
+  }
+
+  /**
+   * Glob a mounted backend for a pattern written relative to `path`, a
+   * directory above the mount.
+   *
+   * The pattern describes paths relative to `path`, but the mounted backend
+   * matches relative to its own root, so the mount's directory prefix has to be
+   * taken out of the pattern (or put into the candidates) first. Results are in
+   * the mount's own coordinates.
+   */
+  private async globMount(
+    routePrefix: string,
+    backend: BackendProtocolV2,
+    pattern: string,
+    path: string,
+  ): Promise<GlobResult> {
+    const normalizedPath = path.endsWith("/") ? path : `${path}/`;
+    const relativeRoute = routePrefix.substring(normalizedPath.length);
+    const bare = pattern.startsWith("/") ? pattern.substring(1) : pattern;
+
+    // A leading `**` absorbs the route prefix, so the pattern means the same
+    // thing inside the mount.
+    if (bare === "**" || bare.startsWith("**/")) {
+      return await backend.glob(pattern, "/");
+    }
+
+    // The pattern spells out the route: what follows is the mount's pattern.
+    if (bare.length > relativeRoute.length && bare.startsWith(relativeRoute)) {
+      return await backend.glob(bare.substring(relativeRoute.length), "/");
+    }
+
+    // A pattern with no separator has always been applied at the mount's root
+    // (`glob("*.md", "/")` finds `/memories/notes.md`); keep that.
+    if (!bare.includes("/")) {
+      return await backend.glob(pattern, "/");
+    }
+
+    // Anything else (`mem*/*.txt`, `{a,b}/*.txt`): list the mount and match
+    // each file by its path relative to `path`.
+    const all = await backend.glob("**", "/");
+    if (all.error) {
+      return all;
+    }
+    const files = (all.files || []).filter((fi) =>
+      micromatch.isMatch(relativeRoute + fi.path.replace(/^\//, ""), bare, {
+        dot: true,
+        nobrace: false,
+      }),
+    );
+    return { files, truncated: all.truncated };
   }
 
   /**
