@@ -102,21 +102,6 @@ describe("createParentNotifierMiddleware", () => {
     expect(threadsGet).not.toHaveBeenCalled();
   });
 
-  it("reports each run once", async () => {
-    const agent = createAgent({
-      model: fakeModel()
-        .respond(new AIMessage("First."))
-        .respond(new AIMessage("Second.")),
-      middleware: [createParentNotifierMiddleware()],
-      checkpointer: new MemorySaver(),
-    });
-
-    await agent.invoke(ask, taskRunConfig());
-    await agent.invoke(ask, taskRunConfig());
-
-    expect(runsCreate).toHaveBeenCalledTimes(1);
-  });
-
   it("names the subagent as its parent knows it, and hands back the run's context", async () => {
     await subagent().invoke(ask, {
       ...taskRunConfig(),

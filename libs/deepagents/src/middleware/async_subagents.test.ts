@@ -1,14 +1,5 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 
-// The real lookup, unless a test points the current span somewhere.
-const { getCurrentRunTree } = vi.hoisted(() => ({
-  getCurrentRunTree: vi.fn(),
-}));
-vi.mock("langsmith/traceable", async (importOriginal) => {
-  const original = await importOriginal<typeof import("langsmith/traceable")>();
-  getCurrentRunTree.mockImplementation(original.getCurrentRunTree);
-  return { ...original, getCurrentRunTree };
-});
 import { Command } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
 import {
@@ -38,6 +29,16 @@ import {
   type AsyncTask,
   type AsyncTaskStatus,
 } from "./async_subagents.js";
+
+// The real lookup, unless a test points the current span somewhere.
+const { getCurrentRunTree } = vi.hoisted(() => ({
+  getCurrentRunTree: vi.fn(),
+}));
+vi.mock("langsmith/traceable", async (importOriginal) => {
+  const original = await importOriginal<typeof import("langsmith/traceable")>();
+  getCurrentRunTree.mockImplementation(original.getCurrentRunTree);
+  return { ...original, getCurrentRunTree };
+});
 
 /**
  * Matches what LangChain `ToolNode` passes to `tool.invoke` (see `agents/nodes/ToolNode.js`):

@@ -11,9 +11,6 @@ import {
   taskEvent,
 } from "./async_subagents.js";
 
-/** Runs remembered as reported; bounded so long-lived processes don't grow without limit. */
-const MAX_REPORTED_RUNS = 1000;
-
 /** Whether this is the outermost graph of a task run, not a graph nested in it. */
 function isTopLevelGraph(config: LangGraphRunnableConfig): boolean {
   const configurable = (config.configurable ?? {}) as Record<string, unknown>;
@@ -38,10 +35,8 @@ function wasAborted(error: unknown, signal: AbortSignal | undefined): boolean {
  * run carries the parent reference, and skips nested runs.
  */
 export function createParentNotifierMiddleware() {
-  const reported = new Set<string>();
-
   /**
-   * Notify once per run, for this graph's own run that an async subagent tool started.
+   * Notify for this graph's own run that an async subagent tool started.
    *
    * The run's context comes from its config: hooks only see the context fields
    * a middleware's `contextSchema` declares, and this one declares none.
@@ -53,12 +48,7 @@ export function createParentNotifierMiddleware() {
     const config = getConfig();
     // Nested graphs (e.g. a deep agent as a sync subagent) inherit the parent reference; only the top-level graph reports.
     if (!launchingAgent(config) || !isTopLevelGraph(config)) return;
-    const runKey = currentRunId(config);
-    if (runKey === undefined || reported.has(runKey)) return;
-    reported.add(runKey);
-    if (reported.size > MAX_REPORTED_RUNS) {
-      reported.delete(reported.values().next().value as string);
-    }
+    if (currentRunId(config) === undefined) return;
     const metadata = (config.metadata ?? {}) as Record<string, unknown>;
     const configurable = (config.configurable ?? {}) as Record<string, unknown>;
     const name = String(
