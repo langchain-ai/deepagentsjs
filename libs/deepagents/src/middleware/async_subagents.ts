@@ -26,7 +26,6 @@ import {
   ToolMessage as CoreToolMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
-import { getContextVariable } from "@langchain/core/context";
 import { getCurrentRunTree } from "langsmith/traceable";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
@@ -576,23 +575,6 @@ function formatTaskEntry(task: AsyncTask, status: AsyncTaskStatus): string {
  * Agents that share the same URL and headers will reuse a single `Client`
  * instance, avoiding unnecessary connections.
  */
-/** Context variable in which an Agent Server gives a running JS graph its own deployment's address. */
-const DEPLOYMENT_URL_KEY = "langgraph_api:url";
-
-/**
- * The address a subagent without a `url` is reached at: this deployment's, when an
- * Agent Server provides it to the running graph, or else the SDK's default.
- */
-export function deploymentUrl(spec?: AsyncSubAgent): string | undefined {
-  if (spec?.url) return spec.url;
-  try {
-    return getContextVariable<string>(DEPLOYMENT_URL_KEY);
-  } catch {
-    // Outside a run (or without async local storage) there's no address to read.
-    return undefined;
-  }
-}
-
 export class ClientCache {
   private agents: Record<string, AsyncSubAgent>;
   private clients = new Map<string, Client>();
@@ -622,7 +604,7 @@ export class ClientCache {
   private cacheKey(spec: AsyncSubAgent): string {
     const headers = this.resolveHeaders(spec);
     const headerStr = Object.entries(headers).sort().flat().join(":");
-    return `${deploymentUrl(spec) ?? ""}|${headerStr}`;
+    return `${spec.url ?? ""}|${headerStr}`;
   }
 
   /**
@@ -634,7 +616,7 @@ export class ClientCache {
     const spec = this.agents[name];
     if (Object.keys(extraHeaders).length > 0) {
       return new Client({
-        apiUrl: deploymentUrl(spec),
+        apiUrl: spec.url,
         defaultHeaders: { ...this.resolveHeaders(spec), ...extraHeaders },
       });
     }
@@ -645,7 +627,7 @@ export class ClientCache {
 
     const headers = this.resolveHeaders(spec);
     const client = new Client({
-      apiUrl: deploymentUrl(spec),
+      apiUrl: spec.url,
       defaultHeaders: headers,
     });
     this.clients.set(key, client);
@@ -1141,7 +1123,7 @@ async function awakeParent(
   context?: Record<string, unknown>,
 ): Promise<void> {
   // The parent runs on this deployment, so use the address the Agent Server gave this run.
-  const client = new Client({ apiUrl: deploymentUrl() });
+  const client = new Client();
   try {
     const thread = await client.threads.get(parentThreadId);
     if (!DELIVERABLE_THREAD_STATUSES.has(thread.status)) return;
