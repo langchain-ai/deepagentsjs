@@ -30,7 +30,6 @@ import { getContextVariable } from "@langchain/core/context";
 import { getCurrentRunTree } from "langsmith/traceable";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
-import { hydrateToolMessages } from "./blobOffload.js";
 import { NUM_CHARS_PER_TOKEN } from "./fs.js";
 import { stripInFlightAIMessage } from "./subagents.js";
 import { getEffectiveMessages } from "./summarization.js";
@@ -790,26 +789,22 @@ function serializeForkMessage(message: BaseMessage): Record<string, unknown> {
 /**
  * The task's input messages: the parent's effective conversation for forks, or only the task.
  *
- * A fork's offloaded media is restored from the parent's blob storage, which the child can't read.
+ * A fork keeps references to the parent's offloaded media; a subagent sharing the
+ * parent's backend loads them, and any other sees that the content is unavailable.
  */
-async function startTaskMessages(
+function startTaskMessages(
   spec: AsyncSubAgent,
   state: Record<string, unknown>,
   description: string,
-  toolCallId: string,
-): Promise<Record<string, unknown>[]> {
+): Record<string, unknown>[] {
   if (spec.mode !== "fork") return [{ role: "user", content: description }];
   const history = stripInFlightAIMessage(
     (state.messages as BaseMessage[] | undefined) ?? [],
   );
-  const messages = await hydrateToolMessages(
-    [
-      ...getEffectiveMessages(history, state),
-      new HumanMessage({ content: ASYNC_FORK_TASK_PREAMBLE + description }),
-    ],
-    toolCallId,
-  );
-  return (messages as BaseMessage[]).map(serializeForkMessage);
+  return [
+    ...getEffectiveMessages(history, state),
+    new HumanMessage({ content: ASYNC_FORK_TASK_PREAMBLE + description }),
+  ].map(serializeForkMessage);
 }
 
 /** Describe a subagent's context inheritance without promising shared tools. */
@@ -917,8 +912,6 @@ interface TaskUpdate extends TaskEvent {
   interrupts?: { id: string; value: unknown }[];
 }
 
-type TextBlock = { type: "text"; text: string };
-
 const NEXT_STEP: Record<TaskEvent["status"], string> = {
   success:
     "Use the result to continue; report back to the user if they're waiting on it.",
@@ -932,7 +925,7 @@ const NEXT_STEP: Record<TaskEvent["status"], string> = {
     "The subagent is waiting for the user, who answers it on the subagent's own thread; you can't answer or approve it. Keep working.",
 };
 
-function textBlock(text: string): TextBlock {
+function textBlock(text: string): ContentBlock.Text {
   return { type: "text", text };
 }
 
@@ -999,7 +992,7 @@ export function notificationContent(update: TaskUpdate): ContentBlock[] {
   return blocks;
 }
 
-function notificationHeader(event: TaskEvent): TextBlock {
+function notificationHeader(event: TaskEvent): ContentBlock.Text {
   return textBlock(
     "[SYSTEM NOTIFICATION - NOT USER INPUT]\n" +
       "An async subagent task you started has an update. This is not a message from the user: " +
@@ -1238,11 +1231,10 @@ export function buildStartTool(
           .getClient(input.agentName, traceHeaders(spec))
           .runs.create(thread.thread_id, spec.graphId, {
             input: {
-              messages: await startTaskMessages(
+              messages: startTaskMessages(
                 spec,
                 runtime.state as Record<string, unknown>,
                 input.description,
-                toolCallIdFromRuntime(runtime),
               ),
               ...callbackContext,
             },

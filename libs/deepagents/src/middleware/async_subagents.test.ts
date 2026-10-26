@@ -1892,7 +1892,7 @@ describe("fork mode", () => {
     ]);
   });
 
-  it("never sends a reference to media only the parent's backend holds", async () => {
+  it("sends offloaded media as references, for a subagent sharing the parent's backend to load", async () => {
     const image = new ToolMessage({
       content: [
         {
@@ -1909,11 +1909,9 @@ describe("fork mode", () => {
       messages: [new HumanMessage("look at this"), image],
     });
 
-    // Outside the filesystem middleware's tool call there's no blob storage to restore it from.
-    expect(JSON.stringify(messages[1].content)).toContain(
-      "no longer available",
-    );
-    expect(JSON.stringify(messages)).not.toContain("deepagents_blob");
+    expect(messages[1].content).toEqual([
+      { type: "image", mimeType: "image/png", deepagents_blob: "a".repeat(64) },
+    ]);
   });
 
   it("sends only the task without fork mode", async () => {

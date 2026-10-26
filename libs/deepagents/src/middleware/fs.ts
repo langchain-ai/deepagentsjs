@@ -42,7 +42,7 @@ import {
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
-  withToolBlobStore,
+  withoutBlobRefs,
 } from "./blobOffload.js";
 import {
   sanitizeToolCallId,
@@ -2518,6 +2518,9 @@ export function createFilesystemMiddleware(
           BLOBS_PREFIX,
           blobCache,
         )) as typeof messages;
+      } else if (messages) {
+        // References this agent can't load (e.g. from a forked parent) become a notice the model accepts.
+        messages = withoutBlobRefs(messages);
       }
 
       const finalRequest = {
@@ -2579,23 +2582,7 @@ export function createFilesystemMiddleware(
     },
     wrapToolCall: async (request, handler) => {
       const toolName = request.toolCall?.name;
-      // Tools that send media elsewhere (such as forking an async subagent) can load it from here.
-      const toolBlobStore = blobCache
-        ? {
-            backend: () =>
-              resolveBackend(backend, {
-                ...request.runtime,
-                state: request.state,
-              }),
-            prefix: BLOBS_PREFIX,
-            cache: blobCache,
-          }
-        : undefined;
-      let result = await withToolBlobStore(
-        request.toolCall?.id,
-        toolBlobStore,
-        async () => handler(request),
-      );
+      let result = await handler(request);
 
       if (blobCache && toolName === "read_file") {
         const resolvedBackend = await resolveBackend(backend, {

@@ -465,50 +465,13 @@ export async function hydrateMessages(
   return restorePayloads(messages, payloads);
 }
 
-/** Blob storage a filesystem middleware exposes while one of its agent's tools runs. */
-interface ToolBlobStore {
-  backend: () => Promise<AnyBackendProtocol>;
-  prefix: string;
-  cache: Map<string, string>;
-}
-
-/** Blob storage exposed to each running tool call, by tool call ID. */
-const toolBlobStores = new Map<string, ToolBlobStore>();
-
 /**
- * Run a tool call with `store` exposed, so tools that need portable media can load it.
- * It's request-scoped, so the backend never lands in a checkpoint.
+ * Replace each blob reference in `messages` with a notice that the content is
+ * unavailable, for an agent that can't load blobs, so the model still accepts
+ * the request.
  */
-export async function withToolBlobStore<T>(
-  toolCallId: string | undefined,
-  store: ToolBlobStore | undefined,
-  run: () => Promise<T>,
-): Promise<T> {
-  if (!toolCallId || !store) return run();
-  toolBlobStores.set(toolCallId, store);
-  try {
-    return await run();
-  } finally {
-    toolBlobStores.delete(toolCallId);
-  }
-}
-
-/**
- * Restore offloaded media in `messages` from the enclosing tool's blob storage.
- *
- * Without it, references become a notice that the content is unavailable.
- */
-export async function hydrateToolMessages(
-  messages: readonly unknown[],
-  toolCallId: string,
-): Promise<unknown[]> {
-  if (!messages.some(messageHasRefs)) return [...messages];
-  const store = toolBlobStores.get(toolCallId);
-  if (!store) return restorePayloads(messages, new Map());
-  return hydrateMessages(
-    messages,
-    await store.backend(),
-    store.prefix,
-    store.cache,
-  );
+export function withoutBlobRefs<T extends readonly unknown[]>(messages: T): T {
+  return messages.some(messageHasRefs)
+    ? (restorePayloads(messages, new Map()) as unknown as T)
+    : messages;
 }
