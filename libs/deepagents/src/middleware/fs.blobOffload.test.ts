@@ -7,11 +7,7 @@ import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "langchain";
 import { Command } from "@langchain/langgraph";
 
 import { createFilesystemMiddleware } from "./fs.js";
-import {
-  BLOB_REF_KEY,
-  hydrateToolMessages,
-  withToolBlobStore,
-} from "./blobOffload.js";
+import { BLOB_REF_KEY, hydrateToolMessages } from "./blobOffload.js";
 import { StateBackend } from "../backends/state.js";
 import { FilesystemBackend } from "../backends/filesystem.js";
 import { CompositeBackend } from "../backends/composite.js";
@@ -283,7 +279,7 @@ describe("blob storage for tools", () => {
         state,
         runtime: {},
       },
-      async () => hydrateToolMessages([offloaded]),
+      async () => hydrateToolMessages([offloaded], "call_2"),
     );
 
     expect((restored[0] as ToolMessage).content).toEqual([
@@ -291,22 +287,28 @@ describe("blob storage for tools", () => {
     ]);
   });
 
-  it("runs tools where there's no async local storage, e.g. in a browser", async () => {
+  it("restores media without async local storage, e.g. in a browser", async () => {
     const key = Symbol.for("ls:tracing_async_local_storage");
     const storage = (globalThis as Record<symbol, unknown>)[key];
+    const state = { messages: [] as unknown[], files: {} };
+    const middleware = createFilesystemMiddleware({
+      backend: () =>
+        new FilesystemBackend({ rootDir: root, virtualMode: true }),
+      offloadBinaryContent: true,
+    });
+    const offloaded = (await offloadReadFile(middleware, state)) as ToolMessage;
+
     delete (globalThis as Record<symbol, unknown>)[key];
-    const store = {
-      backend: async () => ({}) as never,
-      prefix: "/blobs",
-      cache: new Map(),
-    };
     try {
-      await expect(
-        withToolBlobStore(undefined, async () => "ok"),
-      ).resolves.toBe("ok");
-      await expect(withToolBlobStore(store, async () => "ok")).resolves.toBe(
-        "ok",
+      const restored = await (middleware as any).wrapToolCall(
+        {
+          toolCall: { id: "call_2", name: "start_async_task", args: {} },
+          state,
+          runtime: {},
+        },
+        async () => hydrateToolMessages([offloaded], "call_2"),
       );
+      expect(JSON.stringify(restored)).toContain(PNG_BASE64);
     } finally {
       (globalThis as Record<symbol, unknown>)[key] = storage;
     }
@@ -321,7 +323,7 @@ describe("blob storage for tools", () => {
       name: "read_file",
     });
 
-    const [restored] = await hydrateToolMessages([message]);
+    const [restored] = await hydrateToolMessages([message], "call_1");
 
     expect(JSON.stringify((restored as ToolMessage).content)).toContain(
       "no longer available",

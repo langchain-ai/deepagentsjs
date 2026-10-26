@@ -2591,8 +2591,10 @@ export function createFilesystemMiddleware(
             cache: blobCache,
           }
         : undefined;
-      let result = await withToolBlobStore(toolBlobStore, async () =>
-        handler(request),
+      let result = await withToolBlobStore(
+        request.toolCall?.id,
+        toolBlobStore,
+        async () => handler(request),
       );
 
       if (blobCache && toolName === "read_file") {

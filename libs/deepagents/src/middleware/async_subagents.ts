@@ -796,15 +796,19 @@ async function startTaskMessages(
   spec: AsyncSubAgent,
   state: Record<string, unknown>,
   description: string,
+  toolCallId: string,
 ): Promise<Record<string, unknown>[]> {
   if (spec.mode !== "fork") return [{ role: "user", content: description }];
   const history = stripInFlightAIMessage(
     (state.messages as BaseMessage[] | undefined) ?? [],
   );
-  const messages = await hydrateToolMessages([
-    ...getEffectiveMessages(history, state),
-    new HumanMessage({ content: ASYNC_FORK_TASK_PREAMBLE + description }),
-  ]);
+  const messages = await hydrateToolMessages(
+    [
+      ...getEffectiveMessages(history, state),
+      new HumanMessage({ content: ASYNC_FORK_TASK_PREAMBLE + description }),
+    ],
+    toolCallId,
+  );
   return (messages as BaseMessage[]).map(serializeForkMessage);
 }
 
@@ -1238,6 +1242,7 @@ export function buildStartTool(
                 spec,
                 runtime.state as Record<string, unknown>,
                 input.description,
+                toolCallIdFromRuntime(runtime),
               ),
               ...callbackContext,
             },

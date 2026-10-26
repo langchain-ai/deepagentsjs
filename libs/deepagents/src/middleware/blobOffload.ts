@@ -8,10 +8,6 @@
  */
 
 import { createHash } from "node:crypto";
-import {
-  getContextVariable,
-  setContextVariable,
-} from "@langchain/core/context";
 import { Command } from "@langchain/langgraph";
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "langchain";
 import type {
@@ -476,28 +472,24 @@ interface ToolBlobStore {
   cache: Map<string, string>;
 }
 
-const TOOL_BLOB_STORE = "__deepagents_tool_blob_store";
+/** Blob storage exposed to each running tool call, by tool call ID. */
+const toolBlobStores = new Map<string, ToolBlobStore>();
 
 /**
- * Run a tool with `store` exposed, so tools that need portable media can load it.
+ * Run a tool call with `store` exposed, so tools that need portable media can load it.
  * It's request-scoped, so the backend never lands in a checkpoint.
  */
 export async function withToolBlobStore<T>(
+  toolCallId: string | undefined,
   store: ToolBlobStore | undefined,
   run: () => Promise<T>,
 ): Promise<T> {
-  const previous = getContextVariable<ToolBlobStore>(TOOL_BLOB_STORE);
-  if (store === previous) return run();
-  try {
-    setContextVariable(TOOL_BLOB_STORE, store);
-  } catch {
-    // No async local storage (e.g. a browser): tools see offloaded media as unavailable.
-    return run();
-  }
+  if (!toolCallId || !store) return run();
+  toolBlobStores.set(toolCallId, store);
   try {
     return await run();
   } finally {
-    setContextVariable(TOOL_BLOB_STORE, previous);
+    toolBlobStores.delete(toolCallId);
   }
 }
 
@@ -508,9 +500,10 @@ export async function withToolBlobStore<T>(
  */
 export async function hydrateToolMessages(
   messages: readonly unknown[],
+  toolCallId: string,
 ): Promise<unknown[]> {
   if (!messages.some(messageHasRefs)) return [...messages];
-  const store = getContextVariable<ToolBlobStore>(TOOL_BLOB_STORE);
+  const store = toolBlobStores.get(toolCallId);
   if (!store) return restorePayloads(messages, new Map());
   return hydrateMessages(
     messages,
