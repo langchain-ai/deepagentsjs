@@ -1,5 +1,18 @@
 # deepagents
 
+## 1.16.0
+
+### Minor Changes
+
+- [#964](https://github.com/langchain-ai/deepagentsjs/pull/964) [`f002924`](https://github.com/langchain-ai/deepagentsjs/commit/f002924f7bac66d36568684430a5d64337c06dfa) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): async subagents notify the agent that launched them (experimental)
+  
+  When an async subagent finishes, fails, is cancelled or pauses for a human, it now wakes the agent that started it with a notification message, so the agent no longer has to poll `check_async_task`.
+  
+  - `AsyncSubAgent` gains `notifyParent` (set `false` to turn notifications off), `webhook` (also POST each outcome to a URL), `updateStrategy: "enqueue"` (queue follow-ups behind the current run instead of interrupting it) and `mode: "fork"` (start the subagent with a copy of the parent's conversation).
+  - A subagent paused for approval or input shows as `"waiting"`; the user answers it on the subagent's own thread.
+  - `check_async_task` returns content blocks when the answer includes media.
+  - `createCompletionCallbackMiddleware` is deprecated; using it alongside notifications sends two of them.
+
 ## 1.15.1
 
 ### Patch Changes
