@@ -107,6 +107,9 @@ export interface AsyncSubAgent {
    * Fork mode copies conversation history, not the parent's model, prompt, tools
    * or middleware; match them on the remote agent for prompt-cache reuse.
    *
+   * Media the parent offloaded with `offloadBinaryContent` is forked as references:
+   * the subagent must be a deep agent, and shares the parent's backend to see it.
+   *
    * @experimental `mode: "fork"` may change in a future release.
    */
   mode?: "isolated" | "fork";
