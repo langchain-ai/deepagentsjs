@@ -42,6 +42,7 @@ import {
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
+  withoutBlobRefs,
 } from "./blobOffload.js";
 import {
   sanitizeToolCallId,
@@ -2517,6 +2518,9 @@ export function createFilesystemMiddleware(
           BLOBS_PREFIX,
           blobCache,
         )) as typeof messages;
+      } else if (messages) {
+        // References this agent can't load (e.g. from a forked parent) become a notice the model accepts.
+        messages = withoutBlobRefs(messages);
       }
 
       const finalRequest = {
