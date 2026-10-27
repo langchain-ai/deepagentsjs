@@ -771,6 +771,12 @@ function getSubagents(options: {
   };
 }
 
+export interface TaskToolSubagent {
+  name: string;
+  description: string;
+  forked?: true;
+}
+
 /**
  * Create the task tool for invoking subagents
  */
@@ -797,10 +803,23 @@ function createTaskTool(options: {
     parentSystemPrompt = null,
   } = options;
 
-  const subagentNames = [
-    ...(generalPurposeAgent ? ["general-purpose"] : []),
-    ...subagents.map((spec) => spec.name),
+  // Read by graph drawing; a plain property because tool metadata is traced.
+  const taskToolSubagents: TaskToolSubagent[] = [
+    ...(generalPurposeAgent
+      ? [
+          {
+            name: "general-purpose",
+            description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
+          },
+        ]
+      : []),
+    ...subagents.map((spec) => ({
+      name: spec.name,
+      description: spec.description,
+      ...(isForkedSubAgent(spec) && { forked: true as const }),
+    })),
   ];
+  const subagentNames = taskToolSubagents.map((subagent) => subagent.name);
   const subagentDescriptions = [
     ...(generalPurposeAgent
       ? [
@@ -951,18 +970,20 @@ function createTaskTool(options: {
       ),
   });
 
-  const taskTool = tool(runTask, {
-    name: "task",
-    description: finalTaskDescription,
-    schema: taskToolSchema,
-  });
+  const createTaskToolInstance = () =>
+    Object.assign(
+      tool(runTask, {
+        name: "task",
+        description: finalTaskDescription,
+        schema: taskToolSchema,
+      }),
+      { subagents: taskToolSubagents },
+    );
+
+  const taskTool = createTaskToolInstance();
 
   // Separate object, not the same tool instance — see createForkTaskToolMiddleware.
-  const mirroredTaskTool = tool(runTask, {
-    name: "task",
-    description: finalTaskDescription,
-    schema: taskToolSchema,
-  });
+  const mirroredTaskTool = createTaskToolInstance();
 
   const {
     agents,
