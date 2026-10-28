@@ -19,13 +19,13 @@ import {
   type ToolRuntime,
 } from "langchain";
 import {
+  addNotificationMetadata,
   AIMessage,
   BaseMessage,
   coerceMessageLikeToMessage,
-  addNotificationMetadata,
   getNotificationMetadata,
-  NOTIFICATION_HEADER,
   HumanMessage,
+  NOTIFICATION_HEADER,
   ToolMessage as CoreToolMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
@@ -869,9 +869,9 @@ export function launchingAgent(
 const NOTIFICATION_SOURCE = "async_subagent";
 
 /**
- * `additional_kwargs` key carrying a notification's {@link TaskEvent}, still written and read alongside `lc_data`.
+ * `additional_kwargs` key carrying a notification's {@link TaskEvent}; still written, and read when a message has no `async_subagent` event.
  *
- * @deprecated Read `additional_kwargs.lc_data` where `lc_source` is `"async_subagent"`.
+ * @deprecated Read `getNotificationMetadata(message)?.data` where `source` is `"async_subagent"`.
  */
 export const NOTIFICATION_KEY = "deepagents_notification";
 
@@ -1116,9 +1116,8 @@ function notificationEvent(message: BaseMessage | undefined): TaskEvent | null {
   if (message === undefined) return null;
   const metadata = getNotificationMetadata(message);
   const event =
-    metadata?.source === NOTIFICATION_SOURCE
-      ? metadata.data
-      : message.additional_kwargs?.[NOTIFICATION_KEY];
+    (metadata?.source === NOTIFICATION_SOURCE ? metadata.data : undefined) ??
+    message.additional_kwargs?.[NOTIFICATION_KEY];
   return event && typeof event === "object" && !Array.isArray(event)
     ? (event as TaskEvent)
     : null;
