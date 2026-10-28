@@ -81,6 +81,7 @@
 import * as z from "zod";
 import {
   createMiddleware,
+  omitPayload,
   /**
    * required for type inference
    */
@@ -309,6 +310,7 @@ export function createCompletionCallbackMiddleware(
 
   return createMiddleware({
     name: "CompletionCallbackMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: CompletionCallbackStateSchema,
 
     /**

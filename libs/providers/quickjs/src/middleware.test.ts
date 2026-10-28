@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { tool } from "langchain";
+import { createAgent, tool } from "langchain";
+import { fakeModel } from "@langchain/core/testing";
 import * as z from "zod";
-import { SystemMessage, ToolMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import { Command } from "@langchain/langgraph";
 import {
   createCodeInterpreterMiddleware,
@@ -13,6 +19,33 @@ import { ReplSession } from "./session.js";
 describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
     ReplSession.clearCache();
+  });
+
+  it("omits conversation inputs from the cleanup span while preserving model output", async () => {
+    const agent = createAgent({
+      model: fakeModel().respond(new AIMessage("Done")),
+      middleware: [createCodeInterpreterMiddleware()],
+    });
+    const events = [];
+    for await (const event of agent.streamEvents(
+      {
+        messages: [
+          new HumanMessage("Long conversation context. ".repeat(1024)),
+        ],
+      },
+      { version: "v2" },
+    )) {
+      events.push(event);
+    }
+
+    const cleanup = events.find(
+      (event) =>
+        event.name === "CodeInterpreterMiddleware.after_agent" &&
+        event.event === "on_chain_start",
+    );
+    expect(cleanup?.data.input).toEqual({});
+    const model = events.find((event) => event.event === "on_chat_model_end");
+    expect(JSON.stringify(model?.data.output)).toContain("Done");
   });
 
   describe("tool registration", () => {

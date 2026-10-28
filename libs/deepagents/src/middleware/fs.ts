@@ -9,6 +9,7 @@
 import {
   context,
   createMiddleware,
+  omitPayload,
   tool,
   AIMessage,
   HumanMessage,
@@ -2405,6 +2406,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: FilesystemStateSchema,
     tools: allTools,
     async beforeAgent(state) {
