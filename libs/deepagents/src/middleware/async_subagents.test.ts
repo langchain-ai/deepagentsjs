@@ -2170,6 +2170,92 @@ describe("status updates while the parent runs", () => {
     expect(update.messages).toHaveLength(1);
   });
 
+  it("labels the notification as synthetic", async () => {
+    mockServer(
+      { run_id: "run-1", status: "success" },
+      {
+        status: "idle",
+        values: { messages: [{ type: "ai", content: "Done" }] },
+      },
+    );
+    const task = makeTask();
+    const hook = middleware().beforeModel as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    const [message] = update.messages as HumanMessage[];
+    expect(message.additional_kwargs.lc_synthetic).toBe(true);
+    expect(message.additional_kwargs.lc_source).toBe("async_subagent");
+    expect(message.additional_kwargs.lc_data).toEqual(
+      message.additional_kwargs.deepagents_notification,
+    );
+  });
+
+  it("records the notification that started the run from lc_data", async () => {
+    mockServer({ run_id: "run-1", status: "success" }, { status: "idle" });
+    const task = makeTask();
+    const notification = new HumanMessage({
+      content: "update",
+      additional_kwargs: {
+        lc_source: "async_subagent",
+        lc_data: {
+          task_id: task.taskId,
+          agent_name: "researcher",
+          status: "success",
+          run_id: "run-1",
+        },
+      },
+    });
+    const hook = middleware().beforeAgent as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [notification],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("success");
+  });
+
+  it("prefers lc_data over the legacy key", async () => {
+    mockServer({ run_id: "run-1", status: "success" }, { status: "idle" });
+    const task = makeTask();
+    const event = {
+      task_id: task.taskId,
+      agent_name: "researcher",
+      status: "success",
+      run_id: "run-1",
+    };
+    const notification = new HumanMessage({
+      content: "update",
+      additional_kwargs: {
+        lc_source: "async_subagent",
+        lc_data: event,
+        deepagents_notification: { ...event, status: "error" },
+      },
+    });
+    const hook = middleware().beforeAgent as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [notification],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("success");
+  });
+
   it("records the notification that started the run", async () => {
     mockServer({ run_id: "run-1", status: "success" }, { status: "idle" });
     const task = makeTask();
@@ -2586,6 +2672,7 @@ describe("queued follow-ups", () => {
         /^\[SYSTEM NOTIFICATION - NOT USER INPUT\]/,
       );
       expect(replaced.text).toContain("FULL REPORT");
+      expect(replaced.text.split("NOT USER INPUT")).toHaveLength(2);
       expect(replaced.text).toContain("not the result of the follow-up");
       expect(replaced.text).not.toContain("Use the result to continue");
       expect(replaced.text.split("</task-notification>")).toHaveLength(2);
