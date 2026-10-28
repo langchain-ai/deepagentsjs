@@ -7,9 +7,9 @@
   },
   "dependencies": {
     "@deepagents/evals": "workspace:*",
-    "@langchain/langgraph": "^1.4.10",
+    "@langchain/langgraph": "^1.4.18",
     "deepagents": "workspace:*",
-    "langsmith": "^0.8.7",
+    "langsmith": "^0.11.3",
     "vitest": "^5.0.0"
   }
 }

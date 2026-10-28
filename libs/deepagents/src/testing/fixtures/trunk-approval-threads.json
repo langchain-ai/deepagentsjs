@@ -1,0 +1,1812 @@
+{
+  "main-approval": [
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-973c-6280-ffff-53d629129432"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-973c-6280-ffff-53d629129432",
+        "ts": "2026-10-28T09:39:57.224Z",
+        "channel_values": {
+          "messages": [],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {},
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__start__": {
+            "messages": [
+              {
+                "lc": 1,
+                "type": "constructor",
+                "id": ["langchain_core", "messages", "HumanMessage"],
+                "kwargs": {
+                  "content": "Edit the notes",
+                  "additional_kwargs": {},
+                  "response_metadata": {}
+                }
+              }
+            ],
+            "files": {
+              "/notes.md": {
+                "content": "v0",
+                "mimeType": "text/plain",
+                "created_at": "2026-10-28T00:00:00.000Z",
+                "modified_at": "2026-10-28T00:00:00.000Z"
+              }
+            }
+          },
+          "__pregel_tasks": []
+        },
+        "channel_versions": {
+          "__start__": 1
+        },
+        "versions_seen": {
+          "__input__": {}
+        }
+      },
+      "metadata": {
+        "source": "input",
+        "step": -1,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "b799d5be-7449-5ec8-8d78-446cae6c09c6",
+          "messages",
+          [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Edit the notes",
+                "additional_kwargs": {},
+                "response_metadata": {}
+              }
+            }
+          ]
+        ],
+        [
+          "b799d5be-7449-5ec8-8d78-446cae6c09c6",
+          "files",
+          {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          }
+        ],
+        [
+          "b799d5be-7449-5ec8-8d78-446cae6c09c6",
+          "branch:to:FilesystemMiddleware.before_agent",
+          null
+        ]
+      ]
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9745-6ec0-8000-9962a0a95267"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9745-6ec0-8000-9962a0a95267",
+        "ts": "2026-10-28T09:39:57.228Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Edit the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "db0d89a1-9bf5-4717-8930-4ddf1f42b11c"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:FilesystemMiddleware.before_agent": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 2,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 2
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 0,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "c935c6a5-ecfb-5f5e-aaf7-1ea2c08a49fe",
+          "branch:to:patchToolCallsMiddleware.before_agent",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-973c-6280-ffff-53d629129432"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9748-65d0-8001-651521aa2ec3"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9748-65d0-8001-651521aa2ec3",
+        "ts": "2026-10-28T09:39:57.229Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Edit the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "db0d89a1-9bf5-4717-8930-4ddf1f42b11c"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:patchToolCallsMiddleware.before_agent": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 2,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 3,
+          "branch:to:patchToolCallsMiddleware.before_agent": 3
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 1,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "b1fbfe58-a633-5da2-a026-107081ad7f4a",
+          "branch:to:model_request",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9745-6ec0-8000-9962a0a95267"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-974a-6ce0-8002-94f0d21cb907"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-974a-6ce0-8002-94f0d21cb907",
+        "ts": "2026-10-28T09:39:57.230Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Edit the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "db0d89a1-9bf5-4717-8930-4ddf1f42b11c"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:model_request": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 2,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 4,
+          "branch:to:patchToolCallsMiddleware.before_agent": 4,
+          "branch:to:model_request": 4
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          },
+          "patchToolCallsMiddleware.before_agent": {
+            "branch:to:patchToolCallsMiddleware.before_agent": 3
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 2,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "bb731ef3-87b9-5e88-81d3-22cb55065e70",
+          "messages",
+          [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "AIMessage"],
+              "kwargs": {
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "edit_file",
+                    "args": {
+                      "file_path": "/notes.md",
+                      "old_string": "v0",
+                      "new_string": "v1"
+                    },
+                    "id": "call_edit",
+                    "type": "tool_call"
+                  }
+                ],
+                "invalid_tool_calls": [],
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "name": "model"
+              }
+            }
+          ]
+        ],
+        [
+          "bb731ef3-87b9-5e88-81d3-22cb55065e70",
+          "branch:to:HumanInTheLoopMiddleware.after_model",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9748-65d0-8001-651521aa2ec3"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9752-6210-8003-cd7548e448d0"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9752-6210-8003-cd7548e448d0",
+        "ts": "2026-10-28T09:39:57.233Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Edit the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "db0d89a1-9bf5-4717-8930-4ddf1f42b11c"
+              }
+            },
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "AIMessage"],
+              "kwargs": {
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "edit_file",
+                    "args": {
+                      "file_path": "/notes.md",
+                      "old_string": "v0",
+                      "new_string": "v1"
+                    },
+                    "id": "call_edit",
+                    "type": "tool_call"
+                  }
+                ],
+                "invalid_tool_calls": [],
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "name": "model",
+                "id": "cb1fda91-4bd9-4b91-bffd-73116782563a"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:HumanInTheLoopMiddleware.after_model": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 5,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 4,
+          "branch:to:patchToolCallsMiddleware.before_agent": 4,
+          "branch:to:model_request": 5,
+          "branch:to:HumanInTheLoopMiddleware.after_model": 5
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          },
+          "patchToolCallsMiddleware.before_agent": {
+            "branch:to:patchToolCallsMiddleware.before_agent": 3
+          },
+          "model_request": {
+            "branch:to:model_request": 4
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 3,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "0cbdf412-a78f-5bb1-8972-c57ff63dacea",
+          "__interrupt__",
+          {
+            "id": "0edf245c184ae1f06c19fd96cab1f2e7",
+            "value": {
+              "actionRequests": [
+                {
+                  "name": "edit_file",
+                  "args": {
+                    "file_path": "/notes.md",
+                    "old_string": "v0",
+                    "new_string": "v1"
+                  },
+                  "description": "Tool execution requires approval\n\nTool: edit_file\nArgs: {\n  \"file_path\": \"/notes.md\",\n  \"old_string\": \"v0\",\n  \"new_string\": \"v1\"\n}"
+                }
+              ],
+              "reviewConfigs": [
+                {
+                  "actionName": "edit_file",
+                  "allowedDecisions": ["approve", "edit", "reject"]
+                }
+              ]
+            }
+          }
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "main-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-974a-6ce0-8002-94f0d21cb907"
+        }
+      }
+    }
+  ],
+  "subagent-approval": [
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9782-6f51-ffff-4b15d3c4bc2d"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9782-6f51-ffff-4b15d3c4bc2d",
+        "ts": "2026-10-28T09:39:57.253Z",
+        "channel_values": {
+          "messages": [],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {},
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__start__": {
+            "jumpTo": {
+              "lc": 2,
+              "type": "undefined"
+            },
+            "files": {
+              "/notes.md": {
+                "content": "v0",
+                "mimeType": "text/plain",
+                "created_at": "2026-10-28T00:00:00.000Z",
+                "modified_at": "2026-10-28T00:00:00.000Z"
+              }
+            },
+            "lg_tool_call": {
+              "name": "task",
+              "args": {
+                "description": "Write the summary.",
+                "subagent_type": "writer"
+              },
+              "id": "call_task",
+              "type": "tool_call"
+            },
+            "messages": [
+              {
+                "lc": 1,
+                "type": "constructor",
+                "id": ["langchain_core", "messages", "HumanMessage"],
+                "kwargs": {
+                  "content": "Write the summary.",
+                  "additional_kwargs": {},
+                  "response_metadata": {}
+                }
+              }
+            ],
+            "_summarizationSessionId": "session_e47bbcfd"
+          },
+          "__pregel_tasks": []
+        },
+        "channel_versions": {
+          "__start__": 1
+        },
+        "versions_seen": {
+          "__input__": {}
+        }
+      },
+      "metadata": {
+        "source": "input",
+        "step": -1,
+        "parents": {
+          "": "1f1d2b38-9780-6840-8003-5382431b3853"
+        }
+      },
+      "pendingWrites": [
+        [
+          "a309a2ce-f0f4-5a3a-abcf-745f1745501d",
+          "files",
+          {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          }
+        ],
+        [
+          "a309a2ce-f0f4-5a3a-abcf-745f1745501d",
+          "messages",
+          [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Write the summary.",
+                "additional_kwargs": {},
+                "response_metadata": {}
+              }
+            }
+          ]
+        ],
+        [
+          "a309a2ce-f0f4-5a3a-abcf-745f1745501d",
+          "branch:to:FilesystemMiddleware.before_agent",
+          null
+        ]
+      ]
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9782-6f52-8000-8a4e6ed12e19"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9782-6f52-8000-8a4e6ed12e19",
+        "ts": "2026-10-28T09:39:57.253Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Write the summary.",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "537891d3-f904-40b5-8f84-ec7296e47969"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:FilesystemMiddleware.before_agent": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "files": 2,
+          "messages": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 2
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 0,
+        "parents": {
+          "": "1f1d2b38-9780-6840-8003-5382431b3853"
+        }
+      },
+      "pendingWrites": [
+        [
+          "a5003783-3c2c-53eb-8862-4724954a2026",
+          "branch:to:patchToolCallsMiddleware.before_agent",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9782-6f51-ffff-4b15d3c4bc2d"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9785-6660-8001-2b85ed2f5b43"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9785-6660-8001-2b85ed2f5b43",
+        "ts": "2026-10-28T09:39:57.254Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Write the summary.",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "537891d3-f904-40b5-8f84-ec7296e47969"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:patchToolCallsMiddleware.before_agent": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "files": 2,
+          "messages": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 3,
+          "branch:to:patchToolCallsMiddleware.before_agent": 3
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 1,
+        "parents": {
+          "": "1f1d2b38-9780-6840-8003-5382431b3853"
+        }
+      },
+      "pendingWrites": [
+        [
+          "8c6c6802-4ba7-5ebe-bb5f-f0006de382c2",
+          "branch:to:model_request",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9782-6f52-8000-8a4e6ed12e19"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9785-6661-8002-5fab74d9d5f1"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9785-6661-8002-5fab74d9d5f1",
+        "ts": "2026-10-28T09:39:57.254Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Write the summary.",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "537891d3-f904-40b5-8f84-ec7296e47969"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:model_request": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "files": 2,
+          "messages": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 4,
+          "branch:to:patchToolCallsMiddleware.before_agent": 4,
+          "branch:to:model_request": 4
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          },
+          "patchToolCallsMiddleware.before_agent": {
+            "branch:to:patchToolCallsMiddleware.before_agent": 3
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 2,
+        "parents": {
+          "": "1f1d2b38-9780-6840-8003-5382431b3853"
+        }
+      },
+      "pendingWrites": [
+        [
+          "32652744-d6a2-5356-af35-d7c63bdbbe64",
+          "messages",
+          [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "AIMessage"],
+              "kwargs": {
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "write_file",
+                    "args": {
+                      "file_path": "/summary.md",
+                      "content": "summary v1"
+                    },
+                    "id": "call_write",
+                    "type": "tool_call"
+                  }
+                ],
+                "invalid_tool_calls": [],
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "name": "writer"
+              }
+            }
+          ]
+        ],
+        [
+          "32652744-d6a2-5356-af35-d7c63bdbbe64",
+          "branch:to:HumanInTheLoopMiddleware.after_model",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9785-6660-8001-2b85ed2f5b43"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9787-6d70-8003-26857dafdfdb"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9787-6d70-8003-26857dafdfdb",
+        "ts": "2026-10-28T09:39:57.255Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Write the summary.",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "537891d3-f904-40b5-8f84-ec7296e47969"
+              }
+            },
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "AIMessage"],
+              "kwargs": {
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "write_file",
+                    "args": {
+                      "file_path": "/summary.md",
+                      "content": "summary v1"
+                    },
+                    "id": "call_write",
+                    "type": "tool_call"
+                  }
+                ],
+                "invalid_tool_calls": [],
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "name": "writer",
+                "id": "866b64d5-c33c-4a03-8086-ececaa9e70dc"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:HumanInTheLoopMiddleware.after_model": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "files": 2,
+          "messages": 5,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 4,
+          "branch:to:patchToolCallsMiddleware.before_agent": 4,
+          "branch:to:model_request": 5,
+          "branch:to:HumanInTheLoopMiddleware.after_model": 5
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          },
+          "patchToolCallsMiddleware.before_agent": {
+            "branch:to:patchToolCallsMiddleware.before_agent": 3
+          },
+          "model_request": {
+            "branch:to:model_request": 4
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 3,
+        "parents": {
+          "": "1f1d2b38-9780-6840-8003-5382431b3853"
+        }
+      },
+      "pendingWrites": [
+        [
+          "3b5ad323-e7a7-5772-afec-f30ce448d110",
+          "__interrupt__",
+          {
+            "id": "c7d5c6e4990eb617ba6fa00c49d5ffb2",
+            "value": {
+              "actionRequests": [
+                {
+                  "name": "write_file",
+                  "args": {
+                    "file_path": "/summary.md",
+                    "content": "summary v1"
+                  },
+                  "description": "Tool execution requires approval\n\nTool: write_file\nArgs: {\n  \"file_path\": \"/summary.md\",\n  \"content\": \"summary v1\"\n}"
+                }
+              ],
+              "reviewConfigs": [
+                {
+                  "actionName": "write_file",
+                  "allowedDecisions": ["approve", "edit", "reject"]
+                }
+              ]
+            }
+          }
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "tools:1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "checkpoint_id": "1f1d2b38-9785-6661-8002-5fab74d9d5f1"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9779-6310-ffff-b850683a676a"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9779-6310-ffff-b850683a676a",
+        "ts": "2026-10-28T09:39:57.249Z",
+        "channel_values": {
+          "messages": [],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {},
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__start__": {
+            "messages": [
+              {
+                "lc": 1,
+                "type": "constructor",
+                "id": ["langchain_core", "messages", "HumanMessage"],
+                "kwargs": {
+                  "content": "Summarize the notes",
+                  "additional_kwargs": {},
+                  "response_metadata": {}
+                }
+              }
+            ],
+            "files": {
+              "/notes.md": {
+                "content": "v0",
+                "mimeType": "text/plain",
+                "created_at": "2026-10-28T00:00:00.000Z",
+                "modified_at": "2026-10-28T00:00:00.000Z"
+              }
+            }
+          },
+          "__pregel_tasks": []
+        },
+        "channel_versions": {
+          "__start__": 1
+        },
+        "versions_seen": {
+          "__input__": {}
+        }
+      },
+      "metadata": {
+        "source": "input",
+        "step": -1,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "01eae036-f7fe-5c97-969b-3f2bfff46473",
+          "messages",
+          [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Summarize the notes",
+                "additional_kwargs": {},
+                "response_metadata": {}
+              }
+            }
+          ]
+        ],
+        [
+          "01eae036-f7fe-5c97-969b-3f2bfff46473",
+          "files",
+          {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          }
+        ],
+        [
+          "01eae036-f7fe-5c97-969b-3f2bfff46473",
+          "branch:to:FilesystemMiddleware.before_agent",
+          null
+        ]
+      ]
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9779-6311-8000-b8e0f852c716"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9779-6311-8000-b8e0f852c716",
+        "ts": "2026-10-28T09:39:57.249Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Summarize the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "5aab8449-a3ce-459f-b64f-760c92f0ffc5"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:FilesystemMiddleware.before_agent": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 2,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 2
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 0,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "f3cfb4a7-f705-5db2-b875-fef1aeb4c61d",
+          "branch:to:patchToolCallsMiddleware.before_agent",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9779-6310-ffff-b850683a676a"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-977b-6a20-8001-405c08a7df88"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-977b-6a20-8001-405c08a7df88",
+        "ts": "2026-10-28T09:39:57.250Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Summarize the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "5aab8449-a3ce-459f-b64f-760c92f0ffc5"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:patchToolCallsMiddleware.before_agent": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 2,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 3,
+          "branch:to:patchToolCallsMiddleware.before_agent": 3
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 1,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "35f82b51-c5b3-5bbf-9ef8-4ef3c80a6100",
+          "branch:to:model_request",
+          null
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9779-6311-8000-b8e0f852c716"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-977b-6a21-8002-d3a72bf7ea8b"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-977b-6a21-8002-d3a72bf7ea8b",
+        "ts": "2026-10-28T09:39:57.250Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Summarize the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "5aab8449-a3ce-459f-b64f-760c92f0ffc5"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [],
+          "branch:to:model_request": null
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 2,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 4,
+          "branch:to:patchToolCallsMiddleware.before_agent": 4,
+          "branch:to:model_request": 4
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          },
+          "patchToolCallsMiddleware.before_agent": {
+            "branch:to:patchToolCallsMiddleware.before_agent": 3
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 2,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "c270c7ca-a12d-5298-87a9-98b796ab1836",
+          "messages",
+          [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "AIMessage"],
+              "kwargs": {
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "task",
+                    "args": {
+                      "description": "Write the summary.",
+                      "subagent_type": "writer"
+                    },
+                    "id": "call_task",
+                    "type": "tool_call"
+                  }
+                ],
+                "invalid_tool_calls": [],
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "name": "model",
+                "id": "4399135d-cef6-406f-a0ef-b7728cee2ae9"
+              }
+            }
+          ]
+        ],
+        [
+          "c270c7ca-a12d-5298-87a9-98b796ab1836",
+          "__pregel_tasks",
+          {
+            "node": "tools",
+            "args": {
+              "messages": [
+                {
+                  "lc": 1,
+                  "type": "constructor",
+                  "id": ["langchain_core", "messages", "HumanMessage"],
+                  "kwargs": {
+                    "content": "Summarize the notes",
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "id": "5aab8449-a3ce-459f-b64f-760c92f0ffc5"
+                  }
+                },
+                {
+                  "lc": 1,
+                  "type": "constructor",
+                  "id": ["langchain_core", "messages", "AIMessage"],
+                  "kwargs": {
+                    "content": "",
+                    "tool_calls": [
+                      {
+                        "name": "task",
+                        "args": {
+                          "description": "Write the summary.",
+                          "subagent_type": "writer"
+                        },
+                        "id": "call_task",
+                        "type": "tool_call"
+                      }
+                    ],
+                    "invalid_tool_calls": [],
+                    "additional_kwargs": {},
+                    "response_metadata": {},
+                    "name": "model",
+                    "id": "4399135d-cef6-406f-a0ef-b7728cee2ae9"
+                  }
+                }
+              ],
+              "files": {
+                "/notes.md": {
+                  "content": "v0",
+                  "mimeType": "text/plain",
+                  "created_at": "2026-10-28T00:00:00.000Z",
+                  "modified_at": "2026-10-28T00:00:00.000Z"
+                }
+              },
+              "_summarizationSessionId": {
+                "lc": 2,
+                "type": "undefined"
+              },
+              "_summarizationEvent": {
+                "lc": 2,
+                "type": "undefined"
+              },
+              "lg_tool_call": {
+                "name": "task",
+                "args": {
+                  "description": "Write the summary.",
+                  "subagent_type": "writer"
+                },
+                "id": "call_task",
+                "type": "tool_call"
+              }
+            }
+          }
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-977b-6a20-8001-405c08a7df88"
+        }
+      }
+    },
+    {
+      "config": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-9780-6840-8003-5382431b3853"
+        }
+      },
+      "checkpoint": {
+        "v": 4,
+        "id": "1f1d2b38-9780-6840-8003-5382431b3853",
+        "ts": "2026-10-28T09:39:57.252Z",
+        "channel_values": {
+          "messages": [
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "HumanMessage"],
+              "kwargs": {
+                "content": "Summarize the notes",
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "id": "5aab8449-a3ce-459f-b64f-760c92f0ffc5"
+              }
+            },
+            {
+              "lc": 1,
+              "type": "constructor",
+              "id": ["langchain_core", "messages", "AIMessage"],
+              "kwargs": {
+                "content": "",
+                "tool_calls": [
+                  {
+                    "name": "task",
+                    "args": {
+                      "description": "Write the summary.",
+                      "subagent_type": "writer"
+                    },
+                    "id": "call_task",
+                    "type": "tool_call"
+                  }
+                ],
+                "invalid_tool_calls": [],
+                "additional_kwargs": {},
+                "response_metadata": {},
+                "name": "model",
+                "id": "4399135d-cef6-406f-a0ef-b7728cee2ae9"
+              }
+            }
+          ],
+          "jumpTo": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "files": {
+            "/notes.md": {
+              "content": "v0",
+              "mimeType": "text/plain",
+              "created_at": "2026-10-28T00:00:00.000Z",
+              "modified_at": "2026-10-28T00:00:00.000Z"
+            }
+          },
+          "_summarizationSessionId": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "_summarizationEvent": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "structuredResponse": {
+            "lc": 2,
+            "type": "undefined"
+          },
+          "__pregel_tasks": [
+            {
+              "node": "tools",
+              "args": {
+                "messages": [
+                  {
+                    "lc": 1,
+                    "type": "constructor",
+                    "id": ["langchain_core", "messages", "HumanMessage"],
+                    "kwargs": {
+                      "content": "Summarize the notes",
+                      "additional_kwargs": {},
+                      "response_metadata": {},
+                      "id": "5aab8449-a3ce-459f-b64f-760c92f0ffc5"
+                    }
+                  },
+                  {
+                    "lc": 1,
+                    "type": "constructor",
+                    "id": ["langchain_core", "messages", "AIMessage"],
+                    "kwargs": {
+                      "content": "",
+                      "tool_calls": [
+                        {
+                          "name": "task",
+                          "args": {
+                            "description": "Write the summary.",
+                            "subagent_type": "writer"
+                          },
+                          "id": "call_task",
+                          "type": "tool_call"
+                        }
+                      ],
+                      "invalid_tool_calls": [],
+                      "additional_kwargs": {},
+                      "response_metadata": {},
+                      "name": "model",
+                      "id": "4399135d-cef6-406f-a0ef-b7728cee2ae9"
+                    }
+                  }
+                ],
+                "jumpTo": {
+                  "lc": 2,
+                  "type": "undefined"
+                },
+                "files": {
+                  "/notes.md": {
+                    "content": "v0",
+                    "mimeType": "text/plain",
+                    "created_at": "2026-10-28T00:00:00.000Z",
+                    "modified_at": "2026-10-28T00:00:00.000Z"
+                  }
+                },
+                "_summarizationSessionId": {
+                  "lc": 2,
+                  "type": "undefined"
+                },
+                "_summarizationEvent": {
+                  "lc": 2,
+                  "type": "undefined"
+                },
+                "lg_tool_call": {
+                  "name": "task",
+                  "args": {
+                    "description": "Write the summary.",
+                    "subagent_type": "writer"
+                  },
+                  "id": "call_task",
+                  "type": "tool_call"
+                }
+              }
+            }
+          ]
+        },
+        "channel_versions": {
+          "__start__": 2,
+          "messages": 5,
+          "files": 2,
+          "branch:to:FilesystemMiddleware.before_agent": 3,
+          "jumpTo": 4,
+          "branch:to:patchToolCallsMiddleware.before_agent": 4,
+          "branch:to:model_request": 5,
+          "__pregel_tasks": 5
+        },
+        "versions_seen": {
+          "__input__": {},
+          "__start__": {
+            "__start__": 1
+          },
+          "FilesystemMiddleware.before_agent": {
+            "branch:to:FilesystemMiddleware.before_agent": 2
+          },
+          "patchToolCallsMiddleware.before_agent": {
+            "branch:to:patchToolCallsMiddleware.before_agent": 3
+          },
+          "model_request": {
+            "branch:to:model_request": 4
+          }
+        }
+      },
+      "metadata": {
+        "source": "loop",
+        "step": 3,
+        "parents": {}
+      },
+      "pendingWrites": [
+        [
+          "1814becb-8ea3-5ebc-9542-6776984b57b7",
+          "__interrupt__",
+          {
+            "id": "c7d5c6e4990eb617ba6fa00c49d5ffb2",
+            "value": {
+              "actionRequests": [
+                {
+                  "name": "write_file",
+                  "args": {
+                    "file_path": "/summary.md",
+                    "content": "summary v1"
+                  },
+                  "description": "Tool execution requires approval\n\nTool: write_file\nArgs: {\n  \"file_path\": \"/summary.md\",\n  \"content\": \"summary v1\"\n}"
+                }
+              ],
+              "reviewConfigs": [
+                {
+                  "actionName": "write_file",
+                  "allowedDecisions": ["approve", "edit", "reject"]
+                }
+              ]
+            }
+          }
+        ]
+      ],
+      "parentConfig": {
+        "configurable": {
+          "thread_id": "subagent-approval",
+          "checkpoint_ns": "",
+          "checkpoint_id": "1f1d2b38-977b-6a21-8002-d3a72bf7ea8b"
+        }
+      }
+    }
+  ]
+}

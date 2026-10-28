@@ -45,8 +45,8 @@
   },
   "devDependencies": {
     "@langchain/anthropic": "^1.5.12",
-    "@langchain/core": "^1.2.14",
-    "@langchain/langgraph": "^1.4.10",
+    "@langchain/core": "^1.2.20",
+    "@langchain/langgraph": "^1.4.18",
     "@langchain/langgraph-checkpoint": "^1.1.5",
     "@langchain/langgraph-sdk": "^1.9.23",
     "@langchain/openai": "^1.6.2",
@@ -58,7 +58,7 @@
     "@vitest/coverage-v8": "^5.0.2",
     "@vitest/ui": "^5.0.2",
     "dotenv": "^18.0.4",
-    "langchain": "^1.5.10",
+    "langchain": "^1.5.19",
     "tsdown": "^0.22.1",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
@@ -100,13 +100,13 @@
   },
   "peerDependencies": {
     "@langchain/anthropic": "^1.5.12",
-    "@langchain/core": "^1.2.14",
-    "@langchain/langgraph": "^1.4.10",
+    "@langchain/core": "^1.2.20",
+    "@langchain/langgraph": "^1.4.18",
     "@langchain/langgraph-checkpoint": "^1.1.5",
     "@langchain/langgraph-sdk": "^1.9.23",
     "@langchain/openai": "^1.6.2",
-    "langchain": "^1.5.10",
-    "langsmith": ">=0.7.1 <0.10.0"
+    "langchain": "^1.5.19",
+    "langsmith": ">=0.11.0 <1.0.0"
   },
   "peerDependenciesMeta": {
     "@langchain/anthropic": {
