@@ -18,6 +18,7 @@ import {
 } from "langchain";
 import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
+import { deepAgentStateSchema } from "../values.js";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
@@ -563,16 +564,19 @@ export function createSubAgent(
 
   const selectedResponseFormat = options?.responseFormat ?? spec.responseFormat;
 
+  // The deep agent schema gives the agent a state type of its own. The
+  // default type covers what callers read; the delta channels are internal.
   return createAgent({
     model: spec.model,
     systemPrompt: spec.systemPrompt,
+    stateSchema: deepAgentStateSchema(),
     tools: spec.tools,
     middleware,
     name: spec.name,
     ...(selectedResponseFormat != null && {
       responseFormat: selectedResponseFormat,
     }),
-  });
+  }) as unknown as ReactAgent;
 }
 
 /**

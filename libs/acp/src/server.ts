@@ -1123,17 +1123,11 @@ export class DeepAgentsServer {
     let messages: BaseMessage[] = [];
 
     try {
-      const checkpoint = await this.checkpointer.getTuple({
-        configurable: { thread_id: session.threadId },
-      });
-      if (checkpoint?.checkpoint?.channel_values) {
-        const channelValues = checkpoint.checkpoint.channel_values as Record<
-          string,
-          unknown
-        >;
-        if (Array.isArray(channelValues.messages)) {
-          messages = channelValues.messages as BaseMessage[];
-        }
+      const state = await this.agents
+        .get(session.agentName)
+        ?.graph.getState({ configurable: { thread_id: session.threadId } });
+      if (Array.isArray(state?.values.messages)) {
+        messages = state.values.messages as BaseMessage[];
       }
     } catch {
       // Checkpointer may not have data yet
