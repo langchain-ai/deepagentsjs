@@ -6,6 +6,7 @@ import type {
   DeleteResult,
   EditResult,
   FileData,
+  FileDataV2,
   FileDownloadResponse,
   FileInfo,
   FileUploadResponse,
@@ -45,6 +46,85 @@ function trimTrailingSlashes(path: string): string {
 
 const PREGEL_SEND_KEY = "__pregel_send";
 const PREGEL_READ_KEY = "__pregel_read";
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function isBase64Encoded(
+  data: FileData,
+): data is FileDataV2 & { content: string; encoding: "base64" } {
+  return (
+    !isFileDataV1(data) &&
+    data.encoding === "base64" &&
+    typeof data.content === "string"
+  );
+}
+
+/**
+ * Store binary content as base64 text. State is checkpointed as JSON, which
+ * turns a Uint8Array into an object of numeric keys that fails the files
+ * schema on the next run.
+ */
+function toStoredFileData(data: FileData): FileData {
+  if (!isFileDataBinary(data)) {
+    return data;
+  }
+  return { ...data, content: bytesToBase64(data.content), encoding: "base64" };
+}
+
+/** Decode base64-stored content so readers keep getting Uint8Array bytes. */
+function fromStoredFileData(data: FileData): FileData {
+  if (!isBase64Encoded(data)) {
+    return data;
+  }
+  return {
+    content: base64ToBytes(data.content),
+    mimeType: data.mimeType,
+    created_at: data.created_at,
+    modified_at: data.modified_at,
+  };
+}
+
+function fileSize(data: FileData): number {
+  if (isFileDataV1(data)) {
+    return data.content.join("\n").length;
+  }
+  if (typeof data.content !== "string") {
+    return data.content.byteLength;
+  }
+  if (data.encoding !== "base64") {
+    return data.content.length;
+  }
+  const padding = data.content.endsWith("==")
+    ? 2
+    : data.content.endsWith("=")
+      ? 1
+      : 0;
+  return (data.content.length * 3) / 4 - padding;
+}
+
+/** Strict UTF-8 decode; undefined when the bytes are not valid UTF-8. */
+function decodeUtf8(bytes: Uint8Array): string | undefined {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Backend that stores files in agent state (ephemeral).
@@ -189,15 +269,10 @@ export class StateBackend implements BackendProtocolV2 {
       }
 
       // This is a file directly in the current directory
-      const size = isFileDataV1(fd)
-        ? fd.content.join("\n").length
-        : isFileDataBinary(fd)
-          ? fd.content.byteLength
-          : fd.content.length;
       infos.push({
         path: k,
         is_dir: false,
-        size: size,
+        size: fileSize(fd),
         modified_at: fd.modified_at,
       });
     }
@@ -235,7 +310,10 @@ export class StateBackend implements BackendProtocolV2 {
       return { error: `File '${filePath}' not found` };
     }
 
-    const fileDataV2 = migrateToFileDataV2(fileData, filePath);
+    const fileDataV2 = migrateToFileDataV2(
+      fromStoredFileData(fileData),
+      filePath,
+    );
 
     // ignore pagination for binary data, return full content
     if (!isTextMimeType(fileDataV2.mimeType)) {
@@ -288,7 +366,7 @@ export class StateBackend implements BackendProtocolV2 {
     if (!fileData) {
       return { error: `File '${filePath}' not found` };
     }
-    return { data: fileData };
+    return { data: fromStoredFileData(fileData) };
   }
 
   /**
@@ -297,13 +375,16 @@ export class StateBackend implements BackendProtocolV2 {
    */
   write(filePath: string, content: string): WriteResult {
     const files = this.files;
-    const existing = files[filePath];
+    const stored = files[filePath];
+    // A text path holding a non-UTF-8 upload is typed application/octet-stream;
+    // text written over it must read back as the path's own type.
+    const existing =
+      stored && isBase64Encoded(stored)
+        ? { ...stored, mimeType: getMimeType(filePath) }
+        : stored;
 
-    const newFileData = createWriteFileData(
-      filePath,
-      content,
-      this.fileFormat,
-      existing,
+    const newFileData = toStoredFileData(
+      createWriteFileData(filePath, content, this.fileFormat, existing),
     );
 
     const update = { [filePath]: newFileData };
@@ -365,7 +446,7 @@ export class StateBackend implements BackendProtocolV2 {
       return { error: `Error: File '${filePath}' not found` };
     }
 
-    const content = fileDataToString(fileData);
+    const content = fileDataToString(fromStoredFileData(fileData));
     const result = performStringReplacement(
       content,
       oldString,
@@ -423,17 +504,10 @@ export class StateBackend implements BackendProtocolV2 {
     const infos: FileInfo[] = [];
     for (const p of paths) {
       const fd = files[p];
-      const size = fd
-        ? isFileDataV1(fd)
-          ? fd.content.join("\n").length
-          : isFileDataBinary(fd)
-            ? fd.content.byteLength
-            : fd.content.length
-        : 0;
       infos.push({
         path: p,
         is_dir: false,
-        size: size,
+        size: fd ? fileSize(fd) : 0,
         modified_at: fd?.modified_at || "",
       });
     }
@@ -457,20 +531,9 @@ export class StateBackend implements BackendProtocolV2 {
 
     for (const [path, content] of files) {
       try {
-        const mimeType = getMimeType(path);
-
-        if (this.fileFormat === "v2" && !isTextMimeType(mimeType)) {
-          updates[path] = createFileData(content, undefined, "v2", mimeType);
-        } else {
-          const contentStr = new TextDecoder().decode(content);
-          updates[path] = createFileData(
-            contentStr,
-            undefined,
-            this.fileFormat,
-            mimeType,
-          );
-        }
-
+        updates[path] = toStoredFileData(
+          this.createUploadFileData(path, content),
+        );
         responses.push({ path, error: null });
       } catch {
         responses.push({ path, error: "invalid_path" });
@@ -496,6 +559,28 @@ export class StateBackend implements BackendProtocolV2 {
   }
 
   /**
+   * Build FileData for an uploaded file.
+   *
+   * In v2, bytes at a binary MIME type stay binary, and bytes at a text MIME
+   * type that are not valid UTF-8 are kept as application/octet-stream rather
+   * than lossily decoded. v1 cannot hold binary, so it always decodes as text.
+   */
+  private createUploadFileData(path: string, content: Uint8Array): FileData {
+    const mimeType = getMimeType(path);
+    if (this.fileFormat === "v1") {
+      const text = new TextDecoder().decode(content);
+      return createFileData(text, undefined, "v1", mimeType);
+    }
+    if (!isTextMimeType(mimeType)) {
+      return createFileData(content, undefined, "v2", mimeType);
+    }
+    const text = decodeUtf8(content);
+    return text === undefined
+      ? createFileData(content, undefined, "v2", "application/octet-stream")
+      : createFileData(text, undefined, "v2", mimeType);
+  }
+
+  /**
    * Download multiple files.
    *
    * @param paths - List of file paths to download
@@ -512,7 +597,10 @@ export class StateBackend implements BackendProtocolV2 {
         continue;
       }
 
-      const fileDataV2 = migrateToFileDataV2(fileData, path);
+      const fileDataV2 = migrateToFileDataV2(
+        fromStoredFileData(fileData),
+        path,
+      );
 
       if (typeof fileDataV2.content === "string") {
         const content = new TextEncoder().encode(fileDataV2.content);
