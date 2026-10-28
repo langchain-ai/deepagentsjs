@@ -4,6 +4,7 @@ import { Command } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
 import {
   AIMessage,
+  getNotificationMetadata,
   HumanMessage,
   SystemMessage,
   ToolMessage,
@@ -2170,7 +2171,7 @@ describe("status updates while the parent runs", () => {
     expect(update.messages).toHaveLength(1);
   });
 
-  it("labels the notification as synthetic", async () => {
+  it("carries notification metadata", async () => {
     mockServer(
       { run_id: "run-1", status: "success" },
       {
@@ -2189,11 +2190,10 @@ describe("status updates while the parent runs", () => {
     });
 
     const [message] = update.messages as HumanMessage[];
-    expect(message.additional_kwargs.lc_synthetic).toBe(true);
-    expect(message.additional_kwargs.lc_source).toBe("async_subagent");
-    expect(message.additional_kwargs.lc_data).toEqual(
-      message.additional_kwargs.deepagents_notification,
-    );
+    expect(getNotificationMetadata(message)).toEqual({
+      source: "async_subagent",
+      data: message.additional_kwargs.deepagents_notification,
+    });
   });
 
   it("records the notification that started the run from lc_data", async () => {

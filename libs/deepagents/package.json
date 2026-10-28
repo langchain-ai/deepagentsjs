@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@langchain/anthropic": "^1.5.12",
-    "@langchain/core": "https://pkg.pr.new/langchain-ai/langchainjs/@langchain/core@12051",
+    "@langchain/core": "https://pkg.pr.new/langchain-ai/langchainjs/@langchain/core@72078ef",
     "@langchain/langgraph": "^1.4.10",
     "@langchain/langgraph-checkpoint": "^1.1.5",
     "@langchain/langgraph-sdk": "^1.9.23",

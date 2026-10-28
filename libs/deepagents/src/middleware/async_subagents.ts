@@ -22,7 +22,9 @@ import {
   AIMessage,
   BaseMessage,
   coerceMessageLikeToMessage,
-  createNotificationMessage,
+  addNotificationMetadata,
+  getNotificationMetadata,
+  NOTIFICATION_HEADER,
   HumanMessage,
   ToolMessage as CoreToolMessage,
   type ContentBlock,
@@ -883,8 +885,8 @@ const MAX_RESULT_CHARS = NUM_CHARS_PER_TOKEN * 20_000;
 /**
  * How an async subagent's task ended or paused, as reported to the agent that started it.
  *
- * A notification message carries it in `additional_kwargs.lc_data`, with
- * `lc_source` set to `"async_subagent"` and `lc_synthetic` to `true`.
+ * A notification message carries it as notification metadata with source
+ * `"async_subagent"`; read it with `getNotificationMetadata(message)?.data`.
  * `additional_kwargs.deepagents_notification` also carries it; that key is
  * deprecated. Fields are snake_case, as in Python.
  *
@@ -998,11 +1000,11 @@ function notificationBody(update: TaskUpdate): ContentBlock[] {
 
 /** `blocks` under the notification header, labeled with `event`. */
 function labeled(blocks: ContentBlock[], event: TaskEvent): HumanMessage {
-  return createNotificationMessage(blocks, {
-    source: NOTIFICATION_SOURCE,
-    data: { ...event },
-    note: NOTIFICATION_NOTE,
-  });
+  const header = textBlock(`${NOTIFICATION_HEADER}\n${NOTIFICATION_NOTE}\n`);
+  return addNotificationMetadata(
+    new HumanMessage({ content: [header, ...blocks] }),
+    { source: NOTIFICATION_SOURCE, data: { ...event } },
+  );
 }
 
 function taskHeader(event: TaskEvent): ContentBlock.Text {
@@ -1111,11 +1113,12 @@ export function finalContent(values: unknown): ContentBlock.Standard[] {
 
 /** The task event a notification message carries, or `null` for any other message. */
 function notificationEvent(message: BaseMessage | undefined): TaskEvent | null {
-  const kwargs = message?.additional_kwargs;
+  if (message === undefined) return null;
+  const metadata = getNotificationMetadata(message);
   const event =
-    kwargs?.lc_source === NOTIFICATION_SOURCE
-      ? kwargs.lc_data
-      : kwargs?.[NOTIFICATION_KEY];
+    metadata?.source === NOTIFICATION_SOURCE
+      ? metadata.data
+      : message.additional_kwargs?.[NOTIFICATION_KEY];
   return event && typeof event === "object" && !Array.isArray(event)
     ? (event as TaskEvent)
     : null;
