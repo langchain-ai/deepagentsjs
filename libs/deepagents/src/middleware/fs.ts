@@ -752,11 +752,11 @@ async function checkPermission(
 }
 
 /**
- * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
- * bare string would be wrapped as a `status: "success"` message whose content
- * merely starts with "Error:"; marking `status: "error"` reports the failure
- * accurately so callers and the model can distinguish a real failure from a
- * successful result.
+ * Build an error {@link ToolMessage} for a denied path or a failed backend
+ * operation. Returning a bare string would be wrapped as a `status: "success"`
+ * message whose content merely starts with "Error:"; marking `status: "error"`
+ * reports the failure accurately so callers and the model can distinguish a
+ * real failure from a successful result.
  */
 function toolError(
   runtime: ToolRuntime,
@@ -1468,7 +1468,7 @@ function createWriteFileTool(
       const result = await resolvedBackend.write(permission.path, content);
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "write_file", result.error);
       }
 
       // If filesUpdate is present, return Command to update state
@@ -1542,7 +1542,7 @@ function createEditFileTool(
       );
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "edit_file", result.error);
       }
 
       const message = new ToolMessage({

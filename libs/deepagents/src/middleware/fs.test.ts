@@ -1674,6 +1674,61 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("write_file tool should return an error status when the backend write fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        error: "Failed to write to /doc.txt: permission_denied",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const writeFileTool = middleware.tools!.find(
+        (tool) => tool.name === "write_file",
+      );
+      const result = await writeFileTool!.invoke({
+        file_path: "/doc.txt",
+        content: "new content",
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.name).toBe("write_file");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe(
+          "Failed to write to /doc.txt: permission_denied",
+        );
+      }
+    });
+
+    it("edit_file tool should return an error status when the backend edit fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.edit = vi.fn().mockResolvedValue({
+        error: "String not found in file '/doc.txt'",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const editFileTool = middleware.tools!.find(
+        (tool) => tool.name === "edit_file",
+      );
+      const result = await editFileTool!.invoke({
+        type: "tool_call",
+        id: "call-edit",
+        name: "edit_file",
+        args: {
+          file_path: "/doc.txt",
+          old_string: "absent",
+          new_string: "present",
+        },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-edit");
+        expect(result.name).toBe("edit_file");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe("String not found in file '/doc.txt'");
+      }
+    });
+
     it("delete tool should delete through backend", async () => {
       const mockBackend = createMockBackend();
       mockBackend.delete = vi.fn().mockResolvedValue({
