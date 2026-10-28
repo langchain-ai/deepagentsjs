@@ -47,23 +47,6 @@ function trimTrailingSlashes(path: string): string {
 const PREGEL_SEND_KEY = "__pregel_send";
 const PREGEL_READ_KEY = "__pregel_read";
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
-
 function isBase64Encoded(
   data: FileData,
 ): data is FileDataV2 & { content: string; encoding: "base64" } {
@@ -83,7 +66,11 @@ function toStoredFileData(data: FileData): FileData {
   if (!isFileDataBinary(data)) {
     return data;
   }
-  return { ...data, content: bytesToBase64(data.content), encoding: "base64" };
+  return {
+    ...data,
+    content: Buffer.from(data.content).toString("base64"),
+    encoding: "base64",
+  };
 }
 
 /** Decode base64-stored content so readers keep getting Uint8Array bytes. */
@@ -92,7 +79,7 @@ function fromStoredFileData(data: FileData): FileData {
     return data;
   }
   return {
-    content: base64ToBytes(data.content),
+    content: new Uint8Array(Buffer.from(data.content, "base64")),
     mimeType: data.mimeType,
     created_at: data.created_at,
     modified_at: data.modified_at,
@@ -106,15 +93,9 @@ function fileSize(data: FileData): number {
   if (typeof data.content !== "string") {
     return data.content.byteLength;
   }
-  if (data.encoding !== "base64") {
-    return data.content.length;
-  }
-  const padding = data.content.endsWith("==")
-    ? 2
-    : data.content.endsWith("=")
-      ? 1
-      : 0;
-  return (data.content.length * 3) / 4 - padding;
+  return data.encoding === "base64"
+    ? Buffer.byteLength(data.content, "base64")
+    : data.content.length;
 }
 
 /** Strict UTF-8 decode; undefined when the bytes are not valid UTF-8. */
