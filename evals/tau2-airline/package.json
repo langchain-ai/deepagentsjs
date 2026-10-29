@@ -8,8 +8,8 @@
   "dependencies": {
     "@deepagents/evals": "workspace:*",
     "deepagents": "workspace:*",
-    "langchain": "^1.5.10",
-    "langsmith": "^0.8.7",
+    "langchain": "^1.5.19",
+    "langsmith": "^0.11.3",
     "vitest": "^5.0.0",
     "zod": "^4.3.6"
   }

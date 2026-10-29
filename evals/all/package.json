@@ -7,10 +7,10 @@
   },
   "dependencies": {
     "@deepagents/evals": "workspace:*",
-    "@langchain/langgraph": "^1.4.10",
+    "@langchain/langgraph": "^1.4.18",
     "deepagents": "workspace:*",
-    "langchain": "^1.5.10",
-    "langsmith": "^0.8.7",
+    "langchain": "^1.5.19",
+    "langsmith": "^0.11.3",
     "uuid": "^11.1.0",
     "vitest": "^5.0.0",
     "zod": "^4.3.6"
