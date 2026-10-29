@@ -3,6 +3,7 @@ import { StateBackend } from "./state.js";
 import type { FileData, FileDataV1 } from "./protocol.js";
 import { getConfig, Command } from "@langchain/langgraph";
 import { ToolMessage } from "@langchain/core/messages";
+import { FileDataSchema } from "../middleware/fs.js";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
@@ -504,7 +505,7 @@ describe("StateBackend", () => {
       expect((result as any).filesUpdate["/hello.txt"].content).toBe("Hello");
     });
 
-    it("should upload binary (image) files as Uint8Array", () => {
+    it("should store binary (image) uploads as base64 text", () => {
       const { state, runtime } = makeConfig();
       const backend = new StateBackend(runtime);
 
@@ -515,9 +516,11 @@ describe("StateBackend", () => {
       expect(result[0].error).toBeNull();
 
       Object.assign(state.files, (result as any).filesUpdate);
-      const stored = state.files["/image.png"];
-      expect(stored.content).toBeInstanceOf(Uint8Array);
-      expect(stored.content).toEqual(pngBytes);
+      expect(state.files["/image.png"]).toMatchObject({
+        content: Buffer.from(pngBytes).toString("base64"),
+        encoding: "base64",
+        mimeType: "image/png",
+      });
     });
   });
 
@@ -650,7 +653,7 @@ describe("StateBackend", () => {
 
       const full = backend.read("/img.png");
       const withOffsetLimit = backend.read("/img.png", 5, 2);
-      expect(withOffsetLimit.content).toBe(full.content);
+      expect(withOffsetLimit.content).toEqual(full.content);
     });
   });
 
@@ -932,6 +935,142 @@ describe("StateBackend", () => {
       const result = backend.write("/test.txt", "line1\nline2");
       expect(result.error).toBeUndefined();
       expect(result.filesUpdate).toBeUndefined();
+    });
+  });
+
+  describe("JSON-serialized state", () => {
+    const pngBytes = new Uint8Array([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff,
+    ]);
+
+    /** Serialize state the way a JSON checkpointer does, then reopen it. */
+    function roundTrip(state: { files: Record<string, FileData> }) {
+      const restored = JSON.parse(JSON.stringify(state));
+      return {
+        files: restored.files as Record<string, FileData>,
+        backend: new StateBackend({ state: restored, store: undefined }),
+      };
+    }
+
+    function uploadAndRoundTrip(files: Array<[string, Uint8Array]>) {
+      const { state, runtime } = makeConfig();
+      const result = new StateBackend(runtime).uploadFiles(files);
+      Object.assign(state.files, (result as any).filesUpdate);
+      return roundTrip(state);
+    }
+
+    it("keeps binary uploads valid against the files schema", () => {
+      const { files } = uploadAndRoundTrip([["/image.png", pngBytes]]);
+
+      expect(FileDataSchema.parse(files["/image.png"])).toMatchObject({
+        encoding: "base64",
+        mimeType: "image/png",
+      });
+    });
+
+    it("reads, downloads, and sizes binary uploads byte-identically", () => {
+      const { backend } = uploadAndRoundTrip([["/image.png", pngBytes]]);
+
+      expect(backend.read("/image.png")).toEqual({
+        content: pngBytes,
+        mimeType: "image/png",
+      });
+      expect(backend.readRaw("/image.png").data!.content).toEqual(pngBytes);
+      expect(backend.downloadFiles(["/image.png"])[0].content).toEqual(
+        pngBytes,
+      );
+      expect(backend.ls("/").files![0].size).toBe(pngBytes.length);
+      expect(backend.glob("*.png").files![0].size).toBe(pngBytes.length);
+    });
+
+    it("returns an image block from read_file", async () => {
+      const { backend } = uploadAndRoundTrip([["/image.png", pngBytes]]);
+      const { createFilesystemMiddleware } =
+        await import("../middleware/fs.js");
+      const readFileTool = createFilesystemMiddleware({ backend }).tools!.find(
+        (tool) => tool.name === "read_file",
+      );
+
+      const result = await readFileTool!.invoke({ file_path: "/image.png" });
+
+      expect(result).toEqual([
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: Buffer.from(pngBytes).toString("base64"),
+        },
+      ]);
+    });
+
+    it("stores non-UTF-8 bytes at a text path as binary", () => {
+      const bytes = new Uint8Array([0xff, 0xfe, 0x00, 0x80, 0x41]);
+      const { files, backend } = uploadAndRoundTrip([["/blob.dat", bytes]]);
+
+      expect(files["/blob.dat"]).toMatchObject({
+        encoding: "base64",
+        mimeType: "application/octet-stream",
+      });
+      expect(backend.downloadFiles(["/blob.dat"])[0].content).toEqual(bytes);
+      expect(backend.grep("A").matches).toEqual([]);
+    });
+
+    it("reads text written over a non-UTF-8 upload as text", () => {
+      const { state, runtime } = makeConfig();
+      const backend = new StateBackend(runtime);
+      const upload = backend.uploadFiles([
+        ["/blob.dat", new Uint8Array([0xff, 0xfe])],
+      ]);
+      Object.assign(state.files, (upload as any).filesUpdate);
+
+      const result = backend.write("/blob.dat", "hello");
+      Object.assign(state.files, result.filesUpdate);
+
+      expect(backend.read("/blob.dat")).toMatchObject({
+        content: "hello",
+        mimeType: "text/plain",
+      });
+    });
+
+    it("keeps UTF-8 uploads at text paths as plain text", () => {
+      const { files } = uploadAndRoundTrip([
+        ["/notes.txt", new TextEncoder().encode("h\u00e9llo")],
+      ]);
+
+      expect(files["/notes.txt"].content).toBe("h\u00e9llo");
+      expect(files["/notes.txt"]).not.toHaveProperty("encoding");
+    });
+
+    it("stores binary-path writes as base64 text", () => {
+      const { state, runtime } = makeConfig();
+      const result = new StateBackend(runtime).write(
+        "/image.png",
+        Buffer.from(pngBytes).toString("base64"),
+      );
+      Object.assign(state.files, result.filesUpdate);
+
+      const { files, backend } = roundTrip(state);
+
+      expect(files["/image.png"]).toMatchObject({ encoding: "base64" });
+      expect(backend.downloadFiles(["/image.png"])[0].content).toEqual(
+        pngBytes,
+      );
+    });
+
+    it("still reads Uint8Array entries stored before base64 encoding", () => {
+      const { runtime } = makeConfig({
+        "/old.png": {
+          content: pngBytes,
+          mimeType: "image/png",
+          created_at: "2024-01-01T00:00:00.000Z",
+          modified_at: "2024-01-01T00:00:00.000Z",
+        },
+      });
+      const backend = new StateBackend(runtime);
+
+      expect(backend.read("/old.png").content).toEqual(pngBytes);
+      expect(backend.readRaw("/old.png").data!.content).toEqual(pngBytes);
+      expect(backend.downloadFiles(["/old.png"])[0].content).toEqual(pngBytes);
+      expect(backend.ls("/").files![0].size).toBe(pngBytes.length);
     });
   });
 });

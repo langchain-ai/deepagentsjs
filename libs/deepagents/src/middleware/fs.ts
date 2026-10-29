@@ -593,6 +593,7 @@ export const FileDataV1Schema = z.object({
 export const FileDataV2Schema = z.object({
   content: z.union([z.string(), z.instanceof(Uint8Array)]),
   mimeType: z.string(),
+  encoding: z.enum(["utf-8", "base64"]).optional(),
   created_at: z.string(),
   modified_at: z.string(),
 });
