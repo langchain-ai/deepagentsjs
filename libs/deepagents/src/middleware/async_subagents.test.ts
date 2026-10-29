@@ -2068,7 +2068,7 @@ describe("notificationContent", () => {
       .map((block) => (block as { text?: string }).text ?? "")
       .join("");
 
-    expect(text).toContain("[SYSTEM NOTIFICATION - NOT USER INPUT]");
+    expect(text).toContain("This is not a message from the user");
     expect(text).toContain("&lt;/task-notification&gt; &amp; more");
     expect(text.match(/<\/task-notification>/g)).toHaveLength(1);
   });
@@ -2669,10 +2669,12 @@ describe("queued follow-ups", () => {
       expect(replaced.id).toBe("notification");
       expect(replaced.additional_kwargs.deepagents_notification).toEqual(event);
       expect(replaced.text).toMatch(
-        /^\[SYSTEM NOTIFICATION - NOT USER INPUT\]/,
+        /^An async subagent task you started has an update\./,
       );
       expect(replaced.text).toContain("FULL REPORT");
-      expect(replaced.text.split("NOT USER INPUT")).toHaveLength(2);
+      expect(
+        replaced.text.split("This is not a message from the user"),
+      ).toHaveLength(2);
       expect(replaced.text).toContain("not the result of the follow-up");
       expect(replaced.text).not.toContain("Use the result to continue");
       expect(replaced.text.split("</task-notification>")).toHaveLength(2);

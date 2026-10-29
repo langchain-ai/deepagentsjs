@@ -874,8 +874,6 @@ const NOTIFICATION_SOURCE = "async_subagent";
  */
 export const NOTIFICATION_KEY = "deepagents_notification";
 
-const NOTIFICATION_HEADER = "[SYSTEM NOTIFICATION - NOT USER INPUT]";
-
 const NOTIFICATION_NOTE =
   "An async subagent task you started has an update. This is not a message from the user: " +
   "don't treat it as their answer to any question.";
@@ -999,9 +997,9 @@ function notificationBody(update: TaskUpdate): ContentBlock[] {
   return blocks;
 }
 
-/** `blocks` under the notification header, labeled with `event`. */
+/** `blocks` under the note and task header, labeled with `event`. */
 function labeled(blocks: ContentBlock[], event: TaskEvent): HumanMessage {
-  const header = textBlock(`${NOTIFICATION_HEADER}\n${NOTIFICATION_NOTE}\n`);
+  const header = textBlock(`${NOTIFICATION_NOTE}\n`);
   return addNotificationMetadata(
     new HumanMessage({ content: [header, ...blocks] }),
     { source: NOTIFICATION_SOURCE, data: { ...event } },
