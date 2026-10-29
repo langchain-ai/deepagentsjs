@@ -887,7 +887,7 @@ const MAX_RESULT_CHARS = NUM_CHARS_PER_TOKEN * 20_000;
  * A notification message carries it as notification metadata with source
  * `"async_subagent"`; read it with `getNotificationMetadata(message)?.data`.
  * `additional_kwargs.deepagents_notification` also carries it; that key is
- * deprecated. Fields are snake_case, as in Python.
+ * deprecated.
  *
  * @experimental This shape is experimental and subject to change.
  */
