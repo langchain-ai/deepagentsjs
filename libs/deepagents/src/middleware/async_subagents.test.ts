@@ -4,6 +4,7 @@ import { Command } from "@langchain/langgraph";
 import { Client } from "@langchain/langgraph-sdk";
 import {
   AIMessage,
+  getNotificationMetadata,
   HumanMessage,
   SystemMessage,
   ToolMessage,
@@ -2067,7 +2068,7 @@ describe("notificationContent", () => {
       .map((block) => (block as { text?: string }).text ?? "")
       .join("");
 
-    expect(text).toContain("[SYSTEM NOTIFICATION - NOT USER INPUT]");
+    expect(text).toContain("This is not a message from the user");
     expect(text).toContain("&lt;/task-notification&gt; &amp; more");
     expect(text.match(/<\/task-notification>/g)).toHaveLength(1);
   });
@@ -2168,6 +2169,91 @@ describe("status updates while the parent runs", () => {
 
     expect(update.jumpTo).toBe("model");
     expect(update.messages).toHaveLength(1);
+  });
+
+  it("carries notification metadata", async () => {
+    mockServer(
+      { run_id: "run-1", status: "success" },
+      {
+        status: "idle",
+        values: { messages: [{ type: "ai", content: "Done" }] },
+      },
+    );
+    const task = makeTask();
+    const hook = middleware().beforeModel as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    const [message] = update.messages as HumanMessage[];
+    expect(getNotificationMetadata(message)).toEqual({
+      source: "async_subagent",
+      data: message.additional_kwargs.deepagents_notification,
+    });
+  });
+
+  it("records the notification that started the run from lc_data", async () => {
+    mockServer({ run_id: "run-1", status: "success" }, { status: "idle" });
+    const task = makeTask();
+    const notification = new HumanMessage({
+      content: "update",
+      additional_kwargs: {
+        lc_source: "async_subagent",
+        lc_data: {
+          task_id: task.taskId,
+          agent_name: "researcher",
+          status: "success",
+          run_id: "run-1",
+        },
+      },
+    });
+    const hook = middleware().beforeAgent as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [notification],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("success");
+  });
+
+  it("prefers lc_data over the legacy key", async () => {
+    mockServer({ run_id: "run-1", status: "success" }, { status: "idle" });
+    const task = makeTask();
+    const event = {
+      task_id: task.taskId,
+      agent_name: "researcher",
+      status: "success",
+      run_id: "run-1",
+    };
+    const notification = new HumanMessage({
+      content: "update",
+      additional_kwargs: {
+        lc_source: "async_subagent",
+        lc_data: event,
+        deepagents_notification: { ...event, status: "error" },
+      },
+    });
+    const hook = middleware().beforeAgent as (
+      state: unknown,
+    ) => Promise<Record<string, unknown>>;
+
+    const update = await hook({
+      messages: [notification],
+      asyncTasks: { [task.taskId]: task },
+    });
+
+    expect(
+      (update.asyncTasks as Record<string, AsyncTask>)[task.taskId].status,
+    ).toBe("success");
   });
 
   it("records the notification that started the run", async () => {
@@ -2583,9 +2669,12 @@ describe("queued follow-ups", () => {
       expect(replaced.id).toBe("notification");
       expect(replaced.additional_kwargs.deepagents_notification).toEqual(event);
       expect(replaced.text).toMatch(
-        /^\[SYSTEM NOTIFICATION - NOT USER INPUT\]/,
+        /^An async subagent task you started has an update\./,
       );
       expect(replaced.text).toContain("FULL REPORT");
+      expect(
+        replaced.text.split("This is not a message from the user"),
+      ).toHaveLength(2);
       expect(replaced.text).toContain("not the result of the follow-up");
       expect(replaced.text).not.toContain("Use the result to continue");
       expect(replaced.text.split("</task-notification>")).toHaveLength(2);

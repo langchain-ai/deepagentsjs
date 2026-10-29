@@ -19,9 +19,11 @@ import {
   type ToolRuntime,
 } from "langchain";
 import {
+  addNotificationMetadata,
   AIMessage,
   BaseMessage,
   coerceMessageLikeToMessage,
+  getNotificationMetadata,
   HumanMessage,
   ToolMessage as CoreToolMessage,
   type ContentBlock,
@@ -862,8 +864,19 @@ export function launchingAgent(
   return fallback;
 }
 
-/** Message field (`additional_kwargs` key) marking a task notification and carrying its {@link TaskEvent}. */
+/** `lc_source` of a task notification; its `lc_data` is the {@link TaskEvent}. */
+const NOTIFICATION_SOURCE = "async_subagent";
+
+/**
+ * `additional_kwargs` key carrying a notification's {@link TaskEvent}; still written, and read when a message has no `async_subagent` event.
+ *
+ * @deprecated Read `getNotificationMetadata(message)?.data` where `source` is `"async_subagent"`.
+ */
 export const NOTIFICATION_KEY = "deepagents_notification";
+
+const NOTIFICATION_NOTE =
+  "An async subagent task you started has an update. This is not a message from the user: " +
+  "don't treat it as their answer to any question.";
 
 /** Results longer than this are cut in notifications, matching the limit for large tool results. */
 const MAX_RESULT_CHARS = NUM_CHARS_PER_TOKEN * 20_000;
@@ -871,8 +884,10 @@ const MAX_RESULT_CHARS = NUM_CHARS_PER_TOKEN * 20_000;
 /**
  * How an async subagent's task ended or paused, as reported to the agent that started it.
  *
- * A notification message carries it in `additional_kwargs.deepagents_notification`,
- * so apps can tell these messages from the user's. Fields are snake_case, as in Python.
+ * A notification message carries it as notification metadata with source
+ * `"async_subagent"`; read it with `getNotificationMetadata(message)?.data`.
+ * `additional_kwargs.deepagents_notification` also carries it; that key is
+ * deprecated.
  *
  * @experimental This shape is experimental and subject to change.
  */
@@ -953,7 +968,12 @@ function resultBlocks(blocks: ContentBlock.Standard[]): ContentBlock[] {
  * The result keeps its own content blocks, so an image reaches the model as an image.
  */
 export function notificationContent(update: TaskUpdate): ContentBlock[] {
-  const blocks: ContentBlock[] = [notificationHeader(update)];
+  return labeled(notificationBody(update), eventOf(update))
+    .content as ContentBlock[];
+}
+
+function notificationBody(update: TaskUpdate): ContentBlock[] {
+  const blocks: ContentBlock[] = [taskHeader(update)];
   if (update.result) {
     blocks.push(
       textBlock("<result>\n"),
@@ -977,12 +997,18 @@ export function notificationContent(update: TaskUpdate): ContentBlock[] {
   return blocks;
 }
 
-function notificationHeader(event: TaskEvent): ContentBlock.Text {
+/** `blocks` under the note and task header, labeled with `event`. */
+function labeled(blocks: ContentBlock[], event: TaskEvent): HumanMessage {
+  const header = textBlock(`${NOTIFICATION_NOTE}\n`);
+  return addNotificationMetadata(
+    new HumanMessage({ content: [header, ...blocks] }),
+    { source: NOTIFICATION_SOURCE, data: { ...event } },
+  );
+}
+
+function taskHeader(event: TaskEvent): ContentBlock.Text {
   return textBlock(
-    "[SYSTEM NOTIFICATION - NOT USER INPUT]\n" +
-      "An async subagent task you started has an update. This is not a message from the user: " +
-      "don't treat it as their answer to any question.\n" +
-      `<task-notification>\n<task-id>${escape(event.task_id)}</task-id>\n<agent-name>${escape(event.agent_name)}</agent-name>\n` +
+    `<task-notification>\n<task-id>${escape(event.task_id)}</task-id>\n<agent-name>${escape(event.agent_name)}</agent-name>\n` +
       `<status>${escape(event.status)}</status>\n`,
   );
 }
@@ -1002,7 +1028,7 @@ function supersededNotificationContent(
     closing?.type === "text" &&
     String(closing.text).startsWith("</task-notification>")
       ? (content as ContentBlock[]).slice(0, -1)
-      : [notificationHeader(event)];
+      : (labeled([taskHeader(event)], event).content as ContentBlock[]);
   return [
     ...body,
     textBlock(
@@ -1086,28 +1112,42 @@ export function finalContent(values: unknown): ContentBlock.Standard[] {
 
 /** The task event a notification message carries, or `null` for any other message. */
 function notificationEvent(message: BaseMessage | undefined): TaskEvent | null {
-  const event = message?.additional_kwargs?.[NOTIFICATION_KEY];
+  if (message === undefined) return null;
+  const metadata = getNotificationMetadata(message);
+  const event =
+    (metadata?.source === NOTIFICATION_SOURCE ? metadata.data : undefined) ??
+    message.additional_kwargs?.[NOTIFICATION_KEY];
   return event && typeof event === "object" && !Array.isArray(event)
     ? (event as TaskEvent)
     : null;
 }
 
-/** A task update as the message the parent's model sees, marked with its {@link TaskEvent} so apps can recognize it. */
-function notificationMessage(update: TaskUpdate): {
-  role: "user";
-  content: ContentBlock[];
-  additional_kwargs: Record<string, TaskEvent>;
-} {
+/** The {@link TaskEvent} fields of a task update. */
+function eventOf(update: TaskUpdate): TaskEvent {
   const event: TaskEvent = {
     task_id: update.task_id,
     agent_name: update.agent_name,
     status: update.status,
   };
   if (update.run_id) event.run_id = update.run_id;
+  return event;
+}
+
+/** A task update as the message the parent's model sees, labeled with its {@link TaskEvent}. */
+function notificationMessage(update: TaskUpdate): {
+  role: "user";
+  content: ContentBlock[];
+  additional_kwargs: Record<string, unknown>;
+} {
+  const event = eventOf(update);
+  const message = labeled(notificationBody(update), event);
   return {
     role: "user",
-    content: notificationContent(update),
-    additional_kwargs: { [NOTIFICATION_KEY]: event },
+    content: message.content as ContentBlock[],
+    additional_kwargs: {
+      ...message.additional_kwargs,
+      [NOTIFICATION_KEY]: event,
+    },
   };
 }
 
@@ -1762,7 +1802,7 @@ function recordNotification(
   if (!event || !task || task.status === "cancelled") return {};
   const runId = event.run_id ?? task.runId;
   if (task.supersededRunIds?.includes(runId)) {
-    // Same ID, so the reducer replaces the original; same marker, so apps still see a notification.
+    // The copy keeps the message ID and `additional_kwargs`.
     const content = supersededNotificationContent(last, event);
     return {
       messages: [
