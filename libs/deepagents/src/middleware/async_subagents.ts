@@ -25,7 +25,6 @@ import {
   coerceMessageLikeToMessage,
   getNotificationMetadata,
   HumanMessage,
-  NOTIFICATION_HEADER,
   ToolMessage as CoreToolMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
@@ -874,6 +873,8 @@ const NOTIFICATION_SOURCE = "async_subagent";
  * @deprecated Read `getNotificationMetadata(message)?.data` where `source` is `"async_subagent"`.
  */
 export const NOTIFICATION_KEY = "deepagents_notification";
+
+const NOTIFICATION_HEADER = "[SYSTEM NOTIFICATION - NOT USER INPUT]";
 
 const NOTIFICATION_NOTE =
   "An async subagent task you started has an update. This is not a message from the user: " +
