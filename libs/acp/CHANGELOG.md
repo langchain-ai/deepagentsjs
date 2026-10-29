@@ -1,5 +1,12 @@
 # deepagents-acp
 
+## 0.1.38
+
+### Patch Changes
+
+- Updated dependencies [[`bf83c27`](https://github.com/langchain-ai/deepagentsjs/commit/bf83c27fd322a56082590c3426bbcea9014a5b6e), [`fcb8249`](https://github.com/langchain-ai/deepagentsjs/commit/fcb8249fa02debf96a7c293af939ce4276ffaded)]:
+  - deepagents@1.16.1
+
 ## 0.1.37
 
 ### Patch Changes
