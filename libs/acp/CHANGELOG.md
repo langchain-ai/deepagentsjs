@@ -1,5 +1,40 @@
 # deepagents-acp
 
+## 0.1.39
+
+### Patch Changes
+
+- Updated dependencies [[`f4b4fd4`](https://github.com/langchain-ai/deepagentsjs/commit/f4b4fd4f2b0944b1b1f09b894d96f2453abdcd0b), [`0bf3e35`](https://github.com/langchain-ai/deepagentsjs/commit/0bf3e359c67bc6bcd695452e8ba582239925b6a7)]:
+  - deepagents@1.16.2
+
+## 0.1.38
+
+### Patch Changes
+
+- Updated dependencies [[`bf83c27`](https://github.com/langchain-ai/deepagentsjs/commit/bf83c27fd322a56082590c3426bbcea9014a5b6e), [`fcb8249`](https://github.com/langchain-ai/deepagentsjs/commit/fcb8249fa02debf96a7c293af939ce4276ffaded)]:
+  - deepagents@1.16.1
+
+## 0.1.37
+
+### Patch Changes
+
+- Updated dependencies [[`f002924`](https://github.com/langchain-ai/deepagentsjs/commit/f002924f7bac66d36568684430a5d64337c06dfa)]:
+  - deepagents@1.16.0
+
+## 0.1.36
+
+### Patch Changes
+
+- Updated dependencies [[`0e4d3ee`](https://github.com/langchain-ai/deepagentsjs/commit/0e4d3ee00d0ff8873f285833893db66738a66eee)]:
+  - deepagents@1.15.1
+
+## 0.1.35
+
+### Patch Changes
+
+- Updated dependencies [[`b448f22`](https://github.com/langchain-ai/deepagentsjs/commit/b448f220866bbb5d41924dfdbb1e0079c3b11838), [`5f42f2d`](https://github.com/langchain-ai/deepagentsjs/commit/5f42f2df3c814bebbac445c759a34f96c10bc036), [`389e8da`](https://github.com/langchain-ai/deepagentsjs/commit/389e8da2325cd726171a32f6f1ce9103c8789119), [`9333679`](https://github.com/langchain-ai/deepagentsjs/commit/9333679d3b5a5e4fb4d5e0104bf0630213c3ffff), [`9333679`](https://github.com/langchain-ai/deepagentsjs/commit/9333679d3b5a5e4fb4d5e0104bf0630213c3ffff)]:
+  - deepagents@1.15.0
+
 ## 0.1.34
 
 ### Patch Changes

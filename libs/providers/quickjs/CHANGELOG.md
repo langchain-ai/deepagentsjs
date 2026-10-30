@@ -1,5 +1,11 @@
 # @langchain/quickjs
 
+## 0.6.5
+
+### Patch Changes
+
+- [#957](https://github.com/langchain-ai/deepagentsjs/pull/957) [`8b1c1de`](https://github.com/langchain-ai/deepagentsjs/commit/8b1c1dec12419853128757cabe615d59e2c4284b) Thanks [@open-swe](https://github.com/apps/open-swe)! - Add `maxSubagentConcurrency` to configure the interpreter's per-REPL `task()` concurrency cap, retaining the default of 32. The prompt reflects the configured limit and treats batching around 10 as advisory.
+
 ## 0.6.4
 
 ### Patch Changes

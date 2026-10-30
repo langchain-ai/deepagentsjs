@@ -252,3 +252,79 @@ describe("wrapModelCall + offloadBinaryContent", () => {
     ]);
   });
 });
+
+describe("blob references from another agent", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-blob-"));
+  });
+
+  afterEach(() => {
+    fsSync.rmSync(root, { recursive: true, force: true });
+  });
+
+  /** The messages `middleware` sends the model for `messages`. */
+  async function modelInput(middleware: unknown, messages: unknown[]) {
+    let sent: unknown[] = [];
+    await (middleware as any).wrapModelCall(
+      {
+        state: { messages, files: {} },
+        runtime: {},
+        tools: [],
+        messages,
+        systemMessage: new SystemMessage(""),
+      },
+      async (request: { messages: unknown[] }) => {
+        sent = request.messages;
+        return new AIMessage({ content: "ok" });
+      },
+    );
+    return sent;
+  }
+
+  const reference = new ToolMessage({
+    content: [
+      { type: "image", mimeType: "image/png", [BLOB_REF_KEY]: PNG_DIGEST },
+    ] as never,
+    tool_call_id: "call_1",
+    name: "read_file",
+  });
+
+  it("loads media a forked parent offloaded to a shared backend", async () => {
+    const backend = () =>
+      new FilesystemBackend({ rootDir: root, virtualMode: true });
+    const parent = createFilesystemMiddleware({
+      backend,
+      offloadBinaryContent: true,
+    });
+    const offloaded = await offloadReadFile(parent, {
+      messages: [],
+      files: {},
+    });
+    const child = createFilesystemMiddleware({
+      backend,
+      offloadBinaryContent: true,
+    });
+
+    const [sent] = await modelInput(child, [offloaded]);
+
+    expect((sent as ToolMessage).content).toEqual([
+      { type: "image", mimeType: "image/png", data: PNG_BASE64 },
+    ]);
+  });
+
+  it("tells the model media it can't load is unavailable", async () => {
+    const child = createFilesystemMiddleware({
+      backend: () =>
+        new FilesystemBackend({ rootDir: root, virtualMode: true }),
+    });
+
+    const [sent] = await modelInput(child, [reference]);
+
+    expect(JSON.stringify((sent as ToolMessage).content)).toContain(
+      "no longer available",
+    );
+    expect(JSON.stringify(sent)).not.toContain(BLOB_REF_KEY);
+  });
+});

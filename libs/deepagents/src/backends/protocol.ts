@@ -139,6 +139,12 @@ export interface FileDataV2 {
   content: string | Uint8Array;
   /** MIME type of the file (e.g. "image/png", "text/plain") */
   mimeType: string;
+  /**
+   * How string `content` is encoded. `"base64"` marks binary bytes stored as
+   * base64 text so they survive JSON serialization (e.g. a checkpointer).
+   * Omitted means plain text.
+   */
+  encoding?: "utf-8" | "base64";
   /** ISO format timestamp of creation */
   created_at: string;
   /** ISO format timestamp of last modification */

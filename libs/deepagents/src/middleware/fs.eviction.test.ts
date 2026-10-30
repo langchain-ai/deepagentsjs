@@ -684,3 +684,59 @@ describe("evicted tool result readback", () => {
     expect(readResult[0].text).toContain("large plain text result");
   });
 });
+
+describe("tool result eviction with image blocks", () => {
+  const imageBlock = {
+    type: "image",
+    url: `data:image/png;base64,${"A".repeat(200_000)}`,
+  };
+
+  async function wrapToolResult(content: ToolMessage["content"]) {
+    const state = { messages: [], files: {} };
+    vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+    const middleware = createFilesystemMiddleware({
+      backend: () => new StateBackend({ state, store: undefined }),
+      toolTokenLimitBeforeEvict: 100,
+    });
+    return (middleware as any).wrapToolCall(
+      {
+        toolCall: { id: "call_screenshot", name: "screenshot", args: {} },
+        state,
+        runtime: {},
+      },
+      async () =>
+        new ToolMessage({
+          content,
+          tool_call_id: "call_screenshot",
+          name: "screenshot",
+        }),
+    );
+  }
+
+  it("should not count image blocks toward the eviction limit", async () => {
+    const content = [{ type: "text", text: "Screenshot taken" }, imageBlock];
+    const wrapped = await wrapToolResult(content);
+
+    expect(isCommand(wrapped)).toBe(false);
+    expect(wrapped.content).toEqual(content);
+  });
+
+  it("should keep image blocks when evicting large text", async () => {
+    const largeText = "large result\n".repeat(500);
+    const wrapped = await wrapToolResult([
+      { type: "text", text: largeText },
+      imageBlock,
+    ]);
+
+    expect(isCommand(wrapped)).toBe(true);
+    const { files, messages } = (wrapped as any).update;
+    const evictedPath = "/large_tool_results/call_screenshot.txt";
+    expect(files[evictedPath].content).toBe(largeText);
+    const [notice, image] = messages[0].content;
+    expect(notice.type).toBe("text");
+    expect(notice.text).toContain("Tool result too large");
+    expect(notice.text).toContain(evictedPath);
+    expect(image).toEqual(imageBlock);
+    expect(messages[0].content).toHaveLength(2);
+  });
+});

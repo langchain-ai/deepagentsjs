@@ -42,6 +42,7 @@ import {
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
+  withoutBlobRefs,
 } from "./blobOffload.js";
 import {
   sanitizeToolCallId,
@@ -430,12 +431,27 @@ function extractTextFromMessage(message: {
   return String(message.content);
 }
 
+/**
+ * Whether a content block is an image. Tool-result eviction skips images when
+ * sizing a result and keeps them when evicting it: base64 length says little
+ * about what a provider charges for an image.
+ */
+function isImageBlock(block: unknown): boolean {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "type" in block &&
+    (block.type === "image" || block.type === "image_url")
+  );
+}
+
 function stringifyToolContent(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
   if (Array.isArray(content)) {
     return content
+      .filter((block) => !isImageBlock(block))
       .map((block) => {
         if (
           typeof block === "object" &&
@@ -455,28 +471,29 @@ function stringifyToolContent(content: unknown): string {
 }
 
 /**
- * Build replacement content for an evicted HumanMessage, preserving non-text blocks.
+ * Build replacement content for an evicted message, preserving the blocks `keep` selects.
  *
  * For plain string content, returns the replacement text directly. For list content
- * with mixed block types (e.g., text + image), replaces all text blocks with a single
- * text block containing the replacement text while keeping non-text blocks intact.
+ * with mixed block types (e.g., text + image), replaces the other blocks with a single
+ * text block containing the replacement text while keeping the selected blocks intact.
+ * By default every non-text block is kept.
  */
-function buildEvictedHumanContent(
-  message: HumanMessage,
+function buildEvictedContent(
+  message: BaseMessage,
   replacementText: string,
-): string | Array<Record<string, unknown>> {
+  keep: (block: { type: string }) => boolean = (block) => block.type !== "text",
+): BaseMessage["content"] {
   if (typeof message.content === "string") {
     return replacementText;
   }
   if (Array.isArray(message.content)) {
-    const mediaBlocks = message.content.filter(
-      (block) =>
-        typeof block === "object" && block !== null && block.type !== "text",
+    const keptBlocks = message.content.filter(
+      (block) => typeof block === "object" && block !== null && keep(block),
     );
-    if (mediaBlocks.length === 0) {
+    if (keptBlocks.length === 0) {
       return replacementText;
     }
-    return [{ type: "text", text: replacementText }, ...mediaBlocks];
+    return [{ type: "text", text: replacementText }, ...keptBlocks];
   }
   return replacementText;
 }
@@ -498,9 +515,9 @@ function buildTruncatedHumanMessage(
     "{file_path}",
     filePath,
   ).replace("{content_sample}", contentSample);
-  const evictedContent = buildEvictedHumanContent(message, replacementText);
+  const evictedContent = buildEvictedContent(message, replacementText);
   return new HumanMessage({
-    content: evictedContent as any,
+    content: evictedContent,
     id: message.id,
     additional_kwargs: { ...message.additional_kwargs },
     response_metadata: { ...message.response_metadata },
@@ -559,6 +576,7 @@ import {
   validatePermissionPaths,
 } from "../permissions/enforce.js";
 import { CompositeBackend } from "../backends/composite.js";
+import { getRealpath } from "../backends/realpath.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -575,6 +593,7 @@ export const FileDataV1Schema = z.object({
 export const FileDataV2Schema = z.object({
   content: z.union([z.string(), z.instanceof(Uint8Array)]),
   mimeType: z.string(),
+  encoding: z.enum(["utf-8", "base64"]).optional(),
   created_at: z.string(),
   modified_at: z.string(),
 });
@@ -670,45 +689,75 @@ function getErrorMessage(error: unknown): string {
 }
 
 /**
- * Check whether `path` is permitted under `rules` for `operation`, returning an
- * error string to surface to the model (or `undefined` when allowed).
- *
- * Never throws: an invalid path (non-absolute, or containing `..` or `~`) or a
- * denied path is a recoverable tool error, not a fatal run-ending one. Such
- * paths are rejected, never normalized, so they cannot bypass a deny rule or
- * reach the backend.
- *
- * @internal
+ * Resolve `canonical` through the backend's realpath hook, when it has one, and
+ * re-validate the result so it is canonical for rule matching. Returns
+ * `canonical` unchanged for backends without path aliasing.
  */
-function checkPermission(
-  rules: FilesystemPermission[],
-  operation: FilesystemOperation,
-  path: string,
-): string | undefined {
-  if (rules.length === 0) {
-    return undefined;
-  }
-
-  let canonical: string;
-  try {
-    canonical = validatePath(path);
-  } catch (error) {
-    return `Error: ${getErrorMessage(error)}`;
-  }
-
-  if (decidePathAccess(rules, operation, canonical) === "deny") {
-    return `Error: permission denied for ${operation} on ${canonical}`;
-  }
-
-  return undefined;
+async function resolveRealPath(
+  backend: BackendProtocolV2,
+  canonical: string,
+): Promise<string> {
+  const realpath = getRealpath(backend);
+  return realpath ? validatePath(await realpath(canonical)) : canonical;
 }
 
 /**
- * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
- * bare string would be wrapped as a `status: "success"` message whose content
- * merely starts with "Error:"; marking `status: "error"` reports the failure
- * accurately so callers and the model can distinguish a real failure from a
- * successful result.
+ * Check whether `path` is permitted under `rules` for `operation`.
+ *
+ * Returns the canonical path to hand the backend, or an error string to
+ * surface to the model. The decision covers every form of the target: the
+ * lexical canonical path (dot and empty segments dropped) and, when the
+ * backend has a realpath hook, the symlink-resolved path it would actually
+ * touch. A deny on either blocks the call.
+ *
+ * Never throws: an invalid path (non-absolute, or containing `..` or `~`), one
+ * the backend cannot resolve, or a denied one is a recoverable tool error, not
+ * a fatal run-ending one. With no rules configured, `path` is returned as-is.
+ *
+ * @internal
+ */
+async function checkPermission(
+  backend: BackendProtocolV2,
+  rules: FilesystemPermission[],
+  operation: FilesystemOperation,
+  path: string,
+): Promise<{ path: string; error?: undefined } | { error: string }> {
+  if (rules.length === 0) {
+    return { path };
+  }
+
+  let canonical: string;
+  let real: string;
+  try {
+    canonical = validatePath(path);
+    if (decidePathAccess(rules, operation, canonical) === "deny") {
+      return {
+        error: `Error: permission denied for ${operation} on ${canonical}`,
+      };
+    }
+    real = await resolveRealPath(backend, canonical);
+  } catch (error) {
+    return { error: `Error: ${getErrorMessage(error)}` };
+  }
+
+  if (
+    real !== canonical &&
+    decidePathAccess(rules, operation, real) === "deny"
+  ) {
+    return {
+      error: `Error: permission denied for ${operation} on ${canonical} (resolves to ${real})`,
+    };
+  }
+
+  return { path: canonical };
+}
+
+/**
+ * Build an error {@link ToolMessage} for a denied path or a failed backend
+ * operation. Returning a bare string would be wrapped as a `status: "success"`
+ * message whose content merely starts with "Error:"; marking `status: "error"`
+ * reports the failure accurately so callers and the model can distinguish a
+ * real failure from a successful result.
  */
 function toolError(
   runtime: ToolRuntime,
@@ -975,6 +1024,22 @@ function parentPath(path: string): string {
   return `/${parts.slice(0, -1).join("/")}`;
 }
 
+/**
+ * Resolve the path a delete of `target` would actually remove. Backends unlink
+ * a symlink leaf rather than following it, so only the parent is resolved.
+ */
+async function resolveDeleteRealPath(
+  backend: BackendProtocolV2,
+  target: string,
+): Promise<string> {
+  const parts = posixParts(target);
+  if (parts.length === 0) {
+    return resolveRealPath(backend, target);
+  }
+  const realParent = await resolveRealPath(backend, parentPath(target));
+  return validatePath(`${realParent}/${parts[parts.length - 1]}`);
+}
+
 function supportsDelete(backend: { delete?: unknown }): backend is {
   delete: (filePath: string) => DeleteResult | Promise<DeleteResult>;
 } {
@@ -984,30 +1049,56 @@ function supportsDelete(backend: { delete?: unknown }): backend is {
 /**
  * Filter a list of filesystem entries to those the rules permit.
  *
- * `getPath` extracts the absolute path from each entry. Entries with
- * unparsable paths are included (not silently dropped). Returns the
- * original array unchanged when `rules` is empty.
+ * `getPath` extracts the absolute path from each entry. Each entry is checked
+ * on its canonical path and, when the backend has a realpath hook, on its
+ * symlink-resolved path. Entries with unparsable paths are included; entries
+ * whose path cannot be resolved are dropped.
+ * Returns the original array unchanged when `rules` is empty.
  *
  * @internal
  */
-function filterByPermissions<T>(
+async function filterByPermissions<T>(
+  backend: BackendProtocolV2,
   entries: T[],
   rules: readonly FilesystemPermission[],
   operation: FilesystemOperation,
   getPath: (entry: T) => string,
-): T[] {
+): Promise<T[]> {
   if (rules.length === 0) {
     return entries;
   }
 
-  return entries.filter((entry) => {
+  const decisions = new Map<string, Promise<boolean>>();
+  const isPermitted = async (rawPath: string): Promise<boolean> => {
+    let canonical: string;
     try {
-      const canonical = validatePath(getPath(entry));
-      return decidePathAccess(rules, operation, canonical) !== "deny";
+      canonical = validatePath(rawPath);
     } catch {
       return true;
     }
-  });
+    if (decidePathAccess(rules, operation, canonical) === "deny") {
+      return false;
+    }
+    try {
+      const real = await resolveRealPath(backend, canonical);
+      return decidePathAccess(rules, operation, real) !== "deny";
+    } catch {
+      return false;
+    }
+  };
+
+  const permitted = await Promise.all(
+    entries.map((entry) => {
+      const rawPath = getPath(entry);
+      let decision = decisions.get(rawPath);
+      if (decision === undefined) {
+        decision = isPermitted(rawPath);
+        decisions.set(rawPath, decision);
+      }
+      return decision;
+    }),
+  );
+  return entries.filter((_, index) => permitted[index]);
 }
 
 export const LS_TOOL_DESCRIPTION = context`
@@ -1129,24 +1220,26 @@ function createLsTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      const permissionError = checkPermission(
-        permissions,
-        "read",
-        input.path ?? "/",
-      );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "ls", permissionError);
-      }
-
       const resolvedBackend = await resolveBackend(backend, runtime);
       const path = input.path || "/";
-      const lsResult = await resolvedBackend.ls(path);
+      const permission = await checkPermission(
+        resolvedBackend,
+        permissions,
+        "read",
+        path,
+      );
+      if (permission.error !== undefined) {
+        return toolError(runtime, "ls", permission.error);
+      }
+
+      const lsResult = await resolvedBackend.ls(permission.path);
 
       if (lsResult.error) {
         return `Error listing files: ${lsResult.error}`;
       }
 
-      const infos = filterByPermissions(
+      const infos = await filterByPermissions(
+        resolvedBackend,
         lsResult.files ?? [],
         permissions,
         "read",
@@ -1203,16 +1296,17 @@ function createReadFileTool(
   const { customDescription, toolTokenLimitBeforeEvict, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      const permissionError = checkPermission(
+      const resolvedBackend = await resolveBackend(backend, runtime);
+      const permission = await checkPermission(
+        resolvedBackend,
         permissions,
         "read",
         input.file_path,
       );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "read_file", permissionError);
+      if (permission.error !== undefined) {
+        return toolError(runtime, "read_file", permission.error);
       }
 
-      const resolvedBackend = await resolveBackend(backend, runtime);
       const {
         file_path,
         offset: requestedOffset = DEFAULT_READ_LINE_OFFSET,
@@ -1223,7 +1317,11 @@ function createReadFileTool(
         requestedLimit,
       );
 
-      const readResult = await resolvedBackend.read(file_path, offset, limit);
+      const readResult = await resolvedBackend.read(
+        permission.path,
+        offset,
+        limit,
+      );
       if (readResult.error) {
         return toolError(runtime, "read_file", `Error: ${readResult.error}`);
       }
@@ -1356,21 +1454,22 @@ function createWriteFileTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      const permissionError = checkPermission(
+      const resolvedBackend = await resolveBackend(backend, runtime);
+      const permission = await checkPermission(
+        resolvedBackend,
         permissions,
         "write",
         input.file_path,
       );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "write_file", permissionError);
+      if (permission.error !== undefined) {
+        return toolError(runtime, "write_file", permission.error);
       }
 
-      const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, content } = input;
-      const result = await resolvedBackend.write(file_path, content);
+      const result = await resolvedBackend.write(permission.path, content);
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "write_file", result.error);
       }
 
       // If filesUpdate is present, return Command to update state
@@ -1424,26 +1523,27 @@ function createEditFileTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      const permissionError = checkPermission(
+      const resolvedBackend = await resolveBackend(backend, runtime);
+      const permission = await checkPermission(
+        resolvedBackend,
         permissions,
         "write",
         input.file_path,
       );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "edit_file", permissionError);
+      if (permission.error !== undefined) {
+        return toolError(runtime, "edit_file", permission.error);
       }
 
-      const resolvedBackend = await resolveBackend(backend, runtime);
       const { file_path, old_string, new_string, replace_all = false } = input;
       const result = await resolvedBackend.edit(
-        file_path,
+        permission.path,
         old_string,
         new_string,
         replace_all,
       );
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "edit_file", result.error);
       }
 
       const message = new ToolMessage({
@@ -1533,6 +1633,36 @@ function createDeleteTool(
         );
       }
 
+      if (permissions.length > 0) {
+        let realTarget: string;
+        try {
+          realTarget = await resolveDeleteRealPath(
+            resolvedBackend,
+            validatedPath,
+          );
+        } catch (error) {
+          return toolError(
+            runtime,
+            "delete",
+            `Error: ${getErrorMessage(error)}`,
+          );
+        }
+        if (realTarget !== validatedPath) {
+          const realDenyingPatterns = findDeleteDenyPatterns(
+            permissions,
+            realTarget,
+            hasDescendants,
+          );
+          if (realDenyingPatterns.length > 0) {
+            return toolError(
+              runtime,
+              "delete",
+              `Error: permission denied for write on ${validatedPath} (resolves to ${realTarget})`,
+            );
+          }
+        }
+      }
+
       if (!supportsDelete(resolvedBackend)) {
         return toolError(
           runtime,
@@ -1591,24 +1721,34 @@ function createGlobTool(
   const { customDescription, permissions } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      const permissionError = checkPermission(
+      const resolvedBackend = await resolveBackend(backend, runtime);
+      const { pattern } = input;
+      const permission = await checkPermission(
+        resolvedBackend,
         permissions,
         "read",
         input.path ?? "/",
       );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "glob", permissionError);
+      if (permission.error !== undefined) {
+        return toolError(runtime, "glob", permission.error);
       }
 
-      const resolvedBackend = await resolveBackend(backend, runtime);
-      const { pattern, path } = input;
-      const globResult = await resolvedBackend.glob(pattern, path);
+      // An omitted path keeps the backend's own default root.
+      const globResult = await resolvedBackend.glob(
+        pattern,
+        input.path === undefined ? undefined : permission.path,
+      );
 
       if (globResult.error) {
-        return `Error finding files: ${globResult.error}`;
+        return toolError(
+          runtime,
+          "glob",
+          `Error finding files: ${globResult.error}`,
+        );
       }
 
-      const infos = filterByPermissions(
+      const infos = await filterByPermissions(
+        resolvedBackend,
         globResult.files ?? [],
         permissions,
         "read",
@@ -1663,15 +1803,6 @@ function createGrepTool(
     options;
   return tool(
     async (input, runtime: ToolRuntime) => {
-      const permissionError = checkPermission(
-        permissions,
-        "read",
-        input.path ?? "/",
-      );
-      if (permissionError !== undefined) {
-        return toolError(runtime, "grep", permissionError);
-      }
-
       const resolvedBackend = await resolveBackend(backend, runtime);
       const {
         pattern,
@@ -1679,16 +1810,31 @@ function createGrepTool(
         glob = null,
         output_mode = "content",
       } = input;
-      // A per-call max_count overrides the configured middleware default.
-      const maxCount = input.max_count ?? grepMaxCount;
-      const result = await resolvedBackend.grep(pattern, path, glob, maxCount);
-
-      // If string, it's an error
-      if (result.error) {
-        return result.error;
+      const permission = await checkPermission(
+        resolvedBackend,
+        permissions,
+        "read",
+        path,
+      );
+      if (permission.error !== undefined) {
+        return toolError(runtime, "grep", permission.error);
       }
 
-      const matches = filterByPermissions(
+      // A per-call max_count overrides the configured middleware default.
+      const maxCount = input.max_count ?? grepMaxCount;
+      const result = await resolvedBackend.grep(
+        pattern,
+        permission.path,
+        glob,
+        maxCount,
+      );
+
+      if (result.error) {
+        return toolError(runtime, "grep", result.error);
+      }
+
+      const matches = await filterByPermissions(
+        resolvedBackend,
         result.matches ?? [],
         permissions,
         "read",
@@ -1867,6 +2013,12 @@ export interface FilesystemMiddlewareOptions {
    * Rules are evaluated in declaration order; first match wins; permissive
    * default. Applies to `ls`, `read_file`, `write_file`, `edit_file`,
    * `glob`, and `grep`.
+   *
+   * Paths are canonicalized (`.` and empty segments dropped) before matching.
+   * With `FilesystemBackend` (or a `CompositeBackend` route to one), rules
+   * are also checked against the symlink-resolved target, and a deny on either
+   * form blocks the call — so allow rules must cover a symlink's target, not
+   * just the link.
    *
    * **Note on `execute`**: permissions are not enforced on `execute` because
    * shell commands can access any path regardless of path-based rules. Using
@@ -2238,7 +2390,7 @@ export function createFilesystemMiddleware(
           .replace("{content_sample}", contentSample);
 
     const truncatedMessage = new ToolMessage({
-      content: replacementText,
+      content: buildEvictedContent(msg, replacementText, isImageBlock),
       tool_call_id: msg.tool_call_id,
       name: msg.name,
       id: msg.id,
@@ -2386,6 +2538,9 @@ export function createFilesystemMiddleware(
           BLOBS_PREFIX,
           blobCache,
         )) as typeof messages;
+      } else if (messages) {
+        // References this agent can't load (e.g. from a forked parent) become a notice the model accepts.
+        messages = withoutBlobRefs(messages);
       }
 
       const finalRequest = {
