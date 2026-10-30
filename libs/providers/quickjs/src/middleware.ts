@@ -296,9 +296,7 @@ function renderReplSystemPrompt(opts: {
     ? " External side effects from inside the REPL are reachable only via the `tools.*` namespace documented below."
     : " The REPL is pure computation; do any filesystem or other I/O with your normal tools, outside this tool.";
   const timeoutLine =
-    opts.timeout === null
-      ? "No per-call timeout."
-      : `Timeout: ${opts.timeout}s per call.`;
+    opts.timeout === null ? "" : `Timeout: ${opts.timeout}s per call. `;
   return dedent`
     ### Interpreter
 
@@ -306,7 +304,7 @@ function renderReplSystemPrompt(opts: {
     - State (variables, functions) persists across tool calls within a single turn of conversation. They DO NOT persist across multiple turns.
     - Top-level \`await\` works; Promises resolve before the call returns.
     - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed).${sideEffects}
-    - ${timeoutLine} Memory: ${opts.memoryLimitMb} MB total.
+    - ${timeoutLine}Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
   `;
 }

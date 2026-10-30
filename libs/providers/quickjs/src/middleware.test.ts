@@ -128,10 +128,10 @@ describe("createCodeInterpreterMiddleware", () => {
     });
 
     it.each([null, -1, Infinity])(
-      "renders no per-call timeout for %s",
+      "omits the timeout from the prompt for %s",
       async (executionTimeoutMs) => {
         const text = await promptFor(executionTimeoutMs);
-        expect(text).toContain("No per-call timeout. Memory: 64 MB total.");
+        expect(text).toContain("- Memory: 64 MB total.");
         expect(text).not.toContain("Timeout:");
       },
     );
