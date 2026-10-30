@@ -1025,11 +1025,15 @@ export class VfsBackend implements BackendProtocolV2 {
     const matches: NonNullable<GrepResult["matches"]> = [];
 
     const scanFile = (fileAbsolutePath: string) => {
-      if (
-        glob &&
-        !globMatchesPath(glob, path.posix.basename(fileAbsolutePath))
-      ) {
-        return;
+      if (glob) {
+        // Bare patterns search filenames throughout the tree; directory-qualified
+        // patterns are relative to the requested search root, like glob().
+        const matchPath = glob.includes("/")
+          ? path.posix.relative(resolvedPath, fileAbsolutePath)
+          : path.posix.basename(fileAbsolutePath);
+        if (!globMatchesPath(glob, matchPath)) {
+          return;
+        }
       }
 
       const publicPath = this.#toPublicPath(fileAbsolutePath);
