@@ -1,5 +1,13 @@
 # @langchain/quickjs
 
+## 0.6.6
+
+### Patch Changes
+
+- [#1010](https://github.com/langchain-ai/deepagentsjs/pull/1010) [`26f190d`](https://github.com/langchain-ai/deepagentsjs/commit/26f190d40f44a2bb498db73e9e98b002bb8554fe) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(quickjs): allow disabling the per-call `executionTimeoutMs`
+  
+  `createCodeInterpreterMiddleware({ executionTimeoutMs: null })` disables the per-call deadline, and the system prompt omits the timeout instead of rendering a negative or infinite number. Zero and `NaN` are rejected.
+
 ## 0.6.5
 
 ### Patch Changes
