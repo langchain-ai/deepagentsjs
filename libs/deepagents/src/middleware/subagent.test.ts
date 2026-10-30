@@ -48,6 +48,7 @@ import { createMockBackend } from "./test.js";
 import {
   createSubAgent,
   createSubAgentMiddleware,
+  DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
   filterStateForSubagent,
   filterStateForFork,
 } from "./subagents.js";
@@ -1197,6 +1198,81 @@ describe("SubAgent mode: fork", () => {
     });
 
     expect(effective).toEqual([summaryMessage, rawMessages[2], rawMessages[3]]);
+  });
+});
+
+describe("task tool subagents property", () => {
+  function createMiddlewareWithSubagents() {
+    return createSubAgentMiddleware({
+      defaultModel: new FakeListChatModel({ responses: ["ok"] }),
+      subagents: [
+        { name: "researcher", description: "Researches things" },
+        { name: "worker", description: "Continues with context", mode: "fork" },
+        {
+          name: "compiled-fork",
+          description: "Forks via a compiled runnable",
+          runnable: createAgent({
+            model: new FakeListChatModel({ responses: ["ok"] }),
+          }),
+          mode: "fork",
+        },
+      ],
+    });
+  }
+
+  const expectedSubagents = [
+    {
+      name: "general-purpose",
+      description: DEFAULT_GENERAL_PURPOSE_DESCRIPTION,
+    },
+    { name: "researcher", description: "Researches things" },
+    { name: "worker", description: "Continues with context", forked: true },
+    {
+      name: "compiled-fork",
+      description: "Forks via a compiled runnable",
+      forked: true,
+    },
+  ];
+
+  it("lists subagents in tool description order, marking only forks", () => {
+    const taskTool = createMiddlewareWithSubagents().tools![0] as unknown as {
+      subagents: unknown;
+      description: string;
+    };
+
+    expect(taskTool.subagents).toStrictEqual(expectedSubagents);
+    const positions = expectedSubagents.map(({ name }) =>
+      taskTool.description.indexOf(`- ${name}: `),
+    );
+    expect(positions.every((p) => p >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+  });
+
+  it("sets the property on a fork's mirrored task tool", () => {
+    createAgentMock.mockClear();
+    createMiddlewareWithSubagents();
+
+    const workerCall = createAgentMock.mock.calls.find(
+      ([params]) => (params as { name?: string }).name === "worker",
+    )?.[0] as unknown as { middleware: AgentMiddleware[] } | undefined;
+    const forkMiddleware = workerCall?.middleware.find(
+      (m) => m.name === "forkTaskToolMiddleware",
+    );
+    const mirroredTaskTool = forkMiddleware?.tools?.[0] as unknown as {
+      subagents: unknown;
+    };
+
+    expect(mirroredTaskTool.subagents).toStrictEqual(expectedSubagents);
+  });
+
+  it("keeps the property out of tool metadata, schema and serialization", () => {
+    const taskTool = createMiddlewareWithSubagents().tools![0];
+
+    expect(taskTool.metadata?.subagents).toBeUndefined();
+    expect(
+      Object.keys((taskTool.schema as z.ZodObject<z.ZodRawShape>).shape),
+    ).toEqual(["description", "subagent_type"]);
+    expect(taskTool.toJSON()).not.toHaveProperty("kwargs.subagents");
   });
 });
 
