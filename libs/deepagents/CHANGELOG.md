@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.16.3
+
+### Patch Changes
+
+- [#950](https://github.com/langchain-ai/deepagentsjs/pull/950) [`ef35a77`](https://github.com/langchain-ai/deepagentsjs/commit/ef35a77099ec1a69b2592504c03f10a1b18e7474) Thanks [@richardscarrott](https://github.com/richardscarrott)! - feat(deepagents): read inline skill tool support from model profiles
+  
+  The skills middleware discloses a skill's tools inline for any model whose profile sets `midConversationTools`, instead of matching model names.
+
 ## 1.16.2
 
 ### Patch Changes
