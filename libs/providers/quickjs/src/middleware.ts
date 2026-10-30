@@ -288,13 +288,17 @@ function renderSubagentPrompt(
 
 function renderReplSystemPrompt(opts: {
   toolName: string;
-  timeout: number;
+  timeout: number | null;
   memoryLimitMb: number;
   hasPtc: boolean;
 }): string {
   const sideEffects = opts.hasPtc
     ? " External side effects from inside the REPL are reachable only via the `tools.*` namespace documented below."
     : " The REPL is pure computation; do any filesystem or other I/O with your normal tools, outside this tool.";
+  const timeoutLine =
+    opts.timeout === null
+      ? "No per-call timeout."
+      : `Timeout: ${opts.timeout}s per call.`;
   return dedent`
     ### Interpreter
 
@@ -302,7 +306,7 @@ function renderReplSystemPrompt(opts: {
     - State (variables, functions) persists across tool calls within a single turn of conversation. They DO NOT persist across multiple turns.
     - Top-level \`await\` works; Promises resolve before the call returns.
     - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed).${sideEffects}
-    - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
+    - ${timeoutLine} Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
   `;
 }
@@ -415,6 +419,16 @@ export function createCodeInterpreterMiddleware(
     throw new Error("`maxPtcCalls` must be >= 1 or null");
   }
 
+  if (executionTimeoutMs === 0 || Number.isNaN(executionTimeoutMs)) {
+    throw new Error("`executionTimeoutMs` must be > 0 or null");
+  }
+  const timeoutMs =
+    executionTimeoutMs === null ||
+    executionTimeoutMs < 0 ||
+    executionTimeoutMs === Infinity
+      ? null
+      : executionTimeoutMs;
+
   const middlewareId = crypto.randomUUID();
 
   let cachedPtcPrompt: string | null = null;
@@ -506,7 +520,7 @@ export function createCodeInterpreterMiddleware(
         session.updateBridgeDispatch(createBridgeDispatch(taskTool, config));
       }
 
-      const result = await session.eval(input.code, executionTimeoutMs);
+      const result = await session.eval(input.code, timeoutMs ?? -1);
       return formatReplResult(result);
     },
     {
@@ -546,7 +560,7 @@ export function createCodeInterpreterMiddleware(
         customSystemPrompt ||
         renderReplSystemPrompt({
           toolName,
-          timeout: executionTimeoutMs / 1000,
+          timeout: timeoutMs === null ? null : timeoutMs / 1000,
           memoryLimitMb: Math.floor(memoryLimitBytes / (1024 * 1024)),
           hasPtc: ptcTools.length > 0,
         });
