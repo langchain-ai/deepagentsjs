@@ -1739,7 +1739,11 @@ function createGlobTool(
       );
 
       if (globResult.error) {
-        return `Error finding files: ${globResult.error}`;
+        return toolError(
+          runtime,
+          "glob",
+          `Error finding files: ${globResult.error}`,
+        );
       }
 
       const infos = await filterByPermissions(
@@ -1824,9 +1828,8 @@ function createGrepTool(
         maxCount,
       );
 
-      // If string, it's an error
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "grep", result.error);
       }
 
       const matches = await filterByPermissions(

@@ -1729,6 +1729,54 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("glob tool should return an error status when the backend glob fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.glob = vi.fn().mockResolvedValue({
+        error: "permission_denied",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const globTool = middleware.tools!.find((tool) => tool.name === "glob");
+      const result = await globTool!.invoke({
+        type: "tool_call",
+        id: "call-glob",
+        name: "glob",
+        args: { pattern: "**/*.ts" },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-glob");
+        expect(result.name).toBe("glob");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe("Error finding files: permission_denied");
+      }
+    });
+
+    it("grep tool should return an error status when the backend grep fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        error: "Invalid regex pattern: (",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const grepTool = middleware.tools!.find((tool) => tool.name === "grep");
+      const result = await grepTool!.invoke({
+        type: "tool_call",
+        id: "call-grep",
+        name: "grep",
+        args: { pattern: "(" },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-grep");
+        expect(result.name).toBe("grep");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe("Invalid regex pattern: (");
+      }
+    });
+
     it("delete tool should delete through backend", async () => {
       const mockBackend = createMockBackend();
       mockBackend.delete = vi.fn().mockResolvedValue({
@@ -2074,8 +2122,9 @@ describe("createFilesystemMiddleware", () => {
       ) as any;
       const result = await grepTool.invoke({ pattern: "secret", path: "/" });
 
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Permission denied: /restricted");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      expect(result.status).toBe("error");
+      expect(result.content).toContain("Permission denied: /restricted");
     });
 
     it("grep tool should return no-matches message when backend returns empty matches", async () => {
