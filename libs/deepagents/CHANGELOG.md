@@ -1,5 +1,15 @@
 # deepagents
 
+## 1.16.2
+
+### Patch Changes
+
+- [#996](https://github.com/langchain-ai/deepagentsjs/pull/996) [`f4b4fd4`](https://github.com/langchain-ai/deepagentsjs/commit/f4b4fd4f2b0944b1b1f09b894d96f2453abdcd0b) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Async subagent notifications carry notification metadata (`lc_source: "async_subagent"`, `lc_data`: the `TaskEvent`), read with `getNotificationMetadata`. `additional_kwargs.deepagents_notification` is still written and is deprecated.
+  
+  Requires `@langchain/core` 1.3.2 or later.
+
+- [#997](https://github.com/langchain-ai/deepagentsjs/pull/997) [`0bf3e35`](https://github.com/langchain-ai/deepagentsjs/commit/0bf3e359c67bc6bcd695452e8ba582239925b6a7) Thanks [@jordanpramos](https://github.com/jordanpramos)! - `write_file`, `edit_file`, `glob` and `grep` now return a `status: "error"` tool message when the backend reports an error, as `delete` already does. Before, the error came back as a plain string, which was recorded as a successful tool call.
+
 ## 1.16.1
 
 ### Patch Changes
