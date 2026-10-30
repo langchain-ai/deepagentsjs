@@ -59,6 +59,7 @@ import {
   StateSchema,
 } from "@langchain/langgraph";
 import {
+  addNotificationMetadata,
   AIMessage,
   HumanMessage,
   SystemMessage,
@@ -871,10 +872,9 @@ function buildPinnedSkillMessage(
   const body = content.replace(FRONTMATTER_PATTERN, "").trimEnd();
   const name = escapeXmlAttribute(skill.name);
   const path = escapeXmlAttribute(skill.path);
-  return new HumanMessage({
+  const message = new HumanMessage({
     content: `<skill name="${name}" path="${path}">\n${body}\n</skill>`,
     additional_kwargs: {
-      lc_source: "pinned_skill",
       skill: {
         name: skill.name,
         path: skill.path,
@@ -882,6 +882,7 @@ function buildPinnedSkillMessage(
       },
     },
   });
+  return addNotificationMetadata(message, { source: "pinned_skill" });
 }
 
 /** Escape `value` for a double-quoted XML attribute. */
