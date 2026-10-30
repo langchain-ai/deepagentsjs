@@ -91,6 +91,59 @@ describe("createCodeInterpreterMiddleware", () => {
     });
   });
 
+  describe("execution timeout", () => {
+    const SPIN = "let i = 0; while (i < 5_000_000) { i++ } i";
+
+    async function promptFor(executionTimeoutMs: number | null) {
+      const middleware = createCodeInterpreterMiddleware({
+        executionTimeoutMs,
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "timeout-prompt" } },
+          tools: middleware.tools || [],
+        } as any,
+        mockHandler,
+      );
+      return mockHandler.mock.calls[0][0].systemMessage.text as string;
+    }
+
+    async function evalWith(executionTimeoutMs: number | null) {
+      const middleware = createCodeInterpreterMiddleware({
+        executionTimeoutMs,
+      });
+      return (middleware.tools![0] as any).invoke(
+        { code: SPIN },
+        { configurable: { thread_id: `timeout-${executionTimeoutMs}` } },
+      );
+    }
+
+    it.each([0, NaN])("rejects %s", (executionTimeoutMs) => {
+      expect(() =>
+        createCodeInterpreterMiddleware({ executionTimeoutMs }),
+      ).toThrow("`executionTimeoutMs` must be > 0 or null");
+    });
+
+    it.each([null, -1, Infinity])(
+      "omits the timeout from the prompt for %s",
+      async (executionTimeoutMs) => {
+        const text = await promptFor(executionTimeoutMs);
+        expect(text).toContain("- Memory: 64 MB total.");
+        expect(text).not.toContain("Timeout:");
+      },
+    );
+
+    it("runs past a deadline that would interrupt the same code", async () => {
+      expect(await evalWith(1)).toContain("interrupted");
+      const result = await evalWith(null);
+      expect(result).not.toContain("interrupted");
+      expect(result).toContain("5000000");
+    });
+  });
+
   describe("resolveToolList", () => {
     const agentSearch = tool(async () => "results", {
       name: "search",

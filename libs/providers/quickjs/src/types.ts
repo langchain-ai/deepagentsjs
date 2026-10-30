@@ -28,10 +28,15 @@ export interface CodeInterpreterMiddlewareOptions {
 
   /**
    * Execution timeout in milliseconds per evaluation.
-   * Set to a negative value to disable the timeout entirely.
+   * Set to `null` to disable the timeout entirely; negative values and
+   * `Infinity` are treated the same way. Zero and `NaN` are rejected.
+   *
+   * Without a timeout, a synchronous infinite loop blocks the event loop
+   * and cannot be stopped by aborting the agent run. Use process
+   * isolation when running untrusted code without a timeout.
    * @default 5000 (5s)
    */
-  executionTimeoutMs?: number;
+  executionTimeoutMs?: number | null;
 
   /**
    * Custom system prompt override. Set to null to disable the system prompt.
