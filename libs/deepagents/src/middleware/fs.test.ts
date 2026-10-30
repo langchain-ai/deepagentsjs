@@ -1674,6 +1674,109 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("write_file tool should return an error status when the backend write fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.write = vi.fn().mockResolvedValue({
+        error: "Failed to write to /doc.txt: permission_denied",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const writeFileTool = middleware.tools!.find(
+        (tool) => tool.name === "write_file",
+      );
+      const result = await writeFileTool!.invoke({
+        file_path: "/doc.txt",
+        content: "new content",
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.name).toBe("write_file");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe(
+          "Failed to write to /doc.txt: permission_denied",
+        );
+      }
+    });
+
+    it("edit_file tool should return an error status when the backend edit fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.edit = vi.fn().mockResolvedValue({
+        error: "String not found in file '/doc.txt'",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const editFileTool = middleware.tools!.find(
+        (tool) => tool.name === "edit_file",
+      );
+      const result = await editFileTool!.invoke({
+        type: "tool_call",
+        id: "call-edit",
+        name: "edit_file",
+        args: {
+          file_path: "/doc.txt",
+          old_string: "absent",
+          new_string: "present",
+        },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-edit");
+        expect(result.name).toBe("edit_file");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe("String not found in file '/doc.txt'");
+      }
+    });
+
+    it("glob tool should return an error status when the backend glob fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.glob = vi.fn().mockResolvedValue({
+        error: "permission_denied",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const globTool = middleware.tools!.find((tool) => tool.name === "glob");
+      const result = await globTool!.invoke({
+        type: "tool_call",
+        id: "call-glob",
+        name: "glob",
+        args: { pattern: "**/*.ts" },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-glob");
+        expect(result.name).toBe("glob");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe("Error finding files: permission_denied");
+      }
+    });
+
+    it("grep tool should return an error status when the backend grep fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        error: "Invalid regex pattern: (",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const grepTool = middleware.tools!.find((tool) => tool.name === "grep");
+      const result = await grepTool!.invoke({
+        type: "tool_call",
+        id: "call-grep",
+        name: "grep",
+        args: { pattern: "(" },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-grep");
+        expect(result.name).toBe("grep");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe("Invalid regex pattern: (");
+      }
+    });
+
     it("delete tool should delete through backend", async () => {
       const mockBackend = createMockBackend();
       mockBackend.delete = vi.fn().mockResolvedValue({
@@ -2019,8 +2122,9 @@ describe("createFilesystemMiddleware", () => {
       ) as any;
       const result = await grepTool.invoke({ pattern: "secret", path: "/" });
 
-      expect(typeof result).toBe("string");
-      expect(result).toContain("Permission denied: /restricted");
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      expect(result.status).toBe("error");
+      expect(result.content).toContain("Permission denied: /restricted");
     });
 
     it("grep tool should return no-matches message when backend returns empty matches", async () => {
