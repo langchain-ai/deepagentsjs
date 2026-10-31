@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
+import { setTimeout as delay } from "node:timers/promises";
 import { LocalShellBackend } from "./local-shell.js";
 
 function createTempDir(): string {
@@ -146,6 +147,18 @@ describe("LocalShellBackend", () => {
       expect(result.output).toContain("must be a non-empty string");
     });
 
+    it("should report spawn errors", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: path.join(tmpDir, "missing"),
+      });
+
+      const result = await backend.execute("echo test");
+
+      expect(result.exitCode).toBe(1);
+      expect(result.output).toContain("Error executing command:");
+      expect(result.truncated).toBe(false);
+    });
+
     it("should timeout long-running commands", async () => {
       const backend = new LocalShellBackend({
         rootDir: tmpDir,
@@ -158,6 +171,63 @@ describe("LocalShellBackend", () => {
       expect(result.exitCode).toBe(124);
       expect(result.output).toContain("timed out");
     });
+
+    it.each([
+      { redirectOutput: false, ignoreSigterm: false },
+      { redirectOutput: true, ignoreSigterm: false },
+      { redirectOutput: false, ignoreSigterm: true },
+      { redirectOutput: true, ignoreSigterm: true },
+    ])(
+      "should stop descendants on timeout (redirected: $redirectOutput, ignores SIGTERM: $ignoreSigterm)",
+      async ({ redirectOutput, ignoreSigterm }) => {
+        const backend = new LocalShellBackend({
+          rootDir: tmpDir,
+          timeout: 1,
+          inheritEnv: true,
+        });
+        const pidPath = path.join(tmpDir, "worker.pid");
+        const markerPath = path.join(tmpDir, "late.txt");
+        await fs.writeFile(
+          path.join(tmpDir, "worker.cjs"),
+          `const fs = require("node:fs");
+${ignoreSigterm ? 'process.on("SIGTERM", () => {});' : ""}
+fs.writeFileSync("worker.pid", String(process.pid));
+setTimeout(() => fs.writeFileSync("late.txt", "unexpected write"), 4000);
+`,
+        );
+        const redirect = redirectOutput
+          ? ` > ${process.platform === "win32" ? "NUL" : "/dev/null"} 2>&1`
+          : "";
+        // Keep the shell alive so that the Node process remains its child.
+        const suffix = process.platform === "win32" ? " & rem done" : "; :";
+        const started = performance.now();
+        try {
+          const result = await backend.execute(
+            `"${process.execPath}" worker.cjs${redirect}${suffix}`,
+          );
+          const elapsed = performance.now() - started;
+          expect(fsSync.existsSync(pidPath)).toBe(true);
+          // Observe a full worker lifetime even if its startup was delayed.
+          await delay(4300);
+
+          expect.soft(result.exitCode).toBe(124);
+          expect.soft(result.output).toContain("timed out");
+          expect.soft(elapsed).toBeLessThan(3000);
+          expect.soft(fsSync.existsSync(markerPath)).toBe(false);
+        } finally {
+          // Only clean up the finite worker created by this test, including on failure.
+          if (fsSync.existsSync(pidPath)) {
+            const pid = Number(await fs.readFile(pidPath, "utf-8"));
+            try {
+              process.kill(pid, "SIGKILL");
+            } catch (error) {
+              expect(error).toHaveProperty("code", "ESRCH");
+            }
+          }
+          await backend.close();
+        }
+      },
+    );
 
     it("should truncate large output", async () => {
       const backend = new LocalShellBackend({
