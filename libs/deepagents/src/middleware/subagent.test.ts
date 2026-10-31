@@ -27,6 +27,7 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import { RunnableLambda } from "@langchain/core/runnables";
+import { AsyncLocalStorageProviderSingleton } from "@langchain/core/singletons";
 import { z } from "zod/v4";
 import { CallbackManager } from "@langchain/core/callbacks/manager";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
@@ -3533,5 +3534,65 @@ describe("Subagent call-count state isolation", () => {
     ).rejects.toMatchObject({
       lc_error_code: "INVALID_CONCURRENT_GRAPH_UPDATE",
     });
+  });
+});
+
+/**
+ * Browser builds have no AsyncLocalStorage, so the task tool must forward its
+ * config to getCurrentTaskInput instead of relying on the ambient context (#833).
+ */
+describe("task tool without AsyncLocalStorage", () => {
+  beforeEach(() => {
+    vi.spyOn(
+      AsyncLocalStorageProviderSingleton,
+      "getRunnableConfig",
+    ).mockReturnValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("should run the task tool when no ambient runnable config is available", async () => {
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_browser_task",
+              name: "task",
+              args: {
+                description: "Do work",
+                subagent_type: "worker",
+              },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+
+    const agent = createDeepAgent({
+      model,
+      subagents: [
+        {
+          name: "worker",
+          description: "A worker agent",
+          runnable: RunnableLambda.from(async () => ({
+            messages: [new AIMessage({ content: "Subagent done" })],
+          })),
+        },
+      ],
+    });
+
+    const result = await agent.invoke({
+      messages: [new HumanMessage("Test")],
+    });
+
+    const toolMessage = result.messages.find((msg: BaseMessage) =>
+      ToolMessage.isInstance(msg),
+    );
+    expect(toolMessage?.content).toBe("Subagent done");
   });
 });

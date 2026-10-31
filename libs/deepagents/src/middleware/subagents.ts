@@ -857,7 +857,7 @@ function createTaskTool(options: {
   ): Promise<Command | string> {
     const { description, subagent_type } = input;
 
-    const currentState = getCurrentTaskInput<Record<string, unknown>>();
+    const currentState = getCurrentTaskInput<Record<string, unknown>>(config);
     if (currentState[FORKED_CONTEXT_KEY]) {
       return FORK_RECURSION_REFUSAL;
     }
