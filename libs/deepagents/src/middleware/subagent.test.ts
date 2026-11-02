@@ -2019,20 +2019,20 @@ describe("lc_agent_name propagation for subagents", () => {
   });
 });
 
-describe("lc_tool_call_id propagation for subagents", () => {
+describe("lc_subagent_tool_call_id propagation for subagents", () => {
   it("should pass each subagent the id of the task call that started it", async () => {
     const callIdsByAgent = new Map<string, unknown>();
     const identifyCall = tool(
       (_input, config) => {
         callIdsByAgent.set(
           config.metadata?.lc_agent_name as string,
-          config.metadata?.lc_tool_call_id,
+          config.metadata?.lc_subagent_tool_call_id,
         );
         return "captured";
       },
       {
         name: "identify_call",
-        description: "Capture lc_tool_call_id from metadata",
+        description: "Capture lc_subagent_tool_call_id from metadata",
         schema: z.object({}),
       },
     );
