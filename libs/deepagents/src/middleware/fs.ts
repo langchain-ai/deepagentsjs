@@ -156,7 +156,7 @@ export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
  */
 const READ_FILE_TRUNCATION_MSG = `
 
-[Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
+[Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines. To find a specific value without reading the whole line, grep for it: grep shows a window around each match.]`;
 
 /**
  * Describe the window a read returned, as status header fields.
@@ -371,6 +371,32 @@ export const GREP_TRUNCATION_NOTE =
   "Note: the search stopped early because it hit the maximum match count. " +
   "The matches above are valid but incomplete. Narrow the search (a more " +
   "specific pattern or a narrower path), or raise max_count, to see the rest.";
+
+/**
+ * Characters of a grep line shown to the model. Longer lines (minified JSON,
+ * offloaded tool results) show a window around the match instead, so one hit
+ * can't return the whole line.
+ */
+export const GREP_LINE_CHAR_LIMIT = 500;
+
+/**
+ * Clip `text` to a `GREP_LINE_CHAR_LIMIT` window centered on `pattern`,
+ * falling back to the head of the line when `pattern` isn't found in it.
+ */
+function clipGrepLine(text: string, pattern: string): string {
+  if (text.length <= GREP_LINE_CHAR_LIMIT) return text;
+  const center =
+    Math.max(text.indexOf(pattern), 0) + Math.floor(pattern.length / 2);
+  const start = Math.min(
+    Math.max(center - GREP_LINE_CHAR_LIMIT / 2, 0),
+    text.length - GREP_LINE_CHAR_LIMIT,
+  );
+  const end = start + GREP_LINE_CHAR_LIMIT;
+  const before = start > 0 ? `[${start} chars clipped] ` : "";
+  const after =
+    end < text.length ? ` [${text.length - end} chars clipped]` : "";
+  return `${before}${text.slice(start, end)}${after}`;
+}
 
 /**
  * Default cap on the number of matches the grep tool returns.
@@ -1845,7 +1871,10 @@ function createGrepTool(
         return `No matches found for pattern '${pattern}'`;
       }
 
-      const formatted = formatGrepMatches(matches, output_mode);
+      const formatted = formatGrepMatches(
+        matches.map((m) => ({ ...m, text: clipGrepLine(m.text, pattern) })),
+        output_mode,
+      );
       const truncated = truncateIfTooLong(formatted);
       let content =
         typeof truncated === "string" ? truncated : truncated.join("\n");
