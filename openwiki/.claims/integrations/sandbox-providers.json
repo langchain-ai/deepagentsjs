@@ -1,0 +1,362 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:80b9ee6ab79c5c8b5efc746644b196015b2eac200b778cabae8aef815a184b35",
+  "claims": [
+    {
+      "id": "claim_ab7ed0eb9fcd43dc87392191a6dd42fd",
+      "statement": "SandboxBackendProtocolV2 extends BackendProtocolV2 with shell execution and a non-empty backend identifier; BackendProtocolV2 uses structured results for reads, listings, searches, globs, writes, and optional deletion.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/v2/protocol.ts#L121-L138",
+          "version": "repo-lines-v1:sha256:9e3bc2c5c9ec36db6a6fd21020f1939581bd498148b612a9d6582f7d60a4e356:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE4YWRmM2JhMmExMTdiNzczOTMwNzNhNzRiNDQzM2UwNzNjMDYzMDU0MmUyMzJjNjAzMTMzZjY1MjhjNzhlNjAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhNmZhMGJiMzU1MzlmMTY4NGRkNjE1MmY0MjQyMWQyZTBiZDk2ZWM3OThiMWI2NTBkYzYyYjE1M2NiYzNhYzkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/v2/protocol.ts#L34-L47",
+          "version": "repo-lines-v1:sha256:036485c281f40579a1813ab9e43b3780187bfcb14589a121caa1b6f14ea3583b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI4ZWZkNWQwYmQxMGY2NjQxMjkzNGEyYjE3NWRkNDM3N2M3ODA1ZGEwYzdhMDgxM2YxZjliZjEzZmNhZjdkOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFlNTNmYzFjNWEyNmYwZjUwNzBjZWUyNTlkYjgyMDQ3ZDkxMzUzZWY3OTYxOTM1ZTNhNjEyOGFkYjYxYjYzODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjI3YjMyNWQyMjA0ZWI1ZmU2MWZiNzM4ZWRlYmZkY2Q5YTk4MzlkMWQxZTBiNzk5NDUwMjdhODk2MjUzYTJhZTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ3YjlmMDI2ODYyNGQyMTFmYzM2NzIzZDc2Njk3ZGRlMDQxY2MxNWVkM2MxYjk0YzUwZmEyNTlhZWQ0MzA1NDkifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/v2/protocol.ts#L74-L118",
+          "version": "repo-lines-v1:sha256:71fdd418b1d3431a6ec3dd6ff1995f90170427df54a8abd9c16bab0b6ce620d1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk5NTM5NDJkNGY1ZDJkYTA1OGJlOTFjM2MwM2U1ODM2NDhkZjM2N2NhNzUxMjNjMTU0NWIxOGU1Nzc4ZWQwNmMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRjZTYzMGQ0MTNiNDVlMzY2NGU5YTI5OTNiOWZhY2IyN2JiNjRiY2ExZmExNjY2N2E1OTdkNWIxYTY1ZDM4YTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cf543cd94c324ee593d32e141e0fdae3",
+      "statement": "BaseSandbox requires concrete implementations to provide execute, uploadFiles, and downloadFiles, and implements higher-level listing, paginated text/binary reads, raw reads, literal grep, glob, writes, edits, and deletion on top of those primitives.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/sandbox.ts#L339-L371",
+          "version": "repo-lines-v1:sha256:0592e61799644cf2c3b9213abce830673787e8f0c107e143bc62f6a38af991f1:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhkMmI1YjgwMTI1ZDc0ZGI0OTY3NjA5YWEwNGI2MzdiYjIxYmM1ZDQ2NDgwYmFmMGY2OTAxNzVhYjg3MDA1MmIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMxZjJkNjc1NTFkNGM5MjdjNDI5OTA2ZDE4OTkyYTZkYzFjYWUwOWRkZmFjM2JhZDYyZTJkZTcwMWEwZWY2MmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjEzZTVjNDQxZjU5ZTQ5Zjc3YTA1ZTk0Y2E3MjZkNTYyMjEwYTg1MTZiNzZlZjE3NjJjMmRhYWMyNmNhNDc3ODUifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/sandbox.ts#L373-L459",
+          "version": "repo-lines-v1:sha256:51cc69805dbb3aee05696deaa22c2aa732aba4cb70fcda63453926b12b0e21af:eyJzZWxlY3RlZExpbmVDb3VudCI6ODcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5NzYyOTBlMjgyMTFmNDFjOTRjNjliMTE4NjI5ZmVmYzcyY2ExMjA3ODJmYmRlNzBlYjdkMGEzODFiYWQxMzciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjcyZGJiNjdhYmQ1NzZlMGFhNmMxYWZhOTFiMGQxZWFhNGRhZjQ4MDQ1MzYzMzZlNTBlMmZjYmNmMDZiOGVlNTcifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/sandbox.ts#L461-L499",
+          "version": "repo-lines-v1:sha256:b41b8ea059344ac4937c98409c05d1f284a4ae247f3a4842f2c8e6b505287066:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZWVmZGQ1MTEzZDk5MDU2ZjFlMTlkZTFiN2Q1YmVkZTZlMGEzMDFmOWU4ZjdiZTRlYWQzZjhmOGRhODY2YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjE1MGNlZmFiMGE1Njc2ZDM0MjQ1OWI0OGFmMGEzZGE1MjAxZjJlMGU0YTkwZTU3ZDRmNmY2ZWU2ZWE2YzRmNzIifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/sandbox.ts#L501-L625",
+          "version": "repo-lines-v1:sha256:7f9ba4f33f9b95f72ef4cb573bb177ea2bba30b1f7823203718d063bdb2b4a65:eyJzZWxlY3RlZExpbmVDb3VudCI6MTI1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjJhMmY5OTZmMDhlNjgwYmQyOTIxMzVhNmZhNDk3OGJkYTI2ZTYwMmQ4NGYzM2NiMWQ1OTQ3NzVkNDMwNGI1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJiZWVlZmRkNTExM2Q5OTA1NmYxZTE5ZGUxYjdkNWJlZGU2ZTBhMzAxZjllOGY3YmU0ZWFkM2Y4ZjhkYTg2NmM4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiIyYjNlYzQzZDU2NzY5MTE1OWNiYjk3Njg1ZmRlMGQzNWIxMTc4MGYxMzA4N2ZiYWEwNDFkOGNmYjE5MWNiMTM1In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_7c91ce7d78334564ab64da2906288926",
+      "statement": "BaseSandbox deletion shell-quotes the requested path but executes rm -rf without confining the operation to a sandbox root, so deletion can reach anything accessible to the sandbox shell.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/sandbox.ts#L627-L662",
+          "version": "repo-lines-v1:sha256:27fc5354c3922fe0eec52f6b47ff0acf4c751064ef82e634a80d92644720b17f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJjMDlkZjhjZDI4ZGFkMjFmZjQ5MWIwNzlkZjEzODIzZjI3YzVjMDU4NjgyNjE3YzA0YzA2OTdjODliOTBiNTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_80c134334e2449e189f0285b4e33ba64",
+      "statement": "LocalShellBackend executes commands directly on the host with shell:true and the user's permissions; rootDir and virtualMode govern filesystem handling but virtualMode does not restrict shell commands.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/local-shell.ts#L31-L55",
+          "version": "repo-lines-v1:sha256:fc028203be14668de3b499bc1f9499fd21b0ee8fadf57fcb7daaf175f38e2196:eyJzZWxlY3RlZExpbmVDb3VudCI6MjUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjZTk0YjhlYzU1NmY5ODBhN2RlZThkNmUwM2NmNDk1ZDQ3Y2I2NjQ2NDRkNGNmNTg1ODJiM2FiZDY0ZTJiNmUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxYmU5YTA5OGZiZjZmNWQ1NzkxNzE4ODk0NmVmN2IxNjI4YTBiZThlNTBhYjAxODEyMDc3N2JmYjQ4ZGQ0Y2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxYzgxOGFmZmYwZWEyNjgzMTBiYzZkYmJiNDM0ZGZhOTE4Y2VkYzkxNzVjZDIxYmVlYTlmNzNhOWU1YzEyZjAifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/local-shell.ts#L344-L376",
+          "version": "repo-lines-v1:sha256:1c294f8f0fb63241a47702f71f5ca2cf78badf4586b436e71a73c92ae0995c74:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxN2FmMTEwMWM5N2I3YzJmNTI1NDA3ODJlNjM0Y2M0NDQwZjBlOTcwMzQxZTUyZjk3NTIzMTFkNzhiN2Q3ZDAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJhOWNhMTUwNWNkZDY4MzZhNzg5OWNmNzlmM2IxOTRhYmIyZGQ4MjQxMGY4ZGFkY2IwMDY5YmZiMWY4Yzc3N2EiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjUxNTI3NDg5OTkyNWNjMWQyNzY5YTI0NWNhMWQzZDAxY2U2YjlkYjQzZDQwM2UxMzQ4NDdjOTJjYTc5MTdlZDUifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/local-shell.ts#L88-L109",
+          "version": "repo-lines-v1:sha256:eb2f881264e46f4fb661ab707062ba658b4579b5c0e28a7aa37bdb59901d4699:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3Y2M3OGUwZGE3YzBkMjhiNjJkY2Q0MzA1NjgwZGQyNGNlMmYxMjU1MjcwOTc2YzQyZjdhZDI4YWE3Y2Q5YWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjNjNmZiNjM2M2I2ZGJhZTJmYjVjOTE3OWE4NTlkMGNlNzI5ZmVjZGIyYjQ3N2ViNDBhODg5YThjNWEwMDU3NDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMjJmM2FhM2FkODgwMDI2ZTkxODFhYzA5NzJmYjE0MGI4NmE4ZTM2OTU5N2U2ZmE2YzY1NWFkMGFhNTIwYzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_e79b9a580462484c8e8b53a4df2a6324",
+      "statement": "LocalShellBackend creates its root directory during initialize, resets only its initialized flag on close, and its factory uploads initialFiles after initialization; command execution supports configurable environment inheritance, timeout, output truncation, stderr labeling, and timeout exit code 124.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/local-shell.ts#L149-L220",
+          "version": "repo-lines-v1:sha256:2c17c97d6ae51ad5ee263ef21b217cf51df2a23325ec524d9797db729013a8ff:eyJzZWxlY3RlZExpbmVDb3VudCI6NzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwNGM4MzM3NmFmODg2NmI3YTQ1MmRhNjA5NmZlZmM1NWE4OGJkZWVhOWIxZWQyY2IyYTgyODM0ZWE3ZDYwOTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0NWMxNDZiYTZkNWYyNDIyMDU5ZDc3MDdkNTYxNjVjNWRkZGRmNTdmNjcwYzUzZWRiYmUzMjBkMDUzYTZmZDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg2OGIzZjlkMTkwNzM0M2Y2MThiNzcwYjg0YzY4MjJkMzFmODc3NzQ4YmFlYzZkMDQxOGRjNmE3M2QyMzQ1NWYifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/local-shell.ts#L367-L443",
+          "version": "repo-lines-v1:sha256:f38c810e5894e9e4729d1a9877bae56b1bcbb231c2dd51aefc33cbdc4cb2f1de:eyJzZWxlY3RlZExpbmVDb3VudCI6NzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNjOTA2OWU4YTBmNjYzOTU1NThhZWIyYWE3N2EzODk5OGFiNGM0MDU4NWI0MTM3ZTY1NTc5N2IwMTMxMzUzY2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjU5YzEzNTkwNjY1NjMyM2QxYzVlYTQxNjU0ZWU2NmFmYjU4NWFjZGNmYWVhY2ExMjFkNWUzMGJmMTkzZWVkZDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRmM2E1MDYzMzBiMGU1NDBiZjM1ZDYwZGM2ZjZlNTNmZDBkNmE0ZjllNGM3NGIyOTI0NGQ0YzMyZmNjMTkxZjUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg3NjJkMThjODJkMWVkOTIyOTA1MjkxYTNmMjkwMTAwN2NlNWRlMDE0NjlhNzkzMGU0YjhkNzNhNGFiOGM0ZDgifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/local-shell.ts#L448-L474",
+          "version": "repo-lines-v1:sha256:13505ea06d084c8de836baeb930e9427be9d85388067d4593a0e323e4608a615:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVlMTJiNjExODk0M2UzMGMwMDY4MzNlNzgxNjMwYTUzYjMyZjQxN2VmNWY5Nzk1YzNmMTJmMzMwODAyNGM1ZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_82dd232945d74da49547857f270d6d65",
+      "statement": "LangSmithSandbox wraps an existing LangSmith Sandbox or creates one from exactly one of snapshotId or deprecated templateName, executes through sandbox.run with a 30-minute default timeout, and resolves its API key from the apiKey option or LANGSMITH_API_KEY.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/langsmith.ts#L268-L303",
+          "version": "repo-lines-v1:sha256:4ce50f8d118efb667ec9b2ffa02abb893fd5108e7998dbfd9bad5e34468e770d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlZTcwMzQ1YTcxMmIxYzFlZDRiODY1NzBlMDIyYjlhMWNhNDYxMTNiNGEzYjE0OWI5N2M3NzY4MGFjMWE3NjYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhjYTg3YzkyOTZjZmRmYmZmNzBjY2NmYzdlMzQ2ZWE1ODkwMDFlN2M4Nzg2OTVmMDk5MmFjOGJjZTc2ZmJjNjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFlMmQ1OTM2M2IzNGY5N2QzYTUxZmQxNmUzYzhmY2YyMzM0NDNlZDc3NDA5Y2Q1NDExN2MxMDMyYWQxOWQ2YmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImRmNzM5YTA2YzFjYmIxMjQ0ZTMzNjNkMzhiY2Y5ZmE1MGNlODRmZWQzOTljMjE5M2EzYzdmMDhkNTk5MThiMmEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/langsmith.ts#L40-L76",
+          "version": "repo-lines-v1:sha256:b30d87c3da73ac0df0b5fe6d1d16522feaffdbc25f1184fbd7fe2274d7689398:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImEyYThhY2IzN2M4OWMxMGZlOTIzZjEwMjJhZjYwNDBmZmJjMTQyNzdlODBhMDY3NzBiMzU3YWE5NmFhODMxZjIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNkMjMwZmI1OTBkNGJjY2FiZGQzZWY4ZGRmOGFlMGU3OWYwNWM3NmE2MGYzNzNmMDkzNDJjZmM5MjY0Yzg3YzciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE5ZTEyOWEwZTdjMzU2M2NiNzc4ZGRjY2Y4Yzg0ODM4NmU1ZTFiZDVmYzNiZmI0ZWEyYjQwMWY4ZjQ5MmQ4MWIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/langsmith.ts#L90-L139",
+          "version": "repo-lines-v1:sha256:c23b3b76ca4cf6c484591856c089333be13427b5f76612c86d9d53e56a66cd0a:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhhYmU5Yjk4NTE3ODJjNDJhY2QyYTM5NDdkZDIzMGRlYjI5YjJmYjFkZjA4Y2MxOTIwZDIwN2UyYzhhNTdmNmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFkOWUxMjU0NjQyNTU3NmQzZGVhZThjOWI5ZGJmMTI4ZDVkNmRkYWY1ZDdmZTg1NzkzNDkyN2RlZmZhM2I5ZGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZiMmYzZDQxYWJlOTY4Zjg0OWIzZWFmNWNlODQyNjE1MWYyZDRjYzgwZjgyODJhN2M0YzFmZjRhZjUwMjA5MDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3b6212c6f796402d860bec4a1a236dfd",
+      "statement": "LangSmithSandbox performs transfers through native read/write APIs with per-path results and standardized error mapping, preserves files across stop/start, and deletes the remote sandbox on close.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/langsmith.ts#L142-L205",
+          "version": "repo-lines-v1:sha256:964dc942667f0d8951939083cd4cb12fbc8bff1584da22cc149c2d7e1f21cffa:eyJzZWxlY3RlZExpbmVDb3VudCI6NjQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJlZWVmZGQ1MTEzZDk5MDU2ZjFlMTlkZTFiN2Q1YmVkZTZlMGEzMDFmOWU4ZjdiZTRlYWQzZjhmOGRhODY2YzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI5NjJjNjg5MzIyNDM5OTc4ZTZlNzg3ZjE3OTY0ZmI2ZGJmMWIyY2Q3M2RkN2Y0Y2U2MjkxN2Y5M2NiMDU4YzMifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/backends/langsmith.ts#L207-L245",
+          "version": "repo-lines-v1:sha256:e67faa75ff7e03b6eeb6b4b37730ceced4a59d1744a686b37aa0a186b1e021bc:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY5NzUzZGZmMTVmNmI3Y2RhMTg0ZWNlOWVlMWNhNjRiMGY4NzQzZDBhMjYyNzQyMWFkNGY0ZWFkYzhkYmM1ODUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBmMDZkZTkwYjYwNTg0OWMzYTA1MmJhZDAyYjk2ZTEyZmRiNDYzODBlM2Q3ZGJlOGNiNDUxNTI1NjkzYTUwMjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3859b1225ba7492d974556aa9b2ce5d1",
+      "statement": "DaytonaSandbox initialization resolves credentials, provisions from an image or snapshot, uploads initial files, and assigns the provider sandbox ID; close deletes the remote sandbox while stop preserves a sandbox that can be started again.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.ts#L180-L328",
+          "version": "repo-lines-v1:sha256:0e602c58d1c049a2e088f090ec32665ecde25ca86d3ba7ca5b1ccec9f3e326d8:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjJhMmY5OTZmMDhlNjgwYmQyOTIxMzVhNmZhNDk3OGJkYTI2ZTYwMmQ4NGYzM2NiMWQ1OTQ3NzVkNDMwNGI1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiIwNTU2ZTY0ZTVlNjA0YmU3YjIwOTU5ZDg0ZjVlMmZiZGY5NGY5ZDY5N2M3YjZhZDI1ZTNhYmUzYWJlYjYxZWQwIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiJkMDcyNDQ5NDJhMzRmOTNjZjgwYmMzZmRhYzY0YjVlMWI4MWYwZjhhMmMzYmRhY2EzMTgwZGFhYmM5MWE0OTlhIn0"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.ts#L501-L559",
+          "version": "repo-lines-v1:sha256:ba5d6d6fa79c10c52f204516b4f2257ccd787e2aaef4ebdfb3d506f308292766:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijc4ZDU1MGM0MmZhMDAwMzdmOTVjYTQ3NmRhNmI5NWQzYjkwMjg3NGQ0MzBkZTI2ZGQ0MDVhNzE1NTVlOTY3NjQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI0MDQ4MWYxNjFjNGE4NjdmYzc4NzU2MjNmMTViZjkxOTIxOWJiMGY1ODA1ZDVmMGQzNmM5MTc3ZmRmOTgwYzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8ec322d1bea0499eab03eba8561ebb96",
+      "statement": "DaytonaSandbox transfers files one at a time, creates parent directories before uploads, permits partial batch success, and maps provider failures to file_not_found, permission_denied, is_directory, or invalid_path; command timeouts and execution failures become structured DaytonaSandboxError codes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.ts#L354-L445",
+          "version": "repo-lines-v1:sha256:3fe7428665b29e57fdc3b12744ca6d7e6991759c0b6a5f059abd02a038b1d06a:eyJzZWxlY3RlZExpbmVDb3VudCI6OTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0YTE5MDliZGI3ODM1OTI1N2Y1ODk4NjVlMzNjY2MwMGEwZTg3NmUyYTM4ZDU4NWQ2NjQ0NGJlYjBhZTE4MWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImViOWFkODg2OTI2NmVjMjg0YjYwMGRhZDYyNWQ1YWFmYjdkM2U0NGVlYjEzZDEzMTIyNTFmZGVkYTAwYTcyMWQifQ"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.ts#L455-L497",
+          "version": "repo-lines-v1:sha256:38ef434757f4741cd20463a88089cd49d4678050aaafd21a8a19a785edb94663:eyJzZWxlY3RlZExpbmVDb3VudCI6NDMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg0YTE5MDliZGI3ODM1OTI1N2Y1ODk4NjVlMzNjY2MwMGEwZTg3NmUyYTM4ZDU4NWQ2NjQ0NGJlYjBhZTE4MWMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjVhOTI5M2ZkODA1NGI2ZTQ3MjQ4MzczZjM5ZjRkZDc3ODAwMTA1ZWI3NTgzNDg2ODcyNTQyODVjZDEyODJiNzgifQ"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.ts#L623-L645",
+          "version": "repo-lines-v1:sha256:ab8399de31b6972812acd66aac058cd4a644f5d894b3174377f89ea7aabc4d1f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2Zjk2ODk1OTQ0OTBjNGU5OWUxOGY0MDllMzFmZmNhMWM5YzZhNjdiZTA3ZGZjY2YwMGNmOWI2OWIxYWM3YzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkNzgzMDUwMzI3OWM1YjNjNzJkZTU4NmE5YTNjNjQ2ZmE4YzQ5ODYwZjc0ODFlNzNhMDM5MDlmMWJmODEyN2IifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f20a988787f74eaba251dc1ec4365a42",
+      "statement": "Daytona authentication prefers an explicit auth.apiKey over DAYTONA_API_KEY, resolves API URL from options then DAYTONA_API_URL then a default, and resolves target from an explicit target or DAYTONA_TARGET.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/daytona/src/auth.ts#L115-L133",
+          "version": "repo-lines-v1:sha256:3432e574f9137e9d32a9fc6d166bf4abe3ef96eae4c84706d44d58f92af7a799:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQyYTJjYjI1YTEyMmI0NDIyMWE2MjM0ZWM2NjBhN2I1ZmI3ZjliZGU3YjNiOWUyYjNjNTU5YTBkOTZmYWM3MzkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk5MzRkOWNmMzVjYmNlNDMxYTk0NDIwZDhlM2QxYjQ0NjJmZDRlNTg3MmE3NmE1YWQwYjljYThiOTMyOWNkYmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/auth.ts#L25-L36",
+          "version": "repo-lines-v1:sha256:2bc852c45164f3119b691046cba388369617bdd227fdff652992ca5f0236176c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4OTVkMTY2OWVkZTVhMTAxZGE5MmU4MmVkNTY3YjA2ZDg5NjJiM2UwYjJiMjM4M2YxNjFmMjZlMzg2OWNmYmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjJhYzAxMDFlMWEwZDg5MmU1NTM2MWVjNGY2MzVlZjg2ODgwN2E1MzVmODMxMmYxODdlYWE0MDkyODk0MWViNGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAwODU4MTY1ODJhY2IxMzk5YWY4OTQ3ZmU5MDAzOGY5ZTVkYTNjNDY4NWIwY2I3ZjhhZDA1NzgzNDg4YWMwZDkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjZkNzUxNjE5MjU4ZWI5OWI3YWJmMDFkODlmN2QyN2NjYzU2NTQ3MTE2ZWU5NmQwMGYzM2M3NTE0OWEyMzc1ZGYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/auth.ts#L87-L112",
+          "version": "repo-lines-v1:sha256:c57495fd7d840581e681cd0bfeb29904e7da6efe3d52fb45f25881c68b8e82e6:eyJzZWxlY3RlZExpbmVDb3VudCI6MjYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3ZDRjM2JiZjUyODIxOTkxMTJiNDhiMzM4ODY1MDA5ZTg1YzM3YWEyMmQ3MzhlYzUxNTE0MTMwZjhlMjBlMDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjA5NGZjMGMxNzNkMWVjM2ZjNTAxZDdkZmE5Mjg1NTAxYzUyN2NmYjQ3MTI1ODNkYTNjYzM2MTgwNTY2YjRiZTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_cb7468332e04414ea7c67d8a8545c611",
+      "statement": "DenoSandbox creates a microVM through Sandbox.create after resolving its token, supports reconnect by ID, maps deprecated memoryMb/lifetime options to memory/timeout, and closes by terminating the client-held sandbox; stop is an alias for close rather than a resumable state.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.ts#L142-L217",
+          "version": "repo-lines-v1:sha256:974d6b13fa4bf34502a81923d2a564aa773805b95209c4940f4553e0fe466340:eyJzZWxlY3RlZExpbmVDb3VudCI6NzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYwY2JiODhlNTJkNDA3NDE4NzI3Y2M1NjQxN2Y5OGM0OGE4M2NkNzFmYjk0YzI5NDY2NjExMjFjMTYxNGJmYWEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQwNzI0NDk0MmEzNGY5M2NmODBiYzNmZGFjNjRiNWUxYjgxZjBmOGEyYzNiZGFjYTMxODBkYWFiYzkxYTQ5OWEifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.ts#L421-L457",
+          "version": "repo-lines-v1:sha256:96d658a1c2a580e4504654397fe95076474d34822941ae39563b4d2ef0834993:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJjZjhlNGE3ZTEzNjVmYmQ2YzU5NzE1ZTE3M2E2OGU0ODhlNDhjYzBhOWQxZDAwY2JkZTdkZjdjNzg3ZmZkMjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImFlMmQ1OTM2M2IzNGY5N2QzYTUxZmQxNmUzYzhmY2YyMzM0NDNlZDc3NDA5Y2Q1NDExN2MxMDMyYWQxOWQ2YmIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY0MmRiOTBhNGZhMmJhY2Q2MzI3ZTFhZjI3YTNkY2M1YjhlN2UyZTJjYTlhNTZkMDI3ODA5NDAyOTE0OThhN2UifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.ts#L516-L568",
+          "version": "repo-lines-v1:sha256:454bfb11d03e1d8d61b3e087c5387ec8ea4e51696ce11b64125b0d459616b6ac:eyJzZWxlY3RlZExpbmVDb3VudCI6NTMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDkyZmY0MWFkNDUyZTRlZDIyOGYxOGE2NTg5OTQ1ZjEyOTIzMTIwODM2ZjllZmZiOTM3N2E2ZWUzNWY2NzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3f264a9de4724445811682b6d19d0ef3",
+      "statement": "DenoSandbox executes through /bin/bash -c and translates timeouts and command failures into DenoSandboxError codes, while its current upload/download bridge converts byte arrays to text and uses writeTextFile and cat rather than preserving arbitrary binary bytes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.ts#L243-L294",
+          "version": "repo-lines-v1:sha256:cfa3af18efa36216547a6577aed6fd60141cad97188e4b440120d996386afba2:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3MTQ2MDBiNjlkYmIxZjc1OWMzYzhjNGIyZTVlYTFmYjE0ZDM1OGZjMzU3OTZmOTBmOTEwMGI2ZTBiYWI2NzIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.ts#L296-L404",
+          "version": "repo-lines-v1:sha256:17b0ac19b6a440253c3d843e6e253e189de473958bffcfdeb8e2341ea65aa346:eyJzZWxlY3RlZExpbmVDb3VudCI6MTA5LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjJhMmY5OTZmMDhlNjgwYmQyOTIxMzVhNmZhNDk3OGJkYTI2ZTYwMmQ4NGYzM2NiMWQ1OTQ3NzVkNDMwNGI1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI5N2Q4NjMyZTU0ZTkyOThhYmI5NTg3MjdlMmQ1MTQwOGFiYWYxMzY2MDM1Mzc5MTAxNDBhYmY2NWIzMGFiNjEzIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI4MTdkOTY1NmI1ZDgwYzk3ZjEwMmIxYTkxMDJjNjAzNTI4M2IwMjAxZDY5ZDI2MjVlNzUwZjAxNTYwN2U5Mjg2In0"
+        }
+      ]
+    },
+    {
+      "id": "claim_3b4b6883873c4191aea4dcd795d855f6",
+      "statement": "Deno authentication prefers a token option, then deprecated auth.token, then DENO_DEPLOY_TOKEN; the integration tests skip when credentials or sandbox-plan access are unavailable and run sequentially.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/deno/src/auth.ts#L20-L78",
+          "version": "repo-lines-v1:sha256:8b5cb29ea668c3fbc820e0b4f605c9f0189ca8d35b82fc4a039c0e039100d334:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk1ZWYwMWJjMDhkYmMzYjYzZTRlNzVlYTNkMjZhNWI5NDE4OTE4NzdlMjdhZDg5MTMyOWM4NDExZDdkOGRjNGQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhODI5N2RlZGMwMzM3OWMxMjdkZGE5YzBlOGI1ODZkYWMzNzA4ZjM1NWY2ZjhlNDVkMDgwMDIxMWUwNDM0Y2YiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.int.test.ts#L27-L67",
+          "version": "repo-lines-v1:sha256:f37297c822fa03cdacd4149acab1ccfb013f8144628b36a4b6667e76ee11eaa5:eyJzZWxlY3RlZExpbmVDb3VudCI6NDEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlNjcyMTc0NjE4MDk1ZTE1YWVjOTBiNTE1YzI0M2RmMzdkNWRjY2MxMTA1NGFlZDhkOWIwOTViN2JjOGUyNWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE4NzgyNjZhMjExYTAzOTIwYjU4YTZiYzM5YWU4NjBhYWNiZTVkNmEzYWE0NzE5OGUyZGMzNWZhZWVjMWY4NTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM2MTFmMzNhMjgzNTRiZDU4YjI3MTQ5YzNlNzJkM2VkODVhNmFmYTJmZGQ1NDU2NWQ3Y2UxNmI4MzMyZmIzZjAifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a1a6dfa015c04c60883bd2cc86933e47",
+      "statement": "ModalSandbox initialization validates credentials, resolves an app and image, converts named volumes and secrets to SDK objects, creates the sandbox, and uploads initial files; close, terminate, and stop terminate the container rather than providing a restart operation.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.ts#L176-L290",
+          "version": "repo-lines-v1:sha256:446c19bfb97fce04623324874e7715c30ba8b9af0193c49c2b5ce1f477e50a8e:eyJzZWxlY3RlZExpbmVDb3VudCI6MTE1LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiI0ZjJhMmY5OTZmMDhlNjgwYmQyOTIxMzVhNmZhNDk3OGJkYTI2ZTYwMmQ4NGYzM2NiMWQ1OTQ3NzVkNDMwNGI1IiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIyN2U1Nzg4ZDVkOWQ3M2QyNGE4MWRiYzBhNWE3NGJmYTgyYzljM2IzYWY5OWU1MmFmNzk2ZTkwYjQ2OGE4YTNkIiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiJkZjg2NjAwNTE5Njc5MzA4Yzk2YjNhZjRlNjZmZjhlNDg1ZDcxYWE4YWFhMDFkOWVjY2ExZWJlNjA2ZDU3YmQyIiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MywiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0N2JlNjE5ZjdiY2RjZWUxYTA2YWM1MjI5ZDBkZjMyYTc0MTAwOGJkZWEwM2M4ZDRhZWZlYzEzYTAyOGYyMjU1In0"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.ts#L475-L521",
+          "version": "repo-lines-v1:sha256:660a2e02ffd70f8ffdeb11d1a7a1fea2d299581f1dbfb3a68e22095412cb86b5:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJjZWZiNWYwZTFlMWFhNTkyM2JkMWQwYTZiMTE2YzM0ODY1ZWUyNGE3NjM5NThlN2YwMDEzODFjOWU3OGEyMGYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ5YTIyZmM3NGNiY2ExZTQ0MWNiMDI5ZDkzNGZiMmI1YmUzZTliNjY4ZTJlN2ZmYzA2MjM4OGU3ZGMxMjhjMjIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_fa4d71ed85cf4eee85ea7e224ca91a04",
+      "statement": "ModalSandbox executes with sh -c, transfers bytes through the Modal filesystem API with relative paths normalized to absolute paths, and classifies SandboxFilesystemNotFoundError before message-based errors when producing standardized file-operation codes.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.ts#L326-L383",
+          "version": "repo-lines-v1:sha256:b84f0c2a83e7b1039230f464929f86e650828316a10356956a2c775aded2ed67:eyJzZWxlY3RlZExpbmVDb3VudCI6NTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImI3MTQ2MDBiNjlkYmIxZjc1OWMzYzhjNGIyZTVlYTFmYjE0ZDM1OGZjMzU3OTZmOTBmOTEwMGI2ZTBiYWI2NzIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.ts#L385-L473",
+          "version": "repo-lines-v1:sha256:26876f4b91115190800ba424b36949cc5ddc777be0e353ad5b376e0b609eef32:eyJzZWxlY3RlZExpbmVDb3VudCI6ODksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk3ZDg2MzJlNTRlOTI5OGFiYjk1ODcyN2UyZDUxNDA4YWJhZjEzNjYwMzUzNzkxMDE0MGFiZjY1YjMwYWI2MTMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjgxN2Q5NjU2YjVkODBjOTdmMTAyYjFhOTEwMmM2MDM1MjgzYjAyMDFkNjlkMjYyNWU3NTBmMDE1NjA3ZTkyODYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.ts#L559-L592",
+          "version": "repo-lines-v1:sha256:5d03a426f789dc3061a927afdfdd730adf34a127482691762ba096f895164c28:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImE2Zjk2ODk1OTQ0OTBjNGU5OWUxOGY0MDllMzFmZmNhMWM5YzZhNjdiZTA3ZGZjY2YwMGNmOWI2OWIxYWM3YzEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUxN2E0YjcxZjljMDMxNWRmMjIyZmU0MzA0Y2Q2Y2I2OTE5YmQwODM4NzhkNjY4NDZjMWVmOWIzNjA3MDY2YzYifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_76dd5ca0d62741d4ad69c4793972ee52",
+      "statement": "Modal credentials resolve token ID and token secret independently from explicit options or MODAL_TOKEN_ID and MODAL_TOKEN_SECRET, and its integration suite skips without both values while exercising the common suite sequentially.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/modal/src/auth.ts#L21-L29",
+          "version": "repo-lines-v1:sha256:32be77252112347ced6962fb79360d33e254c98d994a20dafecf6979decc6d35:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWFmMjJjZjA3MzI1OTJjMjQ3MTQxY2JlNjFlZmExMTAxMjYxMmY1YTMxMjJiOWFmOWJiYWY1MmY1NzI0ZDE5NCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjIzY2I0YzEzZDY3NzU5ZDU0Zjc2NzFkNDQwMzQ5NzJkMDkwM2EzOWQwOGFmYWU3M2JiOTgxZWI5YWIwZGNmMyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYWU3ODQ3NTI4MzMwZGJkNTk3OTRmYmI1MTcyMDczNDM0ZDI5NDhjMjkyNTdkZGQ5NDZmNzI1YzA5OGJkMzJiMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZmQzYjJmNDMzOGY0ODUyZDk2NTZiMDhjYzZkN2NlYmI0NzQ5MDlmZjZjNzg4ZjNjZThkNjQ0MTBjNmU5ZGY0MCJ9"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/auth.ts#L58-L89",
+          "version": "repo-lines-v1:sha256:d5bc67a9301302edf39ef6bfaee22f43dbda40d79cae56ff88cc47944a109076:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjFiZWJmZTUwNGViN2JhNTJmZDAwY2Q3NTg5YTk3ODRjZTkzNGUxZjBkMzA2MzkzNWFmYjQyZThhZWQ3YTNjNDYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZiMTM1MzFiMzQxZDY5NTcxOTAyZWY1OGIwN2VjNjg3NjhjNTU0MDI4M2MzMThiOWE4MDc5MDk5ODFlOWI2OTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImI3OWFkYTc1NzI0NDBjNmMyN2E3YmIzNjA5OGRhNTc4NDJiN2Y3N2RmNmIzYTE3ZDhhOTY3OWYwODE0MDViZTkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.int.test.ts#L26-L48",
+          "version": "repo-lines-v1:sha256:d84d03bf9845641a9138836d5f94ba99b80be27b59e315380af06628e1c0e004:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjZlNjcyMTc0NjE4MDk1ZTE1YWVjOTBiNTE1YzI0M2RmMzdkNWRjY2MxMTA1NGFlZDhkOWIwOTViN2JjOGUyNWEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjZhZTcyNmRiNDI3NGQ0N2MwY2QwYTEwMmEyMTAyZmVlMTAzNTk3YTMyYTJjMzk0OTg3ZmI1MjI0ZDE2NjYyM2MiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImFmNmQ0NzIwZDlkNDkyNzkyOGJjNjQzMWE1YzRjYTVjYzkxZjM5YjAzZmQ5ZjJiYzIzNWFhNDhjZjM5NzkxOWQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_be424100b2af42d898a34b76e983085c",
+      "statement": "VfsBackend implements BackendProtocolV2 rather than SandboxBackendProtocolV2, stores files in an in-memory VirtualFileSystem rooted at /workspace, rejects paths outside that workspace, and provides no command execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.ts#L360-L405",
+          "version": "repo-lines-v1:sha256:fcb9a55faefee2c94e94ae5c582dd3ce6947930548cac0b7df9ee4cee89b8f24:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI5MTVlNDZkZWY4YmFlYjdhNTdjN2IzYTg3Nzk0MzZhYzE4NzBmYWIyNjE2Y2RmMDJhNjkzZTg3MWEyYzExNTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjJmOWM2MTdlMTQ5YTM1NTJhY2Y0NWU5NzI0NjIzZDhjY2NjOWE2OTc2MGIyMDMxMjI1MmIwNjFiYjBiMzQ2NjAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlhNTc1Nzg5YzgwODA5MzBiMjZjODVhMjUyYjFlNTcxODkxZmQyNTFjOTdiNDE5ZmQxZTAxYWJkMzMyNzkzYTAifQ"
+        },
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.ts#L474-L532",
+          "version": "repo-lines-v1:sha256:2944c0f16dbe188e30725537f7f8b48234213cdf463ff52d4d724d5dd8091e0e:eyJzZWxlY3RlZExpbmVDb3VudCI6NTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlN2YwOTg0OTRjZDk5OWU3MTI4Yzc1MTkwODNiYWUwODM4Mzk5NTliM2JkYmFjNzE0OTI2M2ZhOTI5YjI1NmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc4YjBiMWQ2NTQ0ZmQyYTlhNDI3MDQ2NjEzMDg4ZTQwNzNiMjI2NjgwMDQwMWRiYWNlNmZiZGNmODdkMDEyMGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQxYWQxMjRhMDRkNWU1NTkwYzNmMDE5NTZjMWIyMTMyYzFlYTgxMjViZDlhMWNiZjQyMzc5NDhmZGMyMjVkYTQifQ"
+        },
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.ts#L587-L672",
+          "version": "repo-lines-v1:sha256:5d4f8f695d6377eaa8ad569d69d9adda8d66a29d412e531d3dac5ce5491cee56:eyJzZWxlY3RlZExpbmVDb3VudCI6ODYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjBlYzhiZTY2OTExOGM2ZDZkODc0NWVmMGZkMjg5NDdlYWI1NTE3MjkxZjdkOWEwMDlkZDg3YmZhMDIxYjI4ZTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjEzMzFhNjBhYzU1MDJiOGEwNzBkMjQzYzNhZDYyODRmYjZiMDBjMDQ2MzRlYzBiZTk3ZDAwNTQ2NWEzMTM1OTYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImYzZDY4MGNmYTBmN2JhNTQ1NjlkOTMyNDUxZjIzMzZkNTViMDJhZGUwODNlYzkwOTNhOGQ1MGJmMWQ2MjNkNmUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_582945b14a5044b5b7b174425abf773c",
+      "statement": "VfsBackend stop drops the in-memory filesystem and resets initialization, while its factory creates independent stores; its integration tests cover pagination, metadata/search/glob behavior, binary reads, path confinement, and factory independence without shell execution.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.int.test.ts#L21-L240",
+          "version": "repo-lines-v1:sha256:6091419f8d2beeb69b4359ed2c42efc94875570333f48aeaf20f7cfee53c95d9:eyJzZWxlY3RlZExpbmVDb3VudCI6MjIwLCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIwZDdkZGIzMTY2ODBhMmMyZmYyYTA4MDBmNWNiMDQ4YzJjZjg1ZThhMWY2YTFkNjQ4NzA3NGZlZWJjZjNhMzkwIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI3MjBmYzllNjdkYjA3ZWQyMzliYjNhZDIzMTJlYWFiOWE3MGUxZjZmYmEwMTI4OGIwYmE2ZTYxZDdmOGVlNzg4IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiJmNmY1YjQwYjE1ODQ1N2QxNzg2NGYyMTc5MDc4NmRkNWEyZWNkYjY0YjY2YTY1MWY3ODhkNGUyNWNkMzMwM2QyIn0"
+        },
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.ts#L1161-L1183",
+          "version": "repo-lines-v1:sha256:3b3c74bde36c988f627652e83d40019b4cf8cdf6bdfe585124233a6340b5852f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRmMmEyZjk5NmYwOGU2ODBiZDI5MjEzNWE2ZmE0OTc4YmRhMjZlNjAyZDg0ZjMzY2IxZDU5NDc3NWQ0MzA0YjUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjI3ZTU3ODhkNWQ5ZDczZDI0YTgxZGJjMGE1YTc0YmZhODJjOWMzYjNhZjk5ZTUyYWY3OTZlOTBiNDY4YThhM2QiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIxMzBmMGFjMjkwZTIyZDc4ZmE1MWM1MmZlMjU1ZGM5YzgwNzU5ZGMxNjAyZDMwYjIzZWQxODA5ZTcxZjQ0ZmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjM3OTI5ZTkxZTBmOTljM2U4MjVkZTY5YjQzNWZiNjQ4NGQxYjBhMWRmMmY0NjU2MWFiZjFhMjlmMDQxODhiODgifQ"
+        },
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.ts#L1186-L1235",
+          "version": "repo-lines-v1:sha256:2b21dc1858c670ae1b87ffb8b7485f0d2fd358e29afa2be11a16731ff087f1be:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjIzMTY0ZDY2YWZhODY5YmMyMTQ1ZGRiNjFjODIwODA4YTIzM2FkMDhmM2RhODVmMjk1ZWRmYTRiMDhjMjcwZGIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZiNTgwZTk2NGY4M2E0NzNmNDNkNDQzODQ2Mjk0OWQ2OGI1NjAwZmRhNzg3ZjE2Mzc0NWQwMGRlODljYmYzNmEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/providers/node-vfs/src/backend.ts#L674-L682",
+          "version": "repo-lines-v1:sha256:2cee94c7b35f03f440e29980de1e1e65e92e1f6be2ebc6865f3a0c43eb435e2c:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNGYyYTJmOTk2ZjA4ZTY4MGJkMjkyMTM1YTZmYTQ5NzhiZGEyNmU2MDJkODRmMzNjYjFkNTk0Nzc1ZDQzMDRiNSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjdlNTc4OGQ1ZDlkNzNkMjRhODFkYmMwYTVhNzRiZmE4MmM5YzNiM2FmOTllNTJhZjc5NmU5MGI0NjhhOGEzZCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmNlZmI1ZjBlMWUxYWE1OTIzYmQxZDBhNmIxMTZjMzQ4NjVlZTI0YTc2Mzk1OGU3ZjAwMTM4MWM5ZTc4YTIwZiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDdiOWYwMjY4NjI0ZDIxMWZjMzY3MjNkNzY2OTdkZGUwNDFjYzE1ZWQzYzFiOTRjNTBmYTI1OWFlZDQzMDU0OSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_89a1381e743b42ce85c6b1f7f5fdcb0d",
+      "statement": "The shared sandbox standard-test harness creates one shared sandbox for most tests, uses temporary instances for lifecycle and initial-file cases, retries creation for transient failures, and covers lifecycle, execution, transfers, pagination, edits, listing, grep, glob, initial files, and workflows.",
+      "evidence": [
+        {
+          "resource": "repo://libs/standard-tests/src/sandbox.ts#L124-L169",
+          "version": "repo-lines-v1:sha256:939ef9f94720e91254ede56844aa4201b2afe21b101cbaee8d9eebf9b82f7c77:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAyNmVhNzcxZTcxN2FmMzFkNWExODljYWZlYzIzN2FiNmFkYjg4MDYzOTkxMjZjMzMyNmI5YjdmOTE5ZGM0MGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjhiNWMzMzEyMzY4NzA5NDFkODAyMmQ4MDc3ZDE5ZjVlYTU0NDNkNGEyNjFjZjU2YjA3YWU4ZmZlMzg4MGI4ZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        },
+        {
+          "resource": "repo://libs/standard-tests/src/sandbox.ts#L2-L29",
+          "version": "repo-lines-v1:sha256:4e8a14e1e7a8ddaa86f3d41e9ec73b8ca7726f9b01e9b8ea5f28052a5dcff573:eyJzZWxlY3RlZExpbmVDb3VudCI6MjgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE5ZDZmYzJhNzU2OWJiMDZmZmY0MThlMDUyM2QxZDM2YTNiMDJhMjdjZTRlNGQ0ZmU2NzVjZDVhYjgyODY1MTEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjoxLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQyNDc1ODczNzY5MDljODNiOGIwYjVkNjVjMGIzNmVhYWNjN2JjMTc0NGIxZDkyMDIxYmFlYzgyMDJiMjBhZDAifQ"
+        },
+        {
+          "resource": "repo://libs/standard-tests/src/sandbox.ts#L75-L104",
+          "version": "repo-lines-v1:sha256:8cf1b1c3a470052568ddc08c35f9b9318fada6b4efa521534afdd5975d13356d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA4MzI5NzdhYjA5YTQzMzk4ODcxNWQxNzc2OTUyOGZlMDQzMjc2YWEwYmQ4MGFmMWQzZjk3MWI1NmU2Njc1MjMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM4NzQ1NzUzY2JhOWFmOWNhZjJlODdlNDJiZWM1NjFkNjQ2Y2VjODAzOTc4MWZkYThjZTZmMGU4MzQ5ZTc3YzIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImMzMzMzOGMyNDgzOTNlMzgwMTJhOGY5MDgxMTY0ZGMwYWQ5ZmYyYzgyMTg1YzVjNTE2ZjU0ZGRkMWNhNjE3NjMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijc2MTY1MDQ4OWI0YzAzZmRhNzJmZjMwYThlODg1ZjdhZDNjOWZlODk4NTM3YWQxMDFjODE5NWZhMjk4MjQ5OWUifQ"
+        },
+        {
+          "resource": "repo://libs/standard-tests/src/tests/file-operations.ts#L14-L157",
+          "version": "repo-lines-v1:sha256:a9f94d342900f4421ff61ad4bcdf9dac9548d36d71ced00c24271a3c4e26f48b:eyJzZWxlY3RlZExpbmVDb3VudCI6MTQ0LCJmaXJzdFNlbGVjdGVkTGluZUhhc2giOiIzMzk1MTkxNjgxZDNhNmViZjU1NjgxN2QzMTJmNzcxMzU3ZjUzOWQwMjUxZDBlMzJmODg0ZGVkODhmNjRhMmVkIiwibGFzdFNlbGVjdGVkTGluZUhhc2giOiIzYTNlNDZmOTQyNzZiNmY2ZjRlZDFmMDJhZjc4YmVmNmEyZWUxYzQzOWRkNTU4NGI5NzM5NDgzMTMyMTRkMmI3IiwicHJlY2VkaW5nQ29udGV4dExpbmVDb3VudCI6MywicHJlY2VkaW5nQ29udGV4dEhhc2giOiI1YTNlODY5ZjM0ZGY3ODVjNGNjNTMyZWQ0ZWVmM2I0ZjcxNzJhMjM0MzYyZDg3NDIxN2FjYTEwZTEyMjBiN2E1IiwiZm9sbG93aW5nQ29udGV4dExpbmVDb3VudCI6MSwiZm9sbG93aW5nQ29udGV4dEhhc2giOiI0MTJjYTM0NWNjZjc1YmY5YzA4MDZiY2U2OTViZThkZTgwOGI3OTk4NDI1MWE3YTU0ZDIwMmNmNjEwMWRkNDUxIn0"
+        },
+        {
+          "resource": "repo://libs/standard-tests/src/tests/lifecycle.ts#L17-L95",
+          "version": "repo-lines-v1:sha256:4d61a4a1da00a9b455ade105d0f187d6ad743a375f5c929c71f011a6bbe14347:eyJzZWxlY3RlZExpbmVDb3VudCI6NzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNlZjMxZjk2YjVlMWUzYTUxMjEwNjRmNGU3YzU3ZWQyZDVmZjdhMjE2MTI3Yzc3ZTI4Y2UxYzc4NjI0YjcwN2EiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ4OTNmNDBlMzc4MWViODk2YzgyZDA0NmEwODA2N2ExMWUzNWNkZjJmMWRmYWYyNmZlYTkwYjhkYjY2NzY0MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjBhOTJjOTFjZTU3ZDVlMDRiNTA0NmI3ZGFiYTJjOGE2YmFhMWNhYmEzMjNiZjE0NjRhMTEwYzhkMjI1OTE1NmQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoyLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImEwMWJmMmE1NjhkYmY2MmM0ZTQ4MGNiMTliOGZjM2QxNTNjMzIzMmRjYjc1ZWQ1ZDE5MWIwZGMxODE4YzY3MzIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2ac25d32b51142059f780d32a33bde59",
+      "statement": "Daytona integration tests label and sweep test sandboxes and configure provider-side auto-stop/auto-delete safety intervals, while provider-specific Deno and Modal tests verify reconnect and runtime/image behavior beyond the shared suite.",
+      "evidence": [
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.int.test.ts#L19-L55",
+          "version": "repo-lines-v1:sha256:9f05fd3afad986b3700976012e34fd52a15bf5a0aa766372d5d05ff71285e8ef:eyJzZWxlY3RlZExpbmVDb3VudCI6MzcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImQyMzAzYWM2MzQwN2I2OWViYjAwOWRjNmZhODZlMGYyM2E3Mjg1ZTBkMzRlOGJlMmYzZjg1YTI5MmM4ZTIwOTciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlYjFiYzI5NzQ0YzBkOWIxZDFiODBmNzBiNjc3YTZlYThhZjc5ZWY5ZmNjOGI3MGY4YTA3MTUxMzljODE0OWUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.int.test.ts#L57-L77",
+          "version": "repo-lines-v1:sha256:a6e60ebd48f0f26f35a35d3d5e2168513b3593a3c486d4557af4e2b3c221eab5:eyJzZWxlY3RlZExpbmVDb3VudCI6MjEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjE2OTJkNThlYzAxZTEyNGVhYjUwMjBhNzdkNjZjNWYzMzMzNGY4MzFjYjZlNjc1ZGU5MWEyNTY5NGRjNjgxNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4ZmNlODFlM2YwZWQwMjdlODExOTAzZjk4MmU2YTg2NTEzMzM3NjIwZWZjMDVlZDAyMDgzZGNhZGUzMjIwYzYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjMwMjM3YjY2ZThmOWE0Y2JiYjVlZjQ5N2Q0Mzc2Nzg4MzQ0ZDI0YmQ5MThhZWEzNmFmODNmMDkwMDk4MWY4MDEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg4ZGU1ZTgzOWM1ZTQ0NzFmZWE4ZDBjMTg5MmU0ZjdlMzkyZWEyNDIxYTkyZDkxMjg3ZjgxNTQ0YjkxODA2MGMifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.int.test.ts#L87-L153",
+          "version": "repo-lines-v1:sha256:967b6031695a7de2ca6c86acc7bf38d44a9cd0b6a9994db40d307691b17e9815:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiYTlmNGRhZjBlYzEyZDA3ZGZjY2ViYzc5NWYxZTE4Zjc4ZjJkNGM5NzZmYjg1YTI5YTQ2NWI4NjMxYmQwODMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZlZjY5MDA3YTdlNzVjY2RiMmMxOWVmYTlkOTVjNDNiZjc4N2YzM2EyYjljODI2NWM0YTVjZTY0MmZlNmRiZWEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImY0MzAzMzMzYThkNDRiYjhjNWVkMDkxYzRlNGRhZmRjMzRhNDZjMTIzN2I4OTVlMTM3ZTY3OTFlYTA3OWZlYWYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM5M2ZiYzZjNjU2M2JkYzdkM2UxMzFhMmYyNDZjNzYzYTBmNjBjY2QzZGMyMDhiNWY0NTU0Njg1ODJiZTg1ZjYifQ"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.int.test.ts#L171-L266",
+          "version": "repo-lines-v1:sha256:b57eb827b31d2af5e4a7b7fb2fe7b50d1d20ae61da6dc5d754c3da6354f1c1cf:eyJzZWxlY3RlZExpbmVDb3VudCI6OTYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYxZTc2ODQwODU5YWE1YzA3NmMxNzZiYWI2MTcyZTk3OTJlODZkZTA0ZTNiODkzMTUyZTIxZWFjNTJlMTVlOTMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNhM2U0NmY5NDI3NmI2ZjZmNGVkMWYwMmFmNzhiZWY2YTJlZTFjNDM5ZGQ1NTg0Yjk3Mzk0ODMxMzIxNGQyYjciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImIxNjQ4YmMyYWEyODlkNmM2YzcwZmQ2ZjIxMmY1OGQwMDU5YmYzMjUzMWU0YTQ1M2RlNzc2NjMyOTZmZDE1MzAiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjYxM2E0NjQ1MWJmYzg5OTg2NmRjN2VmMjQ5YjFkYzIzNDc5NTczZjY3MjVkNTRhNDcxNDQ3MjFlOGZjMDZjOGQifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}

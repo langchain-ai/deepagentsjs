@@ -1,0 +1,5 @@
+# Files
+
+- [ACP IDE Server Integration](acp.md) - How deepagents-acp exposes DeepAgents through the Agent Client Protocol over stdio, routes sessions to configured agents, streams messages and tool updates, and proxies editor file operations. Covers checkpoint-backed session replay, modes, permissions, cancellation, authentication, logging, CLI setup, and lifecycle limits.
+- [QuickJS Code Interpreter Integration](quickjs.md) - Explains how CodeInterpreterMiddleware runs TypeScript or JavaScript in an isolated QuickJS WASM REPL, preserves per-turn state, and optionally bridges guest code to agent tools and subagents. Covers evaluation control flow, quotas, serialization, result formatting, configuration, and the boundary between sandboxed code and normal agent operations.
+- [Sandbox Backend Integrations](sandbox-providers.md) - Maps the SandboxBackendProtocolV2 and BaseSandbox contract to LocalShell, LangSmith, Daytona, Deno, Modal, and Node VFS implementations. Documents lifecycle, file transfer, authentication, error behavior, cleanup, and the shared provider test suite.
