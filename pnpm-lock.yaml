@@ -587,8 +587,8 @@ importers:
   libs/acp:
     dependencies:
       '@agentclientprotocol/sdk':
-        specifier: ^2.1.0
-        version: 2.1.0(zod@4.6.7)
+        specifier: ^1.3.0
+        version: 1.9.0(zod@4.6.7)
       deepagents:
         specifier: workspace:*
         version: link:../deepagents
@@ -956,14 +956,10 @@ importers:
 
 packages:
 
-  '@agentclientprotocol/sdk@2.1.0':
-    resolution: {integrity: sha512-IuKjJmHLPzbmbg26eK9Jopd8AVxgLuu8fX114YzYAU6tLYclCo2DUzLL4vbCpYGr9mzvs2T0kigE3ZCueL06tg==}
+  '@agentclientprotocol/sdk@1.9.0':
+    resolution: {integrity: sha512-saCOTPYBK1iqWqJFAYHXbg3+zCoFXyZZFoqQAwdTWkbrZZPpAETr80QOnYr2l+dzPwL0jpNhn3eDY8MoEIDbUA==}
     peerDependencies:
-      '@modelcontextprotocol/server': ^2.4.0
-      zod: ^3.25.76 || ^4.0.0
-    peerDependenciesMeta:
-      '@modelcontextprotocol/server':
-        optional: true
+      zod: ^3.25.0 || ^4.0.0
 
   '@anthropic-ai/sdk@0.129.0':
     resolution: {integrity: sha512-MH7LB20kNpGLUpPTe2OG5XvL/KhX8HUO9XyBaFjgFk6TLS4Xjt0VPIuMKywe7POKKPslX+QxSlVok9e+8kG5Nw==}
@@ -3792,7 +3788,7 @@ packages:
 
 snapshots:
 
-  '@agentclientprotocol/sdk@2.1.0(zod@4.6.7)':
+  '@agentclientprotocol/sdk@1.9.0(zod@4.6.7)':
     dependencies:
       zod: 4.6.7
 
