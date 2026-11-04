@@ -2130,7 +2130,7 @@ describe("createFilesystemMiddleware", () => {
 
       expect(result).toContain('"order_id": "abc-123"');
       expect(result).toContain("chars clipped]");
-      expect(result.length).toBeLessThan(1000);
+      expect(result.length).toBeLessThan(3000);
     });
 
     it("grep tool should return error message when backend returns an error", async () => {

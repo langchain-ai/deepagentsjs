@@ -377,7 +377,7 @@ export const GREP_TRUNCATION_NOTE =
  * offloaded tool results) show a window around the match instead, so one hit
  * can't return the whole line.
  */
-export const GREP_LINE_CHAR_LIMIT = 500;
+export const GREP_LINE_CHAR_LIMIT = 2000;
 
 /**
  * Clip `text` to a `GREP_LINE_CHAR_LIMIT` window centered on `pattern`,
