@@ -373,6 +373,32 @@ export const GREP_TRUNCATION_NOTE =
   "specific pattern or a narrower path), or raise max_count, to see the rest.";
 
 /**
+ * Characters of a grep line shown to the model. Longer lines (minified JSON,
+ * offloaded tool results) show a window around the match instead, so one hit
+ * can't return the whole line.
+ */
+export const GREP_LINE_CHAR_LIMIT = 2000;
+
+/**
+ * Clip `text` to a `GREP_LINE_CHAR_LIMIT` window centered on `pattern`,
+ * falling back to the head of the line when `pattern` isn't found in it.
+ */
+function clipGrepLine(text: string, pattern: string): string {
+  if (text.length <= GREP_LINE_CHAR_LIMIT) return text;
+  const center =
+    Math.max(text.indexOf(pattern), 0) + Math.floor(pattern.length / 2);
+  const start = Math.min(
+    Math.max(center - GREP_LINE_CHAR_LIMIT / 2, 0),
+    text.length - GREP_LINE_CHAR_LIMIT,
+  );
+  const end = start + GREP_LINE_CHAR_LIMIT;
+  const before = start > 0 ? `[${start} chars clipped] ` : "";
+  const after =
+    end < text.length ? ` [${text.length - end} chars clipped]` : "";
+  return `${before}${text.slice(start, end)}${after}`;
+}
+
+/**
  * Default cap on the number of matches the grep tool returns.
  * Set to null to disable the cap.
  */
@@ -1845,7 +1871,10 @@ function createGrepTool(
         return `No matches found for pattern '${pattern}'`;
       }
 
-      const formatted = formatGrepMatches(matches, output_mode);
+      const formatted = formatGrepMatches(
+        matches.map((m) => ({ ...m, text: clipGrepLine(m.text, pattern) })),
+        output_mode,
+      );
       const truncated = truncateIfTooLong(formatted);
       let content =
         typeof truncated === "string" ? truncated : truncated.join("\n");
