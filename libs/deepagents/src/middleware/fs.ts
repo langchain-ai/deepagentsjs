@@ -156,7 +156,7 @@ export const MAX_BINARY_READ_SIZE_BYTES = 10 * 1024 * 1024;
  */
 const READ_FILE_TRUNCATION_MSG = `
 
-[Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines. To find a specific value without reading the whole line, grep for it: grep shows a window around each match.]`;
+[Output was truncated due to size limits. The file content is very large. Consider reformatting the file to make it easier to navigate. For example, if this is JSON, use execute(command='jq . {file_path}') to pretty-print it with line breaks. For other formats, you can use appropriate formatting tools to split long lines.]`;
 
 /**
  * Describe the window a read returned, as status header fields.
