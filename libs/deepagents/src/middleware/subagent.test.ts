@@ -2436,6 +2436,54 @@ describe("middleware override by name", () => {
     }
   });
 
+  it("adds modelRefusalMiddleware after custom middleware in every stack", () => {
+    const custom = namedMiddleware("CustomMiddleware");
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps.",
+          systemPrompt: "Help.",
+          middleware: [namedMiddleware("SpecMiddleware")],
+        },
+      ],
+    });
+
+    for (const [agentName, own] of [
+      ["main", "CustomMiddleware"],
+      ["general-purpose", "CustomMiddleware"],
+      ["helper", "SpecMiddleware"],
+    ] as const) {
+      const names = getMiddlewareStack(agentName).map((entry) => entry.name);
+      expect(names.filter((n) => n === "modelRefusalMiddleware")).toHaveLength(
+        1,
+      );
+      expect(names.indexOf("modelRefusalMiddleware")).toBeGreaterThan(
+        names.indexOf(own),
+      );
+    }
+  });
+
+  it("lets a harness profile exclude modelRefusalMiddleware", () => {
+    registerHarnessProfile("refusal-exclusion-test:model", {
+      excludedMiddleware: ["modelRefusalMiddleware"],
+    });
+
+    createDeepAgent({ model: "refusal-exclusion-test:model", name: "main" });
+
+    for (const agentName of ["main", "general-purpose"]) {
+      expect(
+        getMiddlewareStack(agentName).some(
+          (entry) => entry.name === "modelRefusalMiddleware",
+        ),
+      ).toBe(false);
+    }
+  });
+
   it("lets profile middleware exclusions win over custom replacements", () => {
     registerHarnessProfile("override-test:model", {
       excludedMiddleware: ["SummarizationMiddleware"],
@@ -2830,11 +2878,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("helper").slice(-5)).toEqual([
+      expect(names("helper").slice(-6)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "modelRefusalMiddleware",
         "UnsupportedContentMiddleware",
       ]);
       for (const agentName of ["main", "general-purpose"]) {
@@ -2867,11 +2916,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("forker").slice(-5)).toEqual([
+      expect(names("forker").slice(-6)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "modelRefusalMiddleware",
         "UnsupportedContentMiddleware",
       ]);
       for (const agentName of ["main", "general-purpose"]) {
@@ -2905,11 +2955,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("forker").slice(-5)).toEqual([
+      expect(names("forker").slice(-6)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "modelRefusalMiddleware",
         "UnsupportedContentMiddleware",
       ]);
     });

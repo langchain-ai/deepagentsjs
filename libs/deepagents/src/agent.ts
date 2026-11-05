@@ -3,6 +3,7 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   bedrockPromptCachingMiddleware,
+  modelRefusalMiddleware,
   SystemMessage,
   type AgentMiddleware,
 } from "langchain";
@@ -393,6 +394,8 @@ export function createDeepAgent<
               }),
             ]
           : []),
+        // Last, so a spec's `modelFallbackMiddleware` catches refusals first.
+        modelRefusalMiddleware(),
       ],
     );
 
@@ -544,6 +547,8 @@ export function createDeepAgent<
     ...memoryMiddleware,
     // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    // In the tail, so a caller's `modelFallbackMiddleware` catches refusals first.
+    modelRefusalMiddleware(),
   ];
 
   let middleware: AgentMiddleware[] = mergeMiddlewareStack(
