@@ -1,8 +1,8 @@
 /**
  * Researcher subagent — deployed to LangGraph Platform
  *
- * A research agent with web search that notifies its parent supervisor
- * when it finishes via the completion notifier middleware.
+ * A research agent with web search. As a deep agent on the same deployment
+ * as the supervisor, it notifies the supervisor on its own when it finishes.
  *
  * Deployed alongside the supervisor via:
  *   npx @langchain/langgraph-cli dev -c examples/async-subagents/parallel-research/langgraph.json
@@ -10,12 +10,7 @@
 import "dotenv/config";
 import { tool } from "langchain";
 import { z } from "zod";
-import {
-  createDeepAgent,
-  createCompletionCallbackMiddleware,
-} from "deepagents";
-
-const LANGGRAPH_URL = process.env.LANGGRAPH_URL ?? "http://localhost:2024";
+import { createDeepAgent } from "deepagents";
 
 // ─── Web search tool (Tavily with stub fallback) ─────────────────────────────
 
@@ -68,13 +63,6 @@ const webSearch = tool(
   },
 );
 
-// ─── Completion callback ──────────────────────────────────────────────────────
-
-const notifier = createCompletionCallbackMiddleware({
-  callbackGraphId: "supervisor",
-  url: LANGGRAPH_URL,
-});
-
 // ─── Researcher agent ─────────────────────────────────────────────────────────
 
 export const graph = createDeepAgent({
@@ -90,5 +78,4 @@ export const graph = createDeepAgent({
     "If you receive a new instruction mid-conversation, immediately follow it without asking for " +
     "clarification. Discard any prior work and start fresh on the new task.",
   tools: [webSearch],
-  middleware: [notifier],
 });

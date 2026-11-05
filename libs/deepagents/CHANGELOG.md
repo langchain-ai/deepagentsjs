@@ -1,5 +1,36 @@
 # deepagents
 
+## 1.16.2
+
+### Patch Changes
+
+- [#996](https://github.com/langchain-ai/deepagentsjs/pull/996) [`f4b4fd4`](https://github.com/langchain-ai/deepagentsjs/commit/f4b4fd4f2b0944b1b1f09b894d96f2453abdcd0b) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - Async subagent notifications carry notification metadata (`lc_source: "async_subagent"`, `lc_data`: the `TaskEvent`), read with `getNotificationMetadata`. `additional_kwargs.deepagents_notification` is still written and is deprecated.
+  
+  Requires `@langchain/core` 1.3.2 or later.
+
+- [#997](https://github.com/langchain-ai/deepagentsjs/pull/997) [`0bf3e35`](https://github.com/langchain-ai/deepagentsjs/commit/0bf3e359c67bc6bcd695452e8ba582239925b6a7) Thanks [@jordanpramos](https://github.com/jordanpramos)! - `write_file`, `edit_file`, `glob` and `grep` now return a `status: "error"` tool message when the backend reports an error, as `delete` already does. Before, the error came back as a plain string, which was recorded as a successful tool call.
+
+## 1.16.1
+
+### Patch Changes
+
+- [#980](https://github.com/langchain-ai/deepagentsjs/pull/980) [`bf83c27`](https://github.com/langchain-ai/deepagentsjs/commit/bf83c27fd322a56082590c3426bbcea9014a5b6e) Thanks [@byhow](https://github.com/byhow)! - `FilesystemMiddleware` no longer counts image blocks toward a tool result's eviction limit, and keeps them in the message when it evicts the result's text.
+
+- [#1001](https://github.com/langchain-ai/deepagentsjs/pull/1001) [`fcb8249`](https://github.com/langchain-ai/deepagentsjs/commit/fcb8249fa02debf96a7c293af939ce4276ffaded) Thanks [@byhow](https://github.com/byhow)! - `StateBackend` stores binary uploads and writes as base64 text with `encoding: "base64"`, so threads with uploaded images or PDFs keep working after a JSON checkpointer round trip. Uploads at text paths whose bytes are not valid UTF-8 are kept byte-for-byte as `application/octet-stream` instead of being lossily decoded.
+
+## 1.16.0
+
+### Minor Changes
+
+- [#964](https://github.com/langchain-ai/deepagentsjs/pull/964) [`f002924`](https://github.com/langchain-ai/deepagentsjs/commit/f002924f7bac66d36568684430a5d64337c06dfa) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): async subagents notify the agent that launched them (experimental)
+  
+  When an async subagent finishes, fails, is cancelled or pauses for a human, it now wakes the agent that started it with a notification message, so the agent no longer has to poll `check_async_task`.
+  
+  - `AsyncSubAgent` gains `notifyParent` (set `false` to turn notifications off), `webhook` (also POST each outcome to a URL), `updateStrategy: "enqueue"` (queue follow-ups behind the current run instead of interrupting it) and `mode: "fork"` (start the subagent with a copy of the parent's conversation).
+  - A subagent paused for approval or input shows as `"waiting"`; the user answers it on the subagent's own thread.
+  - `check_async_task` returns content blocks when the answer includes media.
+  - `createCompletionCallbackMiddleware` is deprecated; using it alongside notifications sends two of them.
+
 ## 1.15.1
 
 ### Patch Changes

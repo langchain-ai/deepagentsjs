@@ -43,6 +43,7 @@ import {
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
+  withoutBlobRefs,
 } from "./blobOffload.js";
 import {
   sanitizeToolCallId,
@@ -373,6 +374,32 @@ export const GREP_TRUNCATION_NOTE =
   "specific pattern or a narrower path), or raise max_count, to see the rest.";
 
 /**
+ * Characters of a grep line shown to the model. Longer lines (minified JSON,
+ * offloaded tool results) show a window around the match instead, so one hit
+ * can't return the whole line.
+ */
+export const GREP_LINE_CHAR_LIMIT = 2000;
+
+/**
+ * Clip `text` to a `GREP_LINE_CHAR_LIMIT` window centered on `pattern`,
+ * falling back to the head of the line when `pattern` isn't found in it.
+ */
+function clipGrepLine(text: string, pattern: string): string {
+  if (text.length <= GREP_LINE_CHAR_LIMIT) return text;
+  const center =
+    Math.max(text.indexOf(pattern), 0) + Math.floor(pattern.length / 2);
+  const start = Math.min(
+    Math.max(center - GREP_LINE_CHAR_LIMIT / 2, 0),
+    text.length - GREP_LINE_CHAR_LIMIT,
+  );
+  const end = start + GREP_LINE_CHAR_LIMIT;
+  const before = start > 0 ? `[${start} chars clipped] ` : "";
+  const after =
+    end < text.length ? ` [${text.length - end} chars clipped]` : "";
+  return `${before}${text.slice(start, end)}${after}`;
+}
+
+/**
  * Default cap on the number of matches the grep tool returns.
  * Set to null to disable the cap.
  */
@@ -431,12 +458,27 @@ function extractTextFromMessage(message: {
   return String(message.content);
 }
 
+/**
+ * Whether a content block is an image. Tool-result eviction skips images when
+ * sizing a result and keeps them when evicting it: base64 length says little
+ * about what a provider charges for an image.
+ */
+function isImageBlock(block: unknown): boolean {
+  return (
+    typeof block === "object" &&
+    block !== null &&
+    "type" in block &&
+    (block.type === "image" || block.type === "image_url")
+  );
+}
+
 function stringifyToolContent(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
   if (Array.isArray(content)) {
     return content
+      .filter((block) => !isImageBlock(block))
       .map((block) => {
         if (
           typeof block === "object" &&
@@ -456,28 +498,29 @@ function stringifyToolContent(content: unknown): string {
 }
 
 /**
- * Build replacement content for an evicted HumanMessage, preserving non-text blocks.
+ * Build replacement content for an evicted message, preserving the blocks `keep` selects.
  *
  * For plain string content, returns the replacement text directly. For list content
- * with mixed block types (e.g., text + image), replaces all text blocks with a single
- * text block containing the replacement text while keeping non-text blocks intact.
+ * with mixed block types (e.g., text + image), replaces the other blocks with a single
+ * text block containing the replacement text while keeping the selected blocks intact.
+ * By default every non-text block is kept.
  */
-function buildEvictedHumanContent(
-  message: HumanMessage,
+function buildEvictedContent(
+  message: BaseMessage,
   replacementText: string,
-): string | Array<Record<string, unknown>> {
+  keep: (block: { type: string }) => boolean = (block) => block.type !== "text",
+): BaseMessage["content"] {
   if (typeof message.content === "string") {
     return replacementText;
   }
   if (Array.isArray(message.content)) {
-    const mediaBlocks = message.content.filter(
-      (block) =>
-        typeof block === "object" && block !== null && block.type !== "text",
+    const keptBlocks = message.content.filter(
+      (block) => typeof block === "object" && block !== null && keep(block),
     );
-    if (mediaBlocks.length === 0) {
+    if (keptBlocks.length === 0) {
       return replacementText;
     }
-    return [{ type: "text", text: replacementText }, ...mediaBlocks];
+    return [{ type: "text", text: replacementText }, ...keptBlocks];
   }
   return replacementText;
 }
@@ -499,9 +542,9 @@ function buildTruncatedHumanMessage(
     "{file_path}",
     filePath,
   ).replace("{content_sample}", contentSample);
-  const evictedContent = buildEvictedHumanContent(message, replacementText);
+  const evictedContent = buildEvictedContent(message, replacementText);
   return new HumanMessage({
-    content: evictedContent as any,
+    content: evictedContent,
     id: message.id,
     additional_kwargs: { ...message.additional_kwargs },
     response_metadata: { ...message.response_metadata },
@@ -577,6 +620,7 @@ export const FileDataV1Schema = z.object({
 export const FileDataV2Schema = z.object({
   content: z.union([z.string(), z.instanceof(Uint8Array)]),
   mimeType: z.string(),
+  encoding: z.enum(["utf-8", "base64"]).optional(),
   created_at: z.string(),
   modified_at: z.string(),
 });
@@ -736,11 +780,11 @@ async function checkPermission(
 }
 
 /**
- * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
- * bare string would be wrapped as a `status: "success"` message whose content
- * merely starts with "Error:"; marking `status: "error"` reports the failure
- * accurately so callers and the model can distinguish a real failure from a
- * successful result.
+ * Build an error {@link ToolMessage} for a denied path or a failed backend
+ * operation. Returning a bare string would be wrapped as a `status: "success"`
+ * message whose content merely starts with "Error:"; marking `status: "error"`
+ * reports the failure accurately so callers and the model can distinguish a
+ * real failure from a successful result.
  */
 function toolError(
   runtime: ToolRuntime,
@@ -1452,7 +1496,7 @@ function createWriteFileTool(
       const result = await resolvedBackend.write(permission.path, content);
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "write_file", result.error);
       }
 
       // If filesUpdate is present, return Command to update state
@@ -1526,7 +1570,7 @@ function createEditFileTool(
       );
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "edit_file", result.error);
       }
 
       const message = new ToolMessage({
@@ -1723,7 +1767,11 @@ function createGlobTool(
       );
 
       if (globResult.error) {
-        return `Error finding files: ${globResult.error}`;
+        return toolError(
+          runtime,
+          "glob",
+          `Error finding files: ${globResult.error}`,
+        );
       }
 
       const infos = await filterByPermissions(
@@ -1808,9 +1856,8 @@ function createGrepTool(
         maxCount,
       );
 
-      // If string, it's an error
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "grep", result.error);
       }
 
       const matches = await filterByPermissions(
@@ -1825,7 +1872,10 @@ function createGrepTool(
         return `No matches found for pattern '${pattern}'`;
       }
 
-      const formatted = formatGrepMatches(matches, output_mode);
+      const formatted = formatGrepMatches(
+        matches.map((m) => ({ ...m, text: clipGrepLine(m.text, pattern) })),
+        output_mode,
+      );
       const truncated = truncateIfTooLong(formatted);
       let content =
         typeof truncated === "string" ? truncated : truncated.join("\n");
@@ -2370,7 +2420,7 @@ export function createFilesystemMiddleware(
           .replace("{content_sample}", contentSample);
 
     const truncatedMessage = new ToolMessage({
-      content: replacementText,
+      content: buildEvictedContent(msg, replacementText, isImageBlock),
       tool_call_id: msg.tool_call_id,
       name: msg.name,
       id: msg.id,
@@ -2519,6 +2569,9 @@ export function createFilesystemMiddleware(
           BLOBS_PREFIX,
           blobCache,
         )) as typeof messages;
+      } else if (messages) {
+        // References this agent can't load (e.g. from a forked parent) become a notice the model accepts.
+        messages = withoutBlobRefs(messages);
       }
 
       const finalRequest = {
