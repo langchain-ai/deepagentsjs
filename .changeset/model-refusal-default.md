@@ -1,5 +1,5 @@
 ---
-"deepagents": minor
+"deepagents": patch
 ---
 
 feat(deepagents): raise on model refusals by default and report subagent refusals to the parent
