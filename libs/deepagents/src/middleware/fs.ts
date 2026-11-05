@@ -2686,6 +2686,7 @@ export function createFilesystemMiddleware(
         }
 
         let hasLargeResults = false;
+        let hasReplacedMessages = false;
         const accumulatedFiles: Record<string, FileData> = update.files
           ? { ...update.files }
           : {};
@@ -2700,6 +2701,7 @@ export function createFilesystemMiddleware(
               request.toolCall?.id,
             );
             processedMessages.push(processed.message);
+            hasReplacedMessages ||= processed.message !== msg;
 
             if (processed.filesUpdate) {
               hasLargeResults = true;
@@ -2710,12 +2712,13 @@ export function createFilesystemMiddleware(
           }
         }
 
-        if (hasLargeResults) {
+        if (hasReplacedMessages) {
           return new Command({
+            ...result,
             update: {
               ...update,
               messages: processedMessages,
-              files: accumulatedFiles,
+              ...(hasLargeResults ? { files: accumulatedFiles } : {}),
             },
           });
         }
