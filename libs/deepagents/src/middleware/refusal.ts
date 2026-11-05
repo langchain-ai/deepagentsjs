@@ -34,22 +34,29 @@ export function refusalIn(message: unknown): ContentBlock.Refusal | undefined {
 /**
  * The task result for an error caused by a refusal, or `undefined` to rethrow it.
  *
+ * Middleware wraps errors in `MiddlewareError`, so this walks the `cause` chain.
+ *
  * @param error - The error the subagent run threw.
  */
 export function refusalNoticeFor(error: unknown): string | undefined {
-  if (ModelRefusalError.isInstance(error)) {
-    return refusalNotice(
-      refusalIn(error.rawMessage) ?? {
-        type: "refusal",
-        refusal: error.message,
-      },
-    );
+  let current = error;
+  for (let depth = 0; depth < 32 && current != null; depth += 1) {
+    if (ModelRefusalError.isInstance(current)) {
+      return refusalNotice(
+        refusalIn(current.rawMessage) ?? {
+          type: "refusal",
+          refusal: current.message,
+        },
+      );
+    }
+    // `StructuredOutputParsingError` carries the reply that failed to parse.
+    if (typeof current === "object" && "aiMessage" in current) {
+      const refusal = refusalIn(
+        (current as Pick<StructuredOutputParsingError, "aiMessage">).aiMessage,
+      );
+      if (refusal) return refusalNotice(refusal);
+    }
+    current = (current as { cause?: unknown }).cause;
   }
-  // `StructuredOutputParsingError` carries the reply that failed to parse.
-  const reply =
-    typeof error === "object" && error !== null && "aiMessage" in error
-      ? (error as Pick<StructuredOutputParsingError, "aiMessage">).aiMessage
-      : undefined;
-  const refusal = refusalIn(reply);
-  return refusal ? refusalNotice(refusal) : undefined;
+  return undefined;
 }
