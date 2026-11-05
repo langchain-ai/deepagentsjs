@@ -1,6 +1,5 @@
 import {
   createMiddleware,
-  omitPayload,
   ToolMessage,
   AIMessage,
   /**
@@ -8,6 +7,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { RemoveMessage, type BaseMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 

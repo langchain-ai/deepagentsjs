@@ -35,12 +35,12 @@ import fs from "node:fs";
 import { z } from "zod";
 import {
   createMiddleware,
-  omitPayload,
   /**
    * required for type inference
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 import type { Settings } from "../config.js";
 

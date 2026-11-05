@@ -81,12 +81,12 @@
 import * as z from "zod";
 import {
   createMiddleware,
-  omitPayload,
   /**
    * required for type inference
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Client } from "@langchain/langgraph-sdk";
 import { AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";

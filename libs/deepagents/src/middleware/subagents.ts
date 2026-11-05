@@ -2,7 +2,6 @@ import { z } from "zod/v4";
 
 import {
   createMiddleware,
-  omitPayload,
   createAgent,
   AgentMiddleware,
   tool,
@@ -17,6 +16,7 @@ import {
   StructuredTool,
   context,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";

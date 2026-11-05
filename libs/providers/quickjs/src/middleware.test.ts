@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createAgent, tool } from "langchain";
 import { fakeModel } from "@langchain/core/testing";
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import * as z from "zod";
 import {
   AIMessage,
@@ -21,31 +23,31 @@ describe("createCodeInterpreterMiddleware", () => {
     ReplSession.clearCache();
   });
 
-  it("omits conversation inputs from the cleanup span while preserving model output", async () => {
+  it("omits conversation inputs from the cleanup run sent to LangSmith", async () => {
+    const client = { createRun: vi.fn(), updateRun: vi.fn() };
+    const tracer = new LangChainTracer({
+      client: client as unknown as LangChainTracer["client"],
+    });
     const agent = createAgent({
       model: fakeModel().respond(new AIMessage("Done")),
       middleware: [createCodeInterpreterMiddleware()],
     });
-    const events = [];
-    for await (const event of agent.streamEvents(
+
+    const result = await agent.invoke(
       {
         messages: [
           new HumanMessage("Long conversation context. ".repeat(1024)),
         ],
       },
-      { version: "v2" },
-    )) {
-      events.push(event);
-    }
-
-    const cleanup = events.find(
-      (event) =>
-        event.name === "CodeInterpreterMiddleware.after_agent" &&
-        event.event === "on_chain_start",
+      { callbacks: [tracer] },
     );
-    expect(cleanup?.data.input).toEqual({});
-    const model = events.find((event) => event.event === "on_chat_model_end");
-    expect(JSON.stringify(model?.data.output)).toContain("Done");
+    await awaitAllCallbacks();
+
+    expect(result.messages.at(-1)?.content).toBe("Done");
+    const cleanup = client.createRun.mock.calls
+      .map(([run]) => run)
+      .find((run) => run.name === "CodeInterpreterMiddleware.after_agent");
+    expect(cleanup?.inputs).toEqual({});
   });
 
   describe("tool registration", () => {

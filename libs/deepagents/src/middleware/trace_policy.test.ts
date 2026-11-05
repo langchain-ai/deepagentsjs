@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { fakeModel } from "@langchain/core/testing";
 import { FakeStreamingChatModel } from "@langchain/core/utils/testing";
-import { BaseTracer, type Run } from "@langchain/core/tracers/base";
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { createAgent, createMiddleware, tool } from "langchain";
 import { z } from "zod/v4";
@@ -11,21 +12,25 @@ import { createFileData } from "../backends/utils.js";
 import { createFilesystemMiddleware } from "./fs.js";
 import { createPatchToolCallsMiddleware } from "./patch_tool_calls.js";
 
-class RecordingTracer extends BaseTracer {
-  name = "recording_tracer";
-  roots: Run[] = [];
+// oxlint-disable-next-line typescript/no-explicit-any
+type SentRun = Record<string, any>;
 
-  protected async persistRun(run: Run): Promise<void> {
-    this.roots.push(run);
-  }
-
-  get runs(): Run[] {
-    const flatten = (run: Run): Run[] => [
-      run,
-      ...run.child_runs.flatMap(flatten),
-    ];
-    return this.roots.flatMap(flatten);
-  }
+/** A LangChainTracer whose client records what it would send to LangSmith. */
+function recordingTracer() {
+  const sent = new Map<string, SentRun>();
+  const client = {
+    createRun: async (run: SentRun) => {
+      sent.set(run.id, { ...run });
+    },
+    updateRun: async (id: string, run: SentRun) => {
+      Object.assign(sent.get(id) ?? {}, run);
+    },
+  } as unknown as LangChainTracer["client"];
+  const tracer = new LangChainTracer({ client });
+  // Every run as sent: its create payload merged with its updates.
+  return Object.defineProperty(tracer, "runs", {
+    get: () => [...sent.values()],
+  }) as LangChainTracer & { runs: SentRun[] };
 }
 
 const LARGE_MESSAGE = "Conversation context. ".repeat(2048);
@@ -38,7 +43,7 @@ const LIFECYCLE_NAMES = [
 
 describe("middleware trace inputs", () => {
   it("omits built-in state payloads while retaining user middleware and model/tool traces", async () => {
-    const tracer = new RecordingTracer();
+    const tracer = recordingTracer();
     const userMiddleware = createMiddleware({
       name: "UserMiddleware",
       beforeModel: () => undefined,
@@ -73,6 +78,7 @@ describe("middleware trace inputs", () => {
       },
       { callbacks: [tracer] },
     );
+    await awaitAllCallbacks();
 
     expect(result.messages[0].content).toBe(LARGE_MESSAGE);
     expect(result.messages.at(-1)?.content).toBe("Done");
@@ -109,7 +115,7 @@ describe("middleware trace inputs", () => {
       ...createFilesystemMiddleware(),
       tracePolicy: { processInputs: () => ({ recorded: "custom" }) },
     };
-    const tracer = new RecordingTracer();
+    const tracer = recordingTracer();
     await createDeepAgent({
       model: fakeModel().respond(new AIMessage("Done")),
       middleware: [replacement],
@@ -117,6 +123,7 @@ describe("middleware trace inputs", () => {
       { messages: [new HumanMessage("Hello")] },
       { callbacks: [tracer] },
     );
+    await awaitAllCallbacks();
 
     expect(
       tracer.runs.find(
@@ -130,7 +137,7 @@ describe("middleware trace inputs", () => {
     ).toEqual({});
   });
 
-  it("keeps repaired messages in lifecycle outputs and streaming events", async () => {
+  it("leaves streamEvents payloads raw", async () => {
     const agent = createAgent({
       model: new FakeStreamingChatModel({ responses: [new AIMessage("Done")] }),
       middleware: [createPatchToolCallsMiddleware()],
@@ -161,7 +168,7 @@ describe("middleware trace inputs", () => {
         event.name === "patchToolCallsMiddleware.before_agent" &&
         event.event === "on_chain_end",
     );
-    expect(start?.data.input).toEqual({});
+    expect(JSON.stringify(start?.data.input)).toContain("Hello");
     expect(JSON.stringify(end?.data.output)).toContain("unanswered");
     expect(events.some((event) => event.event === "on_chat_model_stream")).toBe(
       true,
@@ -171,7 +178,7 @@ describe("middleware trace inputs", () => {
   it.each(["fresh", "fork"] as const)(
     "applies defaults inside %s subagents",
     async (mode) => {
-      const tracer = new RecordingTracer();
+      const tracer = recordingTracer();
       const model = fakeModel()
         .respondWithTools([
           {
@@ -196,6 +203,7 @@ describe("middleware trace inputs", () => {
         { messages: [new HumanMessage("Delegate this task")] },
         { callbacks: [tracer] },
       );
+      await awaitAllCallbacks();
 
       expect(result.messages.at(-1)?.content).toBe("Parent done");
       expect(result.messages.find(ToolMessage.isInstance)?.content).toContain(

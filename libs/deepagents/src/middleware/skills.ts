@@ -45,7 +45,6 @@ import yaml from "yaml";
 import {
   context,
   createMiddleware,
-  omitPayload,
   type ModelRequest,
   type Runtime,
   /**
@@ -53,6 +52,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import type { ConfigurableModel } from "langchain/chat_models/universal";
 import {
   Command,

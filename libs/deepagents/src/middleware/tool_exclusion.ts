@@ -1,5 +1,6 @@
 import { ToolMessage } from "@langchain/core/messages";
-import { createMiddleware, omitPayload, type AgentMiddleware } from "langchain";
+import { createMiddleware, type AgentMiddleware } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 function hasToolName(tool: unknown): tool is { name: string } {
   return (

@@ -1,4 +1,5 @@
-import { createMiddleware, omitPayload, SystemMessage } from "langchain";
+import { createMiddleware, SystemMessage } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 /**
  * Import langchain for type inference

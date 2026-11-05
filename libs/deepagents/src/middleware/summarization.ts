@@ -43,7 +43,6 @@
 import { z } from "zod";
 import {
   createMiddleware,
-  omitPayload,
   countTokensApproximately,
   HumanMessage,
   AIMessage,
@@ -53,6 +52,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
   context,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import {
   addNotificationMetadata,
   getBufferString,

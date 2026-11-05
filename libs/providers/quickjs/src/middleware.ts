@@ -9,10 +9,10 @@
 
 import {
   createMiddleware,
-  omitPayload,
   tool,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY } from "deepagents";

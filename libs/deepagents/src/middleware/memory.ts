@@ -52,13 +52,13 @@ import { z } from "zod";
 import {
   context,
   createMiddleware,
-  omitPayload,
   SystemMessage,
   /**
    * required for type inference
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 import type {
   AnyBackendProtocol,

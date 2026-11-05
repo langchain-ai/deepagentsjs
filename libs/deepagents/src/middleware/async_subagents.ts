@@ -12,13 +12,13 @@ import {
 } from "@langchain/langgraph-sdk";
 import {
   createMiddleware,
-  omitPayload,
   tool,
   ToolMessage,
   SystemMessage,
   type BuiltInState,
   type ToolRuntime,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import {
   addNotificationMetadata,
   AIMessage,
