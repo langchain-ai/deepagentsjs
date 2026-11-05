@@ -14,8 +14,10 @@ import type { ChatResult } from "@langchain/core/outputs";
 import {
   createAgent,
   modelFallbackMiddleware,
+  providerStrategy,
   StructuredOutputParsingError,
 } from "langchain";
+import { z } from "zod/v4";
 import { createDeepAgent } from "../agent.js";
 import { finalContent } from "./async_subagents.js";
 import { refusalNoticeFor } from "./refusal.js";
@@ -120,6 +122,25 @@ describe("model refusals", () => {
     expect(messages.at(-1)?.text).toBe("done");
   });
 
+  it("reports a subagent refusal under native structured output", async () => {
+    const agent = createDeepAgent({
+      model: new ScriptedChatModel([taskCall("worker"), new AIMessage("done")]),
+      subagents: [
+        {
+          name: "worker",
+          description: "Does work.",
+          systemPrompt: "Work.",
+          model: new ScriptedChatModel([refusal()]),
+          responseFormat: providerStrategy(z.object({ answer: z.string() })),
+        },
+      ],
+    });
+
+    const result = await agent.invoke({ messages: [new HumanMessage("hi")] });
+    const messages = result.messages as BaseMessage[];
+    expect(messages.find(ToolMessage.isInstance)?.content).toBe(NOTICE);
+  });
+
   it("reports a refusal that ends a compiled subagent's run", async () => {
     const worker = createAgent({ model: new ScriptedChatModel([refusal()]) });
     const agent = createDeepAgent({
@@ -154,6 +175,18 @@ describe("refusalNoticeFor", () => {
       refusal(),
     );
     expect(refusalNoticeFor(error)).toBe(NOTICE);
+  });
+
+  it("finds a refusal behind wrapping middleware errors", () => {
+    const parse = new StructuredOutputParsingError(
+      "extract",
+      ["bad"],
+      refusal(),
+    );
+    const wrapped = new Error("outer", {
+      cause: new Error("inner", { cause: parse }),
+    });
+    expect(refusalNoticeFor(wrapped)).toBe(NOTICE);
   });
 
   it("returns undefined for other errors", () => {

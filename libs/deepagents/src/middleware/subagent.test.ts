@@ -2378,15 +2378,19 @@ describe("middleware override by name", () => {
       ],
     });
 
-    for (const [agentName, own] of [
-      ["main", "CustomMiddleware"],
-      ["general-purpose", "CustomMiddleware"],
-      ["helper", "SpecMiddleware"],
-    ] as const) {
+    for (const agentName of ["main", "general-purpose", "helper"]) {
       const names = getMiddlewareStack(agentName).map((entry) => entry.name);
       expect(names.filter((n) => n === "modelRefusalMiddleware")).toHaveLength(
         1,
       );
+    }
+    // The general-purpose subagent does not inherit novel custom middleware.
+    for (const [agentName, own] of [
+      ["main", "CustomMiddleware"],
+      ["helper", "SpecMiddleware"],
+    ] as const) {
+      const names = getMiddlewareStack(agentName).map((entry) => entry.name);
+      expect(names.indexOf(own)).toBeGreaterThanOrEqual(0);
       expect(names.indexOf("modelRefusalMiddleware")).toBeGreaterThan(
         names.indexOf(own),
       );
