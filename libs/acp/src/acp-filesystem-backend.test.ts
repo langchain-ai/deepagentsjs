@@ -44,24 +44,34 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const result = await backend.read(path.join(tmpDir, "local.txt"));
+      const result = await backend.read("/local.txt");
 
       expect(mockConn.readTextFile).toHaveBeenCalledTimes(1);
       expect(result.content).toBe("acp file content");
     });
 
-    it("should resolve relative paths using cwd", async () => {
+    it("should resolve virtual paths under the workspace root", async () => {
       const backend = new ACPFilesystemBackend({
         conn: mockConn,
         rootDir: tmpDir,
       });
       backend.setSessionId("sess_123");
 
-      await backend.read("local.txt");
+      await backend.read("/local.txt");
 
       const callArgs = mockConn.readTextFile.mock.calls[0][0];
-      expect(callArgs.path).toContain(tmpDir);
-      expect(callArgs.path).toContain("local.txt");
+      expect(callArgs.path).toBe(path.join(tmpDir, "local.txt"));
+    });
+
+    it("should reject paths that escape the workspace root", async () => {
+      const backend = new ACPFilesystemBackend({
+        conn: mockConn,
+        rootDir: tmpDir,
+      });
+      backend.setSessionId("sess_123");
+
+      await expect(backend.read("/../outside.txt")).rejects.toThrow();
+      expect(mockConn.readTextFile).not.toHaveBeenCalled();
     });
 
     it("should fall back to local FS when no session is set", async () => {
@@ -70,7 +80,7 @@ describe("ACPFilesystemBackend", () => {
         rootDir: tmpDir,
       });
 
-      const result = await backend.read(path.join(tmpDir, "local.txt"));
+      const result = await backend.read("/local.txt");
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(result.content).toContain("local file content");
@@ -84,7 +94,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const result = await backend.read(path.join(tmpDir, "local.txt"));
+      const result = await backend.read("/local.txt");
 
       expect(mockConn.readTextFile).toHaveBeenCalledTimes(1);
       expect(result.content).toContain("local file content");
@@ -100,7 +110,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const result = await backend.read(path.join(tmpDir, "local.txt"), 1, 2);
+      const result = await backend.read("/local.txt", 1, 2);
 
       expect(result.content).toBe("line1\nline2");
       expect(result).toMatchObject({
@@ -118,7 +128,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_abc");
 
-      await backend.read(path.join(tmpDir, "local.txt"));
+      await backend.read("/local.txt");
 
       expect(mockConn.readTextFile.mock.calls[0][0].sessionId).toBe("sess_abc");
     });
@@ -132,27 +142,23 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const result = await backend.write(
-        path.join(tmpDir, "output.txt"),
-        "new content",
-      );
+      const result = await backend.write("/output.txt", "new content");
 
       expect(mockConn.writeTextFile).toHaveBeenCalledTimes(1);
       expect(result.filesUpdate).toBeNull();
     });
 
-    it("should pass correct params to writeTextFile", async () => {
+    it("should resolve the virtual path to a real path for writeTextFile", async () => {
       const backend = new ACPFilesystemBackend({
         conn: mockConn,
         rootDir: tmpDir,
       });
       backend.setSessionId("sess_123");
 
-      const targetPath = path.join(tmpDir, "output.txt");
-      await backend.write(targetPath, "data");
+      await backend.write("/output.txt", "data");
 
       const callArgs = mockConn.writeTextFile.mock.calls[0][0];
-      expect(callArgs.path).toBe(targetPath);
+      expect(callArgs.path).toBe(path.join(tmpDir, "output.txt"));
       expect(callArgs.content).toBe("data");
     });
 
@@ -162,11 +168,12 @@ describe("ACPFilesystemBackend", () => {
         rootDir: tmpDir,
       });
 
-      const targetPath = path.join(tmpDir, "fallback-write.txt");
-      await backend.write(targetPath, "written locally");
+      await backend.write("/fallback-write.txt", "written locally");
 
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
-      expect(fs.readFileSync(targetPath, "utf-8")).toBe("written locally");
+      expect(
+        fs.readFileSync(path.join(tmpDir, "fallback-write.txt"), "utf-8"),
+      ).toBe("written locally");
     });
 
     it("should fall back to local FS when ACP write fails", async () => {
@@ -177,12 +184,16 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const targetPath = path.join(tmpDir, "fallback-err.txt");
-      const result = await backend.write(targetPath, "fallback content");
+      const result = await backend.write(
+        "/fallback-err.txt",
+        "fallback content",
+      );
 
       expect(mockConn.writeTextFile).toHaveBeenCalledTimes(1);
       expect(result).toBeDefined();
-      expect(fs.readFileSync(targetPath, "utf-8")).toBe("fallback content");
+      expect(
+        fs.readFileSync(path.join(tmpDir, "fallback-err.txt"), "utf-8"),
+      ).toBe("fallback content");
     });
   });
 
@@ -192,14 +203,13 @@ describe("ACPFilesystemBackend", () => {
         conn: mockConn,
         rootDir: tmpDir,
       });
-      const filePath = path.join(tmpDir, "local.txt");
 
       backend.setSessionId("sess_1");
-      await backend.read(filePath);
+      await backend.read("/local.txt");
       expect(mockConn.readTextFile.mock.calls[0][0].sessionId).toBe("sess_1");
 
       backend.setSessionId("sess_2");
-      await backend.read(filePath);
+      await backend.read("/local.txt");
       expect(mockConn.readTextFile.mock.calls[1][0].sessionId).toBe("sess_2");
     });
   });
@@ -212,7 +222,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const lsResult = await backend.ls(tmpDir);
+      const lsResult = await backend.ls("/");
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(mockConn.writeTextFile).not.toHaveBeenCalled();
@@ -228,7 +238,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      await backend.grep("local", tmpDir);
+      await backend.grep("local", "/");
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
     });
@@ -240,7 +250,7 @@ describe("ACPFilesystemBackend", () => {
       });
       backend.setSessionId("sess_123");
 
-      const globResult = await backend.glob("*.txt", tmpDir);
+      const globResult = await backend.glob("*.txt", "/");
 
       expect(mockConn.readTextFile).not.toHaveBeenCalled();
       expect(globResult.error).toBeUndefined();
