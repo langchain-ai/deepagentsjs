@@ -52,6 +52,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
   context,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import {
   addNotificationMetadata,
   getBufferString,
@@ -1184,6 +1185,7 @@ export function createSummarizationMiddleware(
 
   return createMiddleware({
     name: "SummarizationMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: SummarizationStateSchema,
 
     async wrapModelCall(request, handler) {

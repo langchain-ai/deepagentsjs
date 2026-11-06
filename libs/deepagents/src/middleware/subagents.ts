@@ -16,6 +16,7 @@ import {
   StructuredTool,
   context,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
@@ -509,6 +510,7 @@ function createForkTaskToolMiddleware(
 ): AgentMiddleware {
   return createMiddleware({
     name: "forkTaskToolMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: ForkedContextStateSchema,
     tools: [taskTool],
     beforeAgent: () => ({ [FORKED_CONTEXT_KEY]: true }),
@@ -1047,6 +1049,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
 
   return createMiddleware({
     name: "subAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     tools: [taskTool],
     wrapModelCall: async (request, handler) => {
       if (systemPrompt !== null) {

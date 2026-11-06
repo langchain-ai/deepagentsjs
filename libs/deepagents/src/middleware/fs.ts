@@ -16,6 +16,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
   type ToolRuntime,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import type { BaseMessage } from "@langchain/core/messages";
 import { ContextOverflowError } from "@langchain/core/errors";
 import {
@@ -2438,6 +2439,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: FilesystemStateSchema,
     tools: allTools,
     async beforeAgent(state) {
