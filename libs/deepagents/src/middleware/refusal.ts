@@ -18,9 +18,12 @@ export function refusalNotice(refusal: ContentBlock.Refusal): string {
 /**
  * The refusal block in `message`, if it is a message that refused.
  *
- * @param message - Any value; only a message can hold a refusal.
+ * @param message - The message to check. Callers often take it from an
+ *   unchecked cast, so non-messages are treated as no refusal.
  */
-export function refusalIn(message: unknown): ContentBlock.Refusal | undefined {
+export function refusalIn(
+  message: BaseMessage | undefined,
+): ContentBlock.Refusal | undefined {
   if (!BaseMessage.isInstance(message)) return undefined;
   try {
     return message.contentBlocks.find(
