@@ -2019,6 +2019,81 @@ describe("lc_agent_name propagation for subagents", () => {
   });
 });
 
+describe("lc_subagent_tool_call_id propagation for subagents", () => {
+  it("should pass each subagent the id of the task call that started it", async () => {
+    const callIdsByAgent = new Map<string, unknown>();
+    const identifyCall = tool(
+      (_input, config) => {
+        callIdsByAgent.set(
+          config.metadata?.lc_agent_name as string,
+          config.metadata?.lc_subagent_tool_call_id,
+        );
+        return "captured";
+      },
+      {
+        name: "identify_call",
+        description: "Capture lc_subagent_tool_call_id from metadata",
+        schema: z.object({}),
+      },
+    );
+    const parentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_add",
+              name: "task",
+              args: { description: "Add", subagent_type: "adder" },
+            },
+            {
+              id: "call_multiply",
+              name: "task",
+              args: { description: "Multiply", subagent_type: "multiplier" },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    const agent = createDeepAgent({
+      model: parentModel,
+      subagents: ["adder", "multiplier"].map((name) => ({
+        name,
+        description: `Does ${name} work.`,
+        runnable: createAgent({
+          model: new FakeListChatModel({
+            responses: [
+              new AIMessage({
+                content: "",
+                tool_calls: [
+                  { id: `${name}_call`, name: "identify_call", args: {} },
+                ],
+              }) as unknown as string,
+              "Subagent done",
+            ],
+          }),
+          tools: [identifyCall],
+          name,
+        }),
+      })),
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-lc-tool-call-id-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(Object.fromEntries(callIdsByAgent)).toEqual({
+      adder: "call_add",
+      multiplier: "call_multiply",
+    });
+  });
+});
+
 describe("Subagent tool inheritance", () => {
   beforeEach(() => {
     createAgentMock.mockClear();

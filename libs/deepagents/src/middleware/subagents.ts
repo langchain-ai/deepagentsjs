@@ -904,6 +904,11 @@ function createTaskTool(options: {
       metadata: {
         ...config.metadata,
         lc_agent_name: subagent_type,
+        // Traces and stream metadata carry this key; checkpointers that copy
+        // config metadata also store it, tying the subagent to its `task` call.
+        ...(config.toolCall?.id && {
+          lc_subagent_tool_call_id: config.toolCall.id,
+        }),
       },
       configurable: {
         ...config.configurable,
