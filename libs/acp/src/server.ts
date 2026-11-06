@@ -20,9 +20,13 @@ import {
   FilesystemBackend,
   type BackendProtocol,
   type BackendFactory,
+  createPatchToolCallsMiddleware,
+  getHarnessProfile,
+  type SubAgent,
 } from "deepagents";
 
 import { ACPFilesystemBackend } from "./acp-filesystem-backend.js";
+import { executePermissionKey, permissionArgumentsKey } from "./permissions.js";
 
 import {
   type BaseMessage,
@@ -140,8 +144,32 @@ export class DeepAgentsServer {
   private checkpointer: MemorySaver;
   private clientCapabilities: ACPCapabilities = {};
   private isRunning = false;
-  private currentPromptAbortController: AbortController | null = null;
   private acpBackends: Map<string, ACPFilesystemBackend> = new Map();
+  private permissionContexts = new Map<
+    string,
+    {
+      session: SessionState;
+      conn: AgentSideConnection;
+      signal: AbortSignal;
+      controller: AbortController;
+    }
+  >();
+  private executePermissions = new Map<SessionState, Set<string>>();
+  private permissionIdentities = new WeakMap<object, number>();
+  private nextPermissionIdentity = 0;
+
+  private permissionIdentity(value: unknown): unknown {
+    if (
+      (typeof value !== "object" || value === null) &&
+      typeof value !== "function"
+    )
+      return value;
+    const object = value as object;
+    if (!this.permissionIdentities.has(object)) {
+      this.permissionIdentities.set(object, ++this.nextPermissionIdentity);
+    }
+    return this.permissionIdentities.get(object);
+  }
 
   private readonly serverName: string;
   private readonly serverVersion: string;
@@ -319,6 +347,10 @@ export class DeepAgentsServer {
 
     this.isRunning = false;
     this.connection = null;
+    for (const context of this.permissionContexts.values())
+      context.controller.abort();
+    this.permissionContexts.clear();
+    this.executePermissions.clear();
     this.sessions.clear();
     this.log("Server stopped");
 
@@ -580,19 +612,25 @@ export class DeepAgentsServer {
 
     session.lastActivityAt = new Date();
 
-    // Create abort controller for cancellation
-    this.currentPromptAbortController = new AbortController();
-
-    // Extract prompt text for logging
-    const prompt = params.prompt as ContentBlock[];
-    const promptPreview = this.getPromptPreview(prompt);
-    this.log("Prompt received:", {
-      sessionId,
-      agent: session.agentName,
-      preview: promptPreview,
+    if (this.permissionContexts.has(session.threadId)) {
+      throw new Error("A prompt is already running for this session");
+    }
+    const controller = new AbortController();
+    const threadId = session.threadId;
+    this.permissionContexts.set(threadId, {
+      session,
+      conn,
+      signal: controller.signal,
+      controller,
     });
 
     try {
+      const prompt = params.prompt as ContentBlock[];
+      this.log("Prompt received:", {
+        sessionId,
+        agent: session.agentName,
+        preview: this.getPromptPreview(prompt),
+      });
       const commandResult = await this.handleSlashCommand(
         session,
         prompt,
@@ -622,7 +660,7 @@ export class DeepAgentsServer {
       this.log("Prompt error:", { sessionId, error: (error as Error).message });
       throw error;
     } finally {
-      this.currentPromptAbortController = null;
+      this.permissionContexts.delete(threadId);
     }
   }
 
@@ -644,9 +682,9 @@ export class DeepAgentsServer {
   private async handleCancel(params: CancelNotification): Promise<void> {
     this.log("Cancelling session:", params.sessionId);
 
-    if (this.currentPromptAbortController) {
-      this.currentPromptAbortController.abort();
-    }
+    const session = this.sessions.get(params.sessionId as string);
+    const context = session && this.permissionContexts.get(session.threadId);
+    context?.controller.abort();
   }
 
   /**
@@ -679,9 +717,10 @@ export class DeepAgentsServer {
     humanMessage: HumanMessage,
     conn: AgentSideConnection,
   ): Promise<StopReason> {
+    const signal = this.permissionContexts.get(session.threadId)?.signal;
     const config = {
       configurable: { thread_id: session.threadId },
-      signal: this.currentPromptAbortController?.signal,
+      signal,
     };
 
     // Track active tool calls
@@ -704,7 +743,7 @@ export class DeepAgentsServer {
       const eventKeys = Object.keys(event);
 
       // Check for cancellation
-      if (this.currentPromptAbortController?.signal.aborted) {
+      if (signal?.aborted) {
         this.log(
           "Stream cancelled, cleaning up tool calls:",
           activeToolCalls.size,
@@ -849,43 +888,6 @@ export class DeepAgentsServer {
       await this.sendToolCall(session.id, conn, toolCall);
       activeToolCalls.set(toolCall.id, toolCall);
 
-      const decision = await this.requestToolPermission(
-        session,
-        conn,
-        toolCall,
-      );
-
-      if (decision === "reject") {
-        this.log("Tool call rejected by user:", {
-          sessionId: session.id,
-          toolId: toolCall.id,
-          tool: toolCall.name,
-        });
-        toolCall.status = "failed";
-        toolCall.result = "Tool call rejected by user.";
-        await this.sendToolCallUpdate(session.id, conn, toolCall);
-        activeToolCalls.delete(toolCall.id);
-        if (this.currentPromptAbortController) {
-          this.currentPromptAbortController.abort();
-        }
-        continue;
-      }
-
-      if (decision === "cancelled") {
-        this.log("Tool call permission cancelled:", {
-          sessionId: session.id,
-          toolId: toolCall.id,
-          tool: toolCall.name,
-        });
-        toolCall.status = "cancelled";
-        await this.sendToolCallUpdate(session.id, conn, toolCall);
-        activeToolCalls.delete(toolCall.id);
-        if (this.currentPromptAbortController) {
-          this.currentPromptAbortController.abort();
-        }
-        continue;
-      }
-
       // Update to in_progress
       toolCall.status = "in_progress";
       await this.sendToolCallUpdate(session.id, conn, toolCall);
@@ -984,14 +986,78 @@ export class DeepAgentsServer {
     session: SessionState,
     conn: AgentSideConnection,
     toolCall: ToolCallInfo,
+    grantScope?: number,
   ): Promise<"allow" | "reject" | "cancelled"> {
     if (!session.permissionDecisions) {
       session.permissionDecisions = new Map();
     }
 
+    const argumentsKey =
+      toolCall.name === "execute"
+        ? executePermissionKey(toolCall.args)
+        : undefined;
+    const context = this.permissionContexts.get(session.threadId);
+    const reviewKey = permissionArgumentsKey(toolCall.args);
+    const reviewContext = JSON.stringify([
+      session.id,
+      session.threadId,
+      session.agentName,
+      session.mode,
+    ]);
+    const config = this.agentConfigs.get(session.agentName);
+    const model = config?.model;
+    const backend = config?.backend;
+    const executeKey =
+      argumentsKey === undefined
+        ? undefined
+        : JSON.stringify([
+            session.id,
+            session.threadId,
+            this.workspaceRoot,
+            session.mode ?? "agent",
+            session.agentName,
+            this.permissionIdentity(config?.model),
+            this.permissionIdentity(config?.backend),
+            grantScope,
+            argumentsKey,
+          ]);
     const cached = session.permissionDecisions.get(toolCall.name);
-    if (cached === "allow_always") return "allow";
     if (cached === "reject_always") return "reject";
+    if (toolCall.name === "execute") {
+      if (
+        executeKey !== undefined &&
+        this.executePermissions.get(session)?.has(executeKey)
+      )
+        return "allow";
+    } else if (cached === "allow_always") {
+      return "allow";
+    }
+
+    const options = [
+      {
+        optionId: "allow-once",
+        name: "Allow once",
+        kind: "allow_once" as const,
+      },
+      ...(toolCall.name !== "execute" || executeKey !== undefined
+        ? [
+            {
+              optionId: "allow-always",
+              name:
+                toolCall.name === "execute"
+                  ? "Always allow this exact command in this session"
+                  : "Always allow",
+              kind: "allow_always" as const,
+            },
+          ]
+        : []),
+      { optionId: "reject-once", name: "Reject", kind: "reject_once" as const },
+      {
+        optionId: "reject-always",
+        name: "Always reject",
+        kind: "reject_always" as const,
+      },
+    ];
 
     try {
       const result = await conn.requestPermission({
@@ -1003,28 +1069,7 @@ export class DeepAgentsServer {
           status: "pending",
           input: toolCall.args,
         },
-        options: [
-          {
-            optionId: "allow-once",
-            name: "Allow once",
-            kind: "allow_once" as const,
-          },
-          {
-            optionId: "allow-always",
-            name: "Always allow",
-            kind: "allow_always" as const,
-          },
-          {
-            optionId: "reject-once",
-            name: "Reject",
-            kind: "reject_once" as const,
-          },
-          {
-            optionId: "reject-always",
-            name: "Always reject",
-            kind: "reject_always" as const,
-          },
-        ],
+        options,
       } as any);
 
       const outcome = result?.outcome as
@@ -1034,9 +1079,43 @@ export class DeepAgentsServer {
         return "cancelled";
       }
 
+      if (
+        context &&
+        (context.signal.aborted ||
+          this.permissionContexts.get(session.threadId) !== context)
+      )
+        return "cancelled";
+      if (
+        reviewKey !== permissionArgumentsKey(toolCall.args) ||
+        reviewContext !==
+          JSON.stringify([
+            session.id,
+            session.threadId,
+            session.agentName,
+            session.mode,
+          ]) ||
+        model !== config?.model ||
+        backend !== config?.backend
+      )
+        return "reject";
       const optionId = outcome.optionId;
+      if (
+        outcome.outcome !== "selected" ||
+        !options.some((option) => option.optionId === optionId)
+      ) {
+        return "reject";
+      }
       if (optionId === "allow-always") {
-        session.permissionDecisions.set(toolCall.name, "allow_always");
+        if (toolCall.name === "execute" && executeKey !== undefined) {
+          let permissions = this.executePermissions.get(session);
+          if (!permissions) {
+            permissions = new Set();
+            this.executePermissions.set(session, permissions);
+          }
+          permissions.add(executeKey);
+        } else if (toolCall.name !== "execute") {
+          session.permissionDecisions.set(toolCall.name, "allow_always");
+        }
         return "allow";
       }
       if (optionId === "reject-always") {
@@ -1046,10 +1125,10 @@ export class DeepAgentsServer {
       if (optionId === "reject-once") {
         return "reject";
       }
-      return "allow";
+      return optionId === "allow-once" ? "allow" : "reject";
     } catch (err) {
       this.log("Permission request failed:", err);
-      return "allow";
+      return "reject";
     }
   }
 
@@ -1299,9 +1378,98 @@ export class DeepAgentsServer {
     } as SessionNotification);
   }
 
-  /**
-   * Create a DeepAgent instance for the given configuration
-   */
+  private permissionMiddleware(
+    model: DeepAgentConfig["model"] | SubAgent["model"],
+    middleware: NonNullable<DeepAgentConfig["middleware"]> = [],
+  ): NonNullable<DeepAgentConfig["middleware"]> {
+    let profile = getHarnessProfile(
+      typeof model === "string" ? model : "anthropic:claude-sonnet-4-6",
+    );
+    if (model && typeof model !== "string") {
+      const metadata = model as unknown as {
+        getName(): string;
+        _defaultConfig?: { modelProvider?: string; model?: string };
+        model_name?: string;
+        modelName?: string;
+      };
+      const providers: Record<string, string> = {
+        ChatAnthropic: "anthropic",
+        ChatOpenAI: "openai",
+        ChatGoogleGenerativeAI: "google",
+      };
+      const defaults =
+        metadata.getName() === "ConfigurableModel"
+          ? metadata._defaultConfig
+          : undefined;
+      const provider = defaults?.modelProvider ?? providers[metadata.getName()];
+      const identifier =
+        defaults?.model ?? metadata.model_name ?? metadata.modelName;
+      profile =
+        provider && identifier && !identifier.includes(":")
+          ? getHarnessProfile(`${provider}:${identifier}`)
+          : undefined;
+      profile ??= identifier?.includes(":")
+        ? getHarnessProfile(identifier)
+        : undefined;
+      profile ??= provider ? getHarnessProfile(provider) : undefined;
+    }
+    if (profile?.excludedMiddleware.has("patchToolCallsMiddleware")) {
+      throw new Error(
+        "ACP permissions require patchToolCallsMiddleware in the model profile",
+      );
+    }
+    const original =
+      middleware.find((entry) => entry.name === "patchToolCallsMiddleware") ??
+      createPatchToolCallsMiddleware();
+    const grantScope = ++this.nextPermissionIdentity;
+    const gate: NonNullable<DeepAgentConfig["middleware"]>[number] = {
+      ...original,
+      wrapToolCall: async (request, handler) => {
+        const threadId = request.runtime.configurable?.thread_id;
+        const context =
+          typeof threadId === "string"
+            ? this.permissionContexts.get(threadId)
+            : undefined;
+        const toolCall: ToolCallInfo = {
+          id: request.toolCall.id ?? "",
+          name: request.toolCall.name,
+          args: request.toolCall.args,
+          status: "pending",
+        };
+        const key = permissionArgumentsKey(toolCall.args);
+        const mode = context?.session.mode;
+        const decision =
+          context && !context.signal.aborted && key !== undefined
+            ? await this.requestToolPermission(
+                context.session,
+                context.conn,
+                toolCall,
+                grantScope,
+              )
+            : "reject";
+        if (
+          decision !== "allow" ||
+          !context ||
+          context.signal.aborted ||
+          context.session.mode !== mode ||
+          this.permissionContexts.get(threadId as string) !== context ||
+          key !== permissionArgumentsKey(request.toolCall.args)
+        ) {
+          return new ToolMessage({
+            content: "Tool permission denied or cancelled.",
+            name: toolCall.name,
+            tool_call_id: toolCall.id,
+            status: "error",
+          }) as unknown as Awaited<ReturnType<typeof handler>>;
+        }
+        return original.wrapToolCall
+          ? original.wrapToolCall(request, handler)
+          : handler(request);
+      },
+    };
+    return [...middleware.filter((entry) => entry.name !== gate.name), gate];
+  }
+
   private createAgent(agentName: string): void {
     const config = this.agentConfigs.get(agentName);
 
@@ -1322,12 +1490,30 @@ export class DeepAgentsServer {
     // Create backend - prefer ACP filesystem if client supports it
     const backend = this.createBackend(config);
 
+    const middleware = this.permissionMiddleware(
+      config.model,
+      config.middleware,
+    );
+    const subagents = config.subagents?.map((subagent) => {
+      if ("runnable" in subagent || "graphId" in subagent) {
+        throw new Error(
+          "ACP permissions cannot enforce opaque compiled or remote subagents",
+        );
+      }
+      return {
+        ...subagent,
+        middleware: this.permissionMiddleware(
+          subagent.model ?? config.model,
+          subagent.middleware,
+        ),
+      } as SubAgent;
+    });
     const agent = createDeepAgent({
       model: config.model,
       tools: config.tools,
       systemPrompt: config.systemPrompt,
-      middleware: config.middleware,
-      subagents: config.subagents,
+      middleware,
+      subagents,
       responseFormat: config.responseFormat,
       contextSchema: config.contextSchema as InteropZodObject | undefined,
       interruptOn: config.interruptOn,
