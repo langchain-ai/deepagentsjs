@@ -1,5 +1,13 @@
 # deepagents
 
+## 1.16.4
+
+### Patch Changes
+
+- [#1024](https://github.com/langchain-ai/deepagentsjs/pull/1024) [`ea67c7e`](https://github.com/langchain-ai/deepagentsjs/commit/ea67c7ec9d3d4fa1fa074220339325cd9a82b1d1) Thanks [@sera-wi](https://github.com/sera-wi)! - feat(deepagents): pass the `task` call id to subagents as `lc_subagent_tool_call_id`
+  
+  The `task` tool adds `lc_subagent_tool_call_id` to the subagent's config metadata, so traces, stream events and checkpointers that copy config metadata can tie a subagent back to the call that started it.
+
 ## 1.16.3
 
 ### Patch Changes
