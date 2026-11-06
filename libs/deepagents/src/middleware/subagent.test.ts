@@ -13,12 +13,20 @@ import { FakeListChatModel } from "@langchain/core/utils/testing";
 import {
   createAgent,
   createMiddleware,
+  fakeModel,
   modelCallLimitMiddleware,
   todoListMiddleware,
   tool,
   toolCallLimitMiddleware,
+  toolRetryMiddleware,
   type AgentMiddleware,
 } from "langchain";
+import {
+  END,
+  MessagesAnnotation,
+  START,
+  StateGraph,
+} from "@langchain/langgraph";
 import {
   AIMessage,
   BaseMessage,
@@ -1062,7 +1070,6 @@ describe("SubAgent mode: fork", () => {
   });
 
   it("should fork message history into a CompiledSubAgent without throwing or touching its system prompt", async () => {
-    let capturedMessages: BaseMessage[] | undefined;
     const compiledWorkerModel = new FakeListChatModel({
       responses: ["Worker done"],
     });
@@ -1070,11 +1077,6 @@ describe("SubAgent mode: fork", () => {
       model: compiledWorkerModel,
       systemPrompt: "You are a compiled worker.",
     });
-    const originalInvoke = compiledWorker.invoke.bind(compiledWorker);
-    compiledWorker.invoke = (async (state: any, config: any) => {
-      capturedMessages = state.messages;
-      return originalInvoke(state, config);
-    }) as typeof compiledWorker.invoke;
 
     const model = new FakeListChatModel({
       responses: [
@@ -1132,8 +1134,9 @@ describe("SubAgent mode: fork", () => {
       },
     );
 
-    expect(capturedMessages).toBeDefined();
-    const text = capturedMessages!
+    const workerCall = findCallContaining(invokeSpy, "UNIQUE_TASK_MARKER");
+    expect(workerCall).toBeDefined();
+    const text = workerCall!
       .map((m) => (typeof m.content === "string" ? m.content : ""))
       .join("\n");
     expect(text).toContain("BANANA42");
@@ -1599,6 +1602,307 @@ describe("Subagent content block filtering", () => {
     ) as ToolMessage;
     expect(taskToolMessage).toBeDefined();
     expect(taskToolMessage.content).toBe("Simple string result");
+  });
+});
+
+describe("Subagent checkpoint namespace", () => {
+  // A parent model that hands "Do task" to `subagentType` once, then finishes.
+  const delegateOnce = (subagentType = "worker") =>
+    fakeModel()
+      .respond(
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_task",
+              name: "task",
+              args: { description: "Do task", subagent_type: subagentType },
+            },
+          ],
+        }),
+      )
+      .respond(new AIMessage("Done."));
+
+  // The message contents in the latest checkpoint under `checkpointNs`.
+  const messagesSavedUnder = async (
+    checkpointer: MemorySaver,
+    threadId: string,
+    checkpointNs: string,
+  ) => {
+    const saved = await checkpointer.getTuple({
+      configurable: { thread_id: threadId, checkpoint_ns: checkpointNs },
+    });
+    const messages = saved?.checkpoint.channel_values.messages as
+      | BaseMessage[]
+      | undefined;
+    return messages?.map((message) => message.content);
+  };
+
+  it("records the namespace holding the subagent's checkpoints on the task tool message", async () => {
+    const subagentContent = "SUBAGENT_RESPONSE";
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_worker",
+              name: "task",
+              args: { description: "Do task", subagent_type: "worker" },
+            },
+          ],
+        }) as unknown as string,
+        "Done.",
+      ],
+    });
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "Does work.",
+          runnable: createAgent({
+            model: new FakeListChatModel({ responses: [subagentContent] }),
+            name: "worker",
+          }),
+        },
+      ],
+    });
+    const threadId = "subagent-checkpoint-namespace";
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe(subagentContent);
+    const subagentNamespace = toolMessage?.artifact?.checkpoint_ns;
+    expect(subagentNamespace).toMatch(/^tools:/);
+
+    // Read the checkpointer directly: whether `agent.getState` can read a
+    // namespace with no declared subgraph depends on the langgraph release.
+    const subagentCheckpoint = await checkpointer.getTuple({
+      configurable: { thread_id: threadId, checkpoint_ns: subagentNamespace },
+    });
+    const subagentMessages = subagentCheckpoint?.checkpoint.channel_values
+      .messages as BaseMessage[];
+    expect(subagentMessages.map((message) => message.content)).toEqual([
+      "Do task",
+      subagentContent,
+    ]);
+  });
+
+  it("records the full namespace, with the parent's segments, for a task call inside a subagent", async () => {
+    // `fakeModel` replies with real AIMessages, which the checkpointer can
+    // store; the nested deep agent's tool call is read back from its history.
+    const taskCall = (id: string, subagentType: string) =>
+      new AIMessage({
+        content: "",
+        tool_calls: [
+          {
+            id,
+            name: "task",
+            args: {
+              description: `Run ${subagentType}`,
+              subagent_type: subagentType,
+            },
+          },
+        ],
+      });
+    const inner = createDeepAgent({
+      model: fakeModel()
+        .respond(taskCall("call_worker", "worker"))
+        .respond(new AIMessage("INNER_DONE")),
+      subagents: [
+        {
+          name: "worker",
+          description: "Does work.",
+          runnable: createAgent({
+            model: fakeModel().respond(new AIMessage("WORKER_DONE")),
+            name: "worker",
+          }),
+        },
+      ],
+    });
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: fakeModel()
+        .respond(taskCall("call_inner", "inner"))
+        .respond(new AIMessage("Done.")),
+      checkpointer,
+      subagents: [
+        {
+          name: "inner",
+          description: "Delegates to the worker.",
+          runnable: inner,
+        },
+      ],
+    });
+    const threadId = "nested-subagent-checkpoint-namespace";
+    const readMessages = async (checkpointNs: string) => {
+      const saved = await checkpointer.getTuple({
+        configurable: { thread_id: threadId, checkpoint_ns: checkpointNs },
+      });
+      return saved?.checkpoint.channel_values.messages as BaseMessage[];
+    };
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const outerNamespace = result.messages.find(ToolMessage.isInstance)
+      ?.artifact?.checkpoint_ns;
+    expect(outerNamespace).toMatch(/^tools:/);
+    const innerToolMessage = (await readMessages(outerNamespace)).find(
+      ToolMessage.isInstance,
+    );
+    const innerNamespace = innerToolMessage?.artifact?.checkpoint_ns;
+    expect(innerNamespace?.split("|")).toEqual([
+      outerNamespace,
+      expect.stringMatching(/^tools:/),
+    ]);
+
+    const workerMessages = await readMessages(innerNamespace);
+    expect(workerMessages.map((message) => message.content)).toEqual([
+      "Run worker",
+      "WORKER_DONE",
+    ]);
+  });
+
+  it("records the namespace of the run that finished when the task call is retried", async () => {
+    // LangGraph saves a second subagent run in the same step under
+    // `<namespace>|1`.
+    let runs = 0;
+    const flaky = new StateGraph(MessagesAnnotation)
+      .addNode("work", () => {
+        runs += 1;
+        if (runs === 1) throw new Error("first run fails");
+        return { messages: [new AIMessage("SUBAGENT_RESPONSE")] };
+      })
+      .addEdge(START, "work")
+      .addEdge("work", END)
+      .compile();
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer,
+      middleware: [
+        toolRetryMiddleware({
+          maxRetries: 1,
+          initialDelayMs: 0,
+          jitter: false,
+        }),
+      ],
+      subagents: [
+        { name: "worker", description: "Fails once.", runnable: flaky },
+      ],
+    });
+    const threadId = "retried-subagent-checkpoint-namespace";
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("SUBAGENT_RESPONSE");
+    expect(
+      await messagesSavedUnder(
+        checkpointer,
+        threadId,
+        toolMessage?.artifact?.checkpoint_ns,
+      ),
+    ).toEqual(["Do task", "SUBAGENT_RESPONSE"]);
+  });
+
+  it("records the namespace of a subagent compiled with checkpointer: true, which drops task ids", async () => {
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "Remembers its calls.",
+          runnable: createAgent({
+            model: fakeModel().respond(new AIMessage("SUBAGENT_RESPONSE")),
+            name: "worker",
+            checkpointer: true,
+          }),
+        },
+      ],
+    });
+    const threadId = "per-thread-subagent-checkpoint-namespace";
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(
+      await messagesSavedUnder(
+        checkpointer,
+        threadId,
+        toolMessage?.artifact?.checkpoint_ns,
+      ),
+    ).toEqual(["Do task", "SUBAGENT_RESPONSE"]);
+  });
+
+  it("records no namespace for a subagent compiled with checkpointer: false, which saves nothing", async () => {
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "worker",
+          description: "Keeps no history.",
+          runnable: createAgent({
+            model: fakeModel().respond(new AIMessage("SUBAGENT_RESPONSE")),
+            name: "worker",
+            checkpointer: false,
+          }),
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: "stateless-subagent" } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("SUBAGENT_RESPONSE");
+    expect(toolMessage?.artifact).toBeUndefined();
+  });
+
+  it("records the task call's own namespace for a subagent that is not a graph", async () => {
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "worker",
+          description: "A plain runnable.",
+          runnable: RunnableLambda.from(async () => ({
+            messages: [new AIMessage("SUBAGENT_RESPONSE")],
+          })),
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: "runnable-subagent" } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("SUBAGENT_RESPONSE");
+    expect(toolMessage?.artifact?.checkpoint_ns).toMatch(/^tools:/);
   });
 });
 
