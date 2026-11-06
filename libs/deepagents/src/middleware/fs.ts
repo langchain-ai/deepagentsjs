@@ -16,6 +16,7 @@ import {
   type AgentMiddleware as _AgentMiddleware,
   type ToolRuntime,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import type { BaseMessage } from "@langchain/core/messages";
 import { ContextOverflowError } from "@langchain/core/errors";
 import {
@@ -371,6 +372,32 @@ export const GREP_TRUNCATION_NOTE =
   "Note: the search stopped early because it hit the maximum match count. " +
   "The matches above are valid but incomplete. Narrow the search (a more " +
   "specific pattern or a narrower path), or raise max_count, to see the rest.";
+
+/**
+ * Characters of a grep line shown to the model. Longer lines (minified JSON,
+ * offloaded tool results) show a window around the match instead, so one hit
+ * can't return the whole line.
+ */
+export const GREP_LINE_CHAR_LIMIT = 2000;
+
+/**
+ * Clip `text` to a `GREP_LINE_CHAR_LIMIT` window centered on `pattern`,
+ * falling back to the head of the line when `pattern` isn't found in it.
+ */
+function clipGrepLine(text: string, pattern: string): string {
+  if (text.length <= GREP_LINE_CHAR_LIMIT) return text;
+  const center =
+    Math.max(text.indexOf(pattern), 0) + Math.floor(pattern.length / 2);
+  const start = Math.min(
+    Math.max(center - GREP_LINE_CHAR_LIMIT / 2, 0),
+    text.length - GREP_LINE_CHAR_LIMIT,
+  );
+  const end = start + GREP_LINE_CHAR_LIMIT;
+  const before = start > 0 ? `[${start} chars clipped] ` : "";
+  const after =
+    end < text.length ? ` [${text.length - end} chars clipped]` : "";
+  return `${before}${text.slice(start, end)}${after}`;
+}
 
 /**
  * Default cap on the number of matches the grep tool returns.
@@ -1845,7 +1872,10 @@ function createGrepTool(
         return `No matches found for pattern '${pattern}'`;
       }
 
-      const formatted = formatGrepMatches(matches, output_mode);
+      const formatted = formatGrepMatches(
+        matches.map((m) => ({ ...m, text: clipGrepLine(m.text, pattern) })),
+        output_mode,
+      );
       const truncated = truncateIfTooLong(formatted);
       let content =
         typeof truncated === "string" ? truncated : truncated.join("\n");
@@ -2409,6 +2439,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: FilesystemStateSchema,
     tools: allTools,
     async beforeAgent(state) {

@@ -12,6 +12,7 @@ import {
   tool,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY } from "deepagents";
@@ -541,6 +542,7 @@ export function createCodeInterpreterMiddleware(
 
   return createMiddleware({
     name: "CodeInterpreterMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     tools: [evalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];

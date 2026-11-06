@@ -18,6 +18,7 @@ import {
   type BuiltInState,
   type ToolRuntime,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import {
   addNotificationMetadata,
   AIMessage,
@@ -1946,6 +1947,7 @@ export function createAsyncSubAgentMiddleware(
 
   return createMiddleware({
     name: "asyncSubAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: AsyncTaskStateSchema,
     tools,
     beforeAgent: async (state) => {
