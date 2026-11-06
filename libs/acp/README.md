@@ -41,7 +41,7 @@ npx deepagents-acp --name my-agent --debug
 # Full options
 npx deepagents-acp \
   --name coding-assistant \
-  --model claude-sonnet-4-5-20250929 \
+  --model claude-sonnet-4-6 \
   --workspace /path/to/project \
   --skills ./skills,~/.deepagents/skills \
   --debug
@@ -53,7 +53,7 @@ npx deepagents-acp \
 | ---------------------- | ----- | ------------------------------------------------- |
 | `--name <name>`        | `-n`  | Agent name (default: "deepagents")                |
 | `--description <desc>` | `-d`  | Agent description                                 |
-| `--model <model>`      | `-m`  | LLM model (default: "claude-sonnet-4-5-20250929") |
+| `--model <model>`      | `-m`  | LLM model (default: "claude-sonnet-4-6") |
 | `--workspace <path>`   | `-w`  | Workspace root directory (default: cwd)           |
 | `--skills <paths>`     | `-s`  | Comma-separated skill paths                       |
 | `--memory <paths>`     |       | Comma-separated AGENTS.md paths                   |
@@ -96,14 +96,14 @@ const server = new DeepAgentsServer({
     {
       name: "code-agent",
       description: "Full-featured coding assistant",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       skills: ["./skills/"],
       memory: ["./.deepagents/AGENTS.md"],
     },
     {
       name: "reviewer",
       description: "Code review specialist",
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
       systemPrompt: "You are a code review expert...",
     },
   ],
@@ -238,7 +238,7 @@ const server = new DeepAgentsServer(options);
 | -------------- | ---------------------------------------------- | ------------------------------------------------- |
 | `name`         | `string`                                       | Unique agent name (required)                      |
 | `description`  | `string`                                       | Agent description                                 |
-| `model`        | `string`                                       | LLM model (default: "claude-sonnet-4-5-20250929") |
+| `model`        | `string`                                       | LLM model (default: "claude-sonnet-4-6") |
 | `tools`        | `StructuredTool[]`                             | Custom tools                                      |
 | `systemPrompt` | `string`                                       | Custom system prompt                              |
 | `middleware`   | `AgentMiddleware[]`                            | Custom middleware                                 |
