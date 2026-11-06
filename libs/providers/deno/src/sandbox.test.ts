@@ -27,7 +27,7 @@ const mockState = {
 interface MockSandboxType {
   id: string;
   status: string;
-  files: Map<string, string>;
+  files: Map<string, Uint8Array>;
   nextCommandResult: {
     stdoutText: string;
     stderrText: string;
@@ -40,20 +40,24 @@ interface MockSandboxType {
     stderrText: string,
     code: number,
   ) => void;
-  addFile: (path: string, content: string) => void;
+  addFile: (path: string, content: string | Uint8Array) => void;
   spawn: (
     cmd: string,
     options: { args: string[]; stdout: string; stderr: string },
   ) => Promise<{
     output: () => Promise<{
       status: { success: boolean; code: number };
+      stdout: Uint8Array;
       stdoutText: string;
       stderrText: string;
     }>;
     status: Promise<{ success: boolean; code: number }>;
   }>;
   sh: ReturnType<typeof createMockSh>;
-  writeTextFile: (path: string, content: string) => Promise<void>;
+  fs: {
+    writeTextFile: (path: string, content: string) => Promise<void>;
+    writeFile: (path: string, content: Uint8Array) => Promise<void>;
+  };
   close: () => Promise<void>;
   kill: () => Promise<void>;
 }
@@ -76,7 +80,7 @@ function createMockSh(instance: MockSandboxType) {
           if (content !== undefined) {
             return {
               status: { success: true, code: 0 },
-              stdoutText: content,
+              stdoutText: new TextDecoder().decode(content),
               stderrText: "",
             };
           } else {
@@ -118,7 +122,8 @@ vi.mock("@deno/sandbox", () => {
     status: string = "running";
 
     // Mock file storage
-    files: Map<string, string> = new Map();
+    // Files are kept as bytes, like the real sandbox, so binary content survives.
+    files: Map<string, Uint8Array> = new Map();
 
     // Command execution configuration
     nextCommandResult: {
@@ -153,8 +158,13 @@ vi.mock("@deno/sandbox", () => {
     }
 
     // Add file to mock filesystem
-    addFile(path: string, content: string) {
-      this.files.set(path, content);
+    addFile(path: string, content: string | Uint8Array) {
+      this.files.set(
+        path,
+        typeof content === "string"
+          ? new TextEncoder().encode(content)
+          : content,
+      );
     }
 
     // SDK methods
@@ -164,6 +174,7 @@ vi.mock("@deno/sandbox", () => {
     ): Promise<{
       output: () => Promise<{
         status: { success: boolean; code: number };
+        stdout: Uint8Array;
         stdoutText: string;
         stderrText: string;
       }>;
@@ -177,7 +188,9 @@ vi.mock("@deno/sandbox", () => {
           return {
             output: async () => ({
               status: { success: true, code: 0 },
-              stdoutText: content,
+              stdout: content.slice(),
+              // Lossy for non-UTF-8 bytes, like the SDK's text view.
+              stdoutText: new TextDecoder().decode(content),
               stderrText: "",
             }),
             status: Promise.resolve({ success: true, code: 0 }),
@@ -187,6 +200,7 @@ vi.mock("@deno/sandbox", () => {
         return {
           output: async () => ({
             status: { success: false, code: 1 },
+            stdout: new Uint8Array(),
             stdoutText: "",
             stderrText: "cat: file not found",
           }),
@@ -198,6 +212,7 @@ vi.mock("@deno/sandbox", () => {
         return {
           output: async () => ({
             status: { success: true, code: 0 },
+            stdout: new Uint8Array(),
             stdoutText: "",
             stderrText: "",
           }),
@@ -211,6 +226,7 @@ vi.mock("@deno/sandbox", () => {
       return {
         output: async () => ({
           status: result.status,
+          stdout: new TextEncoder().encode(result.stdoutText),
           stdoutText: result.stdoutText,
           stderrText: result.stderrText,
         }),
@@ -218,12 +234,21 @@ vi.mock("@deno/sandbox", () => {
       };
     }
 
-    async writeTextFile(path: string, content: string): Promise<void> {
-      if (this.shouldFailWriteFile) {
-        throw new Error("Write operation failed: permission denied");
-      }
-      this.files.set(path, content);
-    }
+    // The SDK exposes file writes under `sandbox.fs`.
+    fs = {
+      writeTextFile: async (path: string, content: string): Promise<void> => {
+        if (this.shouldFailWriteFile) {
+          throw new Error("Write operation failed: permission denied");
+        }
+        this.files.set(path, new TextEncoder().encode(content));
+      },
+      writeFile: async (path: string, content: Uint8Array): Promise<void> => {
+        if (this.shouldFailWriteFile) {
+          throw new Error("Write operation failed: permission denied");
+        }
+        this.files.set(path, content.slice());
+      },
+    };
 
     async close(): Promise<void> {
       this.status = "closed";
@@ -491,17 +516,27 @@ describe("DenoSandbox", () => {
   // ==========================================================================
 
   describe("uploadFiles", () => {
-    it("should write text content to sandbox", async () => {
+    it("should write the file bytes to the sandbox", async () => {
       const sandbox = await DenoSandbox.create();
-      const writeFileSpy = vi.spyOn(
-        mockState.sandboxInstance!,
-        "writeTextFile",
-      );
+      const writeFileSpy = vi.spyOn(mockState.sandboxInstance!.fs, "writeFile");
 
       const content = new TextEncoder().encode("file content");
       await sandbox.uploadFiles([["test.txt", content]]);
 
-      expect(writeFileSpy).toHaveBeenCalledWith("test.txt", "file content");
+      expect(writeFileSpy).toHaveBeenCalledWith("test.txt", content);
+    });
+
+    it("should not alter bytes that are not valid UTF-8", async () => {
+      const sandbox = await DenoSandbox.create();
+      // A PNG signature plus bytes that no UTF-8 sequence can start with.
+      const binary = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0xc3,
+      ]);
+
+      const results = await sandbox.uploadFiles([["image.png", binary]]);
+
+      expect(results[0].error).toBeNull();
+      expect(mockState.sandboxInstance!.files.get("image.png")).toEqual(binary);
     });
 
     it("should create parent directories without shell interpretation", async () => {
@@ -569,6 +604,19 @@ describe("DenoSandbox", () => {
 
       const content = new TextDecoder().decode(results[0].content!);
       expect(content).toBe("file content");
+    });
+
+    it("should return binary content byte for byte", async () => {
+      const sandbox = await DenoSandbox.create();
+      const binary = new Uint8Array([
+        0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0xc3,
+      ]);
+      mockState.sandboxInstance!.addFile("image.png", binary);
+
+      const results = await sandbox.downloadFiles(["image.png"]);
+
+      expect(results[0].error).toBeNull();
+      expect(results[0].content).toEqual(binary);
     });
 
     it("should read files without shell interpretation", async () => {
