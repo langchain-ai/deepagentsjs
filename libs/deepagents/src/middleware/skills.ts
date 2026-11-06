@@ -92,7 +92,8 @@ import { filesValue } from "../values.js";
 import { adaptBackendProtocol } from "../backends/utils.js";
 import { ConfigurationError } from "../errors.js";
 import { getModelProvider } from "../utils.js";
-import { DEFAULT_READ_LINE_LIMIT } from "./fs.js";
+import { checkPermission, DEFAULT_READ_LINE_LIMIT } from "./fs.js";
+import type { FilesystemPermission } from "../permissions/types.js";
 // Security: Maximum size for SKILL.md files to prevent DoS attacks (10MB)
 export const MAX_SKILL_FILE_SIZE = 10 * 1024 * 1024;
 
@@ -275,6 +276,13 @@ export interface SkillsMiddlewareOptions<TContext = unknown> {
    * ```
    */
   sources: readonly string[];
+
+  /**
+   * Filesystem permission rules that pinned skill reads must pass, the same
+   * rules `read_file` enforces. `createDeepAgent` passes the agent's (or
+   * subagent's) `permissions`.
+   */
+  permissions?: FilesystemPermission[];
 
   /**
    * Tools the model sees only after a skill that lists them in its `SKILL.md`
@@ -837,13 +845,17 @@ async function loadSkills(
 /**
  * Return a message pinning each skill `names` refers to, in first-seen order.
  *
- * Skips a name that isn't in `skills`, and a skill whose `SKILL.md` is
- * missing, unreadable, empty, or larger than {@link MAX_SKILL_FILE_SIZE}.
+ * `skills` comes from state, which a caller can set in the run's input, so
+ * each `SKILL.md` is read only if `permissions` allow it and is pinned only if
+ * it parses as the skill it claims to be. Skips a name that isn't in
+ * `skills`, and a skill whose path isn't a `SKILL.md`, is denied, missing,
+ * unreadable, or doesn't parse with the same `name`.
  */
 async function buildPinnedSkillMessages(
   backend: AnyBackendProtocol,
   names: readonly string[],
   skills: readonly SkillMetadata[],
+  permissions: FilesystemPermission[],
 ): Promise<HumanMessage[]> {
   const adaptedBackend = adaptBackendProtocol(backend);
   const skillsByName = new Map(skills.map((skill) => [skill.name, skill]));
@@ -852,17 +864,34 @@ async function buildPinnedSkillMessages(
     const skill = skillsByName.get(name);
     return skill === undefined ? [] : [skill];
   });
+  const readSkill = async (skill: SkillMetadata): Promise<string | null> => {
+    const segments = skill.path.split(/[/\\]/);
+    if (segments.at(-1) !== "SKILL.md") return null;
+    const access = await checkPermission(
+      adaptedBackend,
+      permissions,
+      "read",
+      skill.path,
+    );
+    if (access.error !== undefined) return null;
+    const content = await readFileFromBackend(adaptedBackend, access.path);
+    if (content === null) return null;
+    const parsed = parseSkillMetadataFromContent(
+      content,
+      skill.path,
+      segments.at(-2) ?? "",
+    );
+    return parsed?.name === skill.name ? content : null;
+  };
   // A backend that throws rather than returning an error is skipped too, so a
   // failed read never fails the run and leaves the pin pending.
   const contents = await Promise.all(
-    skillsToPin.map((skill) =>
-      readFileFromBackend(adaptedBackend, skill.path).catch(() => null),
-    ),
+    skillsToPin.map((skill) => readSkill(skill).catch(() => null)),
   );
   return skillsToPin.flatMap((skill, i) => {
     const content = contents[i];
     // Consider logging a skipped pin once we have a proper logging solution
-    if (!content || content.length > MAX_SKILL_FILE_SIZE) return [];
+    if (content === null) return [];
     return [buildPinnedSkillMessage(skill, content)];
   });
 }
@@ -1636,7 +1665,7 @@ function openaiAdditionalTools(
 export function createSkillsMiddleware<TContext = unknown>(
   options: SkillsMiddlewareOptions<TContext>,
 ) {
-  const { backend, sources } = options;
+  const { backend, sources, permissions = [] } = options;
   const skillToolResolver = toSkillToolResolver(options.tools);
   // Without skill tools no model call is shown one, so the record stays empty.
   const hasSkillTools =
@@ -1674,6 +1703,7 @@ export function createSkillsMiddleware<TContext = unknown>(
         resolvedBackend,
         pinnedNames,
         skillsMetadata,
+        permissions,
       );
       return {
         ...(needsLoad && { skillsMetadata }),
