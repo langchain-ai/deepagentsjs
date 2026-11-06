@@ -40,7 +40,7 @@ export function refusalIn(message: unknown): ContentBlock.Refusal | undefined {
  */
 export function refusalNoticeFor(error: unknown): string | undefined {
   let current = error;
-  for (let depth = 0; depth < 32 && current != null; depth += 1) {
+  while (current) {
     if (ModelRefusalError.isInstance(current)) {
       return refusalNotice(
         refusalIn(current.rawMessage) ?? {
@@ -56,7 +56,10 @@ export function refusalNoticeFor(error: unknown): string | undefined {
       );
       if (refusal) return refusalNotice(refusal);
     }
-    current = (current as { cause?: unknown }).cause;
+    current =
+      typeof current === "object" && "cause" in current
+        ? (current as { cause?: unknown }).cause
+        : undefined;
   }
   return undefined;
 }
