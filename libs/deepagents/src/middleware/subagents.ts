@@ -485,10 +485,9 @@ function returnCommandWithStateUpdate(
           content,
           tool_call_id: toolCallId,
           name: "task",
-          // A subagent on the parent's checkpointer saves under the `task`
-          // call's own namespace. Recording it lets a client load the
-          // subagent's history from the parent thread's messages. `artifact`
-          // is not sent to the model.
+          // The subagent saves its checkpoints under `checkpointNs`, so a
+          // client can load its history from it. The model never sees
+          // `artifact`.
           ...(checkpointNs
             ? { artifact: { checkpoint_ns: checkpointNs } }
             : {}),
