@@ -50,6 +50,7 @@
     "quickjs-emscripten-core": "^0.32.0"
   },
   "peerDependencies": {
+    "@langchain/core": "^1.3.4",
     "deepagents": ">=1.13.4-rc.0"
   },
   "devDependencies": {
