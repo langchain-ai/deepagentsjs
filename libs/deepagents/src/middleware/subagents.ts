@@ -497,6 +497,70 @@ function returnCommandWithStateUpdate(
   });
 }
 
+type CompiledGraph = { lg_is_pregel: true; outputChannels: unknown };
+
+function isCompiledGraph(value: unknown): value is CompiledGraph {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "lg_is_pregel" in value &&
+    value.lg_is_pregel === true
+  );
+}
+
+/**
+ * The compiled graph behind a subagent: the subagent itself, or the `graph` of
+ * a `createAgent` agent. `undefined` for any other runnable.
+ */
+function getCompiledGraph(subagent: unknown): CompiledGraph | undefined {
+  if (isCompiledGraph(subagent)) return subagent;
+  const graph = (subagent as { graph?: unknown }).graph;
+  return isCompiledGraph(graph) ? graph : undefined;
+}
+
+/**
+ * Invoke a subagent, returning its final state and the namespace it
+ * checkpointed under.
+ *
+ * A compiled subagent is streamed rather than invoked so its checkpoint events
+ * report the namespace it saved under. LangGraph changes that namespace from
+ * the `task` call's own for a second run in the same step (`<namespace>|1`)
+ * and for `checkpointer: true` (task ids removed). No checkpoint event means
+ * nothing was saved. Any other runnable is invoked and assumed to save under
+ * the `task` call's namespace.
+ */
+async function runSubagent(
+  subagent: Runnable,
+  state: Record<string, unknown>,
+  config: Record<string, any>,
+): Promise<{
+  result: Record<string, unknown>;
+  checkpointNs: string | undefined;
+}> {
+  const graph = getCompiledGraph(subagent);
+  if (graph === undefined) {
+    return {
+      result: (await subagent.invoke(state, config)) as Record<string, unknown>,
+      checkpointNs: config.configurable?.checkpoint_ns,
+    };
+  }
+  let result: Record<string, unknown> = {};
+  let checkpointNs: string | undefined;
+  // `Runnable.stream` is typed with `RunnableConfig`, which lacks LangGraph's
+  // `streamMode` and `outputKeys`.
+  const options: Record<string, any> = {
+    ...config,
+    streamMode: ["values", "checkpoints"],
+    outputKeys: graph.outputChannels,
+  };
+  const stream = await subagent.stream(state, options);
+  for await (const [mode, chunk] of stream as AsyncIterable<[string, any]>) {
+    if (mode === "values") result = chunk;
+    else checkpointNs ??= chunk.config.configurable?.checkpoint_ns;
+  }
+  return { result, checkpointNs };
+}
+
 /** Drop the trailing in-flight AIMessage with unresolved tool_calls. */
 export function stripInFlightAIMessage(messages: BaseMessage[]): BaseMessage[] {
   const last = messages.at(-1);
@@ -915,10 +979,11 @@ function createTaskTool(options: {
         ls_agent_type: "subagent",
       },
     };
-    const result = (await subagent.invoke(
+    const { result, checkpointNs } = await runSubagent(
+      subagent,
       subagentState,
       subagentConfig,
-    )) as Record<string, unknown>;
+    );
 
     if (!config.toolCall?.id) {
       if (result.structuredResponse != null) {
@@ -947,7 +1012,7 @@ function createTaskTool(options: {
     return returnCommandWithStateUpdate(
       result,
       config.toolCall.id,
-      config.configurable?.checkpoint_ns,
+      checkpointNs,
     );
   }
 
