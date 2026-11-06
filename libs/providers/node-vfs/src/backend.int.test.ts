@@ -110,6 +110,54 @@ describe.skipIf(isWindows)("VfsBackend Integration", () => {
       expect(result.matches?.[0].path).toBe("dir/b.py");
     });
 
+    it("matches grep globs relative to the search root", async () => {
+      sandbox = await VfsBackend.create({
+        initialFiles: {
+          "/project/src/main.ts": "target",
+          "/project/src/nested/helper.ts": "target",
+          "/project/src/notes.md": "target",
+          "/project/test/main.ts": "target",
+        },
+      });
+
+      const scoped = await sandbox.grep("target", "/project", "src/*.ts");
+      expect(scoped.error).toBeUndefined();
+      expect(scoped.matches?.map((match) => match.path)).toEqual([
+        "project/src/main.ts",
+      ]);
+
+      const fromRoot = await sandbox.grep("target", "/", "project/src/*.ts");
+      expect(fromRoot.error).toBeUndefined();
+      expect(fromRoot.matches?.map((match) => match.path)).toEqual([
+        "project/src/main.ts",
+      ]);
+
+      const trailingSlash = await sandbox.grep(
+        "target",
+        "/project/",
+        "src/*.ts",
+      );
+      expect(trailingSlash.error).toBeUndefined();
+      expect(trailingSlash.matches?.map((match) => match.path)).toEqual([
+        "project/src/main.ts",
+      ]);
+
+      const recursive = await sandbox.grep("target", "/project", "src/**/*.ts");
+      expect(recursive.error).toBeUndefined();
+      expect(recursive.matches?.map((match) => match.path).sort()).toEqual([
+        "project/src/main.ts",
+        "project/src/nested/helper.ts",
+      ]);
+
+      const bare = await sandbox.grep("target", "/project", "*.ts");
+      expect(bare.error).toBeUndefined();
+      expect(bare.matches?.map((match) => match.path).sort()).toEqual([
+        "project/src/main.ts",
+        "project/src/nested/helper.ts",
+        "project/test/main.ts",
+      ]);
+    });
+
     it("supports glob with recursive patterns and directories", async () => {
       sandbox = await VfsBackend.create({
         initialFiles: {
