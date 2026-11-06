@@ -743,7 +743,7 @@ async function resolveRealPath(
  *
  * @internal
  */
-async function checkPermission(
+export async function checkPermission(
   backend: BackendProtocolV2,
   rules: FilesystemPermission[],
   operation: FilesystemOperation,
