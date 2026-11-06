@@ -1,5 +1,15 @@
 # @langchain/quickjs
 
+## 0.6.6
+
+### Patch Changes
+
+- [#971](https://github.com/langchain-ai/deepagentsjs/pull/971) [`2160d18`](https://github.com/langchain-ai/deepagentsjs/commit/2160d187f5d5c330ed83e575ad0f406e98bdada3) Thanks [@hntrl](https://github.com/hntrl)! - Built-in middleware now omit their lifecycle hook inputs (the full agent state) from LangSmith traces via `tracePolicy: { processInputs: omitPayload }`. Hook outputs, model and tool runs, and streaming are unchanged. Requires `langchain` >= 1.6.2. QuickJS declares `@langchain/core` ^1.3.4 as a peer dependency for its runtime `omitPayload` import.
+
+- [#1010](https://github.com/langchain-ai/deepagentsjs/pull/1010) [`26f190d`](https://github.com/langchain-ai/deepagentsjs/commit/26f190d40f44a2bb498db73e9e98b002bb8554fe) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(quickjs): allow disabling the per-call `executionTimeoutMs`
+  
+  `createCodeInterpreterMiddleware({ executionTimeoutMs: null })` disables the per-call deadline, and the system prompt omits the timeout instead of rendering a negative or infinite number. Zero and `NaN` are rejected.
+
 ## 0.6.5
 
 ### Patch Changes
