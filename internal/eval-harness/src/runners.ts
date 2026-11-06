@@ -48,3 +48,14 @@ registerDeepAgentRunner("gpt-4.1-mini", (config) =>
 registerDeepAgentRunner("o3-mini", (config) =>
   createDeepAgent({ ...config, model: new ChatOpenAI({ model: "o3-mini" }) }),
 );
+
+registerDeepAgentRunner("orcarouter", (config) =>
+  createDeepAgent({
+    ...config,
+    model: new ChatOpenAI({
+      model: "orcarouter/fusion",
+      apiKey: process.env.ORCAROUTER_API_KEY,
+      configuration: { baseURL: "https://www.orcarouter.ai/v1" },
+    }),
+  }),
+);
