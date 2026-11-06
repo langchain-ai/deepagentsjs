@@ -1602,6 +1602,65 @@ describe("Subagent content block filtering", () => {
   });
 });
 
+describe("Subagent checkpoint namespace", () => {
+  it("records the namespace holding the subagent's checkpoints on the task tool message", async () => {
+    const subagentContent = "SUBAGENT_RESPONSE";
+    const model = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_worker",
+              name: "task",
+              args: { description: "Do task", subagent_type: "worker" },
+            },
+          ],
+        }) as unknown as string,
+        "Done.",
+      ],
+    });
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model,
+      checkpointer,
+      subagents: [
+        {
+          name: "worker",
+          description: "Does work.",
+          runnable: createAgent({
+            model: new FakeListChatModel({ responses: [subagentContent] }),
+            name: "worker",
+          }),
+        },
+      ],
+    });
+    const threadId = "subagent-checkpoint-namespace";
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe(subagentContent);
+    const subagentNamespace = toolMessage?.artifact?.checkpoint_ns;
+    expect(subagentNamespace).toMatch(/^tools:/);
+
+    // Read the checkpointer directly: whether `agent.getState` can read a
+    // namespace with no declared subgraph depends on the langgraph release.
+    const subagentCheckpoint = await checkpointer.getTuple({
+      configurable: { thread_id: threadId, checkpoint_ns: subagentNamespace },
+    });
+    const subagentMessages = subagentCheckpoint?.checkpoint.channel_values
+      .messages as BaseMessage[];
+    expect(subagentMessages.map((message) => message.content)).toEqual([
+      "Do task",
+      subagentContent,
+    ]);
+  });
+});
+
 /**
  * Tests for structured response support in subagents.
  *

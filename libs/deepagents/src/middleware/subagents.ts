@@ -448,6 +448,7 @@ const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
 function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
+  checkpointNs: string | undefined,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
 
@@ -484,6 +485,13 @@ function returnCommandWithStateUpdate(
           content,
           tool_call_id: toolCallId,
           name: "task",
+          // A subagent on the parent's checkpointer saves under the `task`
+          // call's own namespace. Recording it lets a client load the
+          // subagent's history from the parent thread's messages. `artifact`
+          // is not sent to the model.
+          ...(checkpointNs
+            ? { artifact: { checkpoint_ns: checkpointNs } }
+            : {}),
         }),
       ],
     },
@@ -937,7 +945,11 @@ function createTaskTool(options: {
       return content;
     }
 
-    return returnCommandWithStateUpdate(result, config.toolCall.id);
+    return returnCommandWithStateUpdate(
+      result,
+      config.toolCall.id,
+      config.configurable?.checkpoint_ns,
+    );
   }
 
   const taskToolSchema = z.object({
