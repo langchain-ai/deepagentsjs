@@ -151,7 +151,7 @@ interface QuickJSMiddlewareOptions {
   ptc?: boolean | string[] | { include: string[] } | { exclude: string[] }; // PTC config
   memoryLimitBytes?: number; // Default: 50MB
   maxStackSizeBytes?: number; // Default: 320KB
-  executionTimeoutMs?: number | null; // Default: 5s (null to disable)
+  executionTimeoutMs?: number | null; // Default: 5s of JS execution; awaiting tools.* / task() is not counted (null to disable)
   systemPrompt?: string | null; // Override the built-in REPL system prompt
 }
 ```

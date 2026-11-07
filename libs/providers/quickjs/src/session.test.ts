@@ -298,6 +298,58 @@ describe("REPL Engine", () => {
       expect(result.ok).toBe(false);
       expect(result.error?.message).toContain("interrupted");
     });
+
+    function slowTool(name: string, ms: number) {
+      return tool(
+        async () => {
+          await new Promise((r) => setTimeout(r, ms));
+          return `${name} done`;
+        },
+        { name, description: name, schema: z.object({}) },
+      );
+    }
+
+    it("should not count time spent awaiting a tool", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 500)],
+      });
+      const result = await session.eval("await tools.slowRead({})", 200);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("slow_read done");
+    });
+
+    it("should not count time spent awaiting tools in sequence", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 300), slowTool("slow_save", 300)],
+      });
+      const result = await session.eval(
+        "await tools.slowRead({}); await tools.slowSave({})",
+        200,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("slow_save done");
+    });
+
+    it("should still interrupt a loop that runs after a tool call", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 50)],
+      });
+      const result = await session.eval(
+        "await tools.slowRead({}); while (true) {}",
+        200,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should fail fast on a promise nothing can settle", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const startedAt = Date.now();
+      const result = await session.eval("await new Promise(() => {})", 5000);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("never settles");
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+    });
   });
 
   describe("sandbox isolation", () => {

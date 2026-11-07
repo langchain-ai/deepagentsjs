@@ -17,7 +17,6 @@
  * safe across graph interrupts and checkpointing.
  */
 
-import { shouldInterruptAfterDeadline } from "quickjs-emscripten";
 import type { QuickJSHandle } from "quickjs-emscripten";
 import { newQuickJSAsyncWASMModuleFromVariant } from "quickjs-emscripten-core";
 import type {
@@ -255,6 +254,12 @@ export class ReplSession {
   private bridgeDispatchRef: {
     current: SubagentBridgeOptions["dispatch"];
   } | null = null;
+  /** Guest execution time charged to the current eval's budget. */
+  private executionMs = 0;
+  /** Start of the guest execution currently running, if any. */
+  private executionStartedAt: number | null = null;
+  /** `tools.*` and `task()` calls whose host promise has not settled yet. */
+  private pendingHostCalls = 0;
 
   /** Allowed keys in the subagent input object. */
   private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
@@ -324,6 +329,45 @@ export class ReplSession {
     const sessionIdHandle = context.newString(sessionId);
     context.setProp(context.global, "__sessionId__", sessionIdHandle);
     sessionIdHandle.dispose();
+  }
+
+  /**
+   * Run guest code and charge its duration to the eval's execution budget.
+   * Re-entrant calls are already covered by the outer measurement.
+   */
+  private runGuest<T>(fn: () => T): T {
+    if (this.executionStartedAt !== null) {
+      return fn();
+    }
+    this.executionStartedAt = Date.now();
+    try {
+      return fn();
+    } finally {
+      this.executionMs += Date.now() - this.executionStartedAt;
+      this.executionStartedAt = null;
+    }
+  }
+
+  private async runGuestAsync<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.executionStartedAt !== null) {
+      return fn();
+    }
+    this.executionStartedAt = Date.now();
+    try {
+      return await fn();
+    } finally {
+      this.executionMs += Date.now() - this.executionStartedAt;
+      this.executionStartedAt = null;
+    }
+  }
+
+  private elapsedExecutionMs(): number {
+    return (
+      this.executionMs +
+      (this.executionStartedAt === null
+        ? 0
+        : Date.now() - this.executionStartedAt)
+    );
   }
 
   /**
@@ -432,18 +476,19 @@ export class ReplSession {
     };
 
     this.resetPtcBudget();
+    this.executionMs = 0;
+    // The budget covers guest execution only, like the Python middleware's
+    // `timeout`: time spent awaiting `tools.*` / `task()`, or queued behind
+    // other sessions' evals, is not counted.
+    const noTimeout = timeoutMs < 0;
+    const overBudget = () =>
+      !noTimeout && this.elapsedExecutionMs() > timeoutMs;
     try {
-      if (timeoutMs >= 0) {
-        runtime.setInterruptHandler(
-          shouldInterruptAfterDeadline(Date.now() + timeoutMs),
-        );
-      } else {
-        runtime.setInterruptHandler(() => false);
-      }
+      runtime.setInterruptHandler(overBudget);
 
       const transformed = transformForEval(code);
       const result = await sharedEvalQueue.enqueue(() =>
-        context.evalCodeAsync(transformed),
+        this.runGuestAsync(() => context.evalCodeAsync(transformed)),
       );
 
       if (result.error) {
@@ -473,10 +518,9 @@ export class ReplSession {
         return { ok: false, error, ...drainLogs() };
       }
 
-      const noTimeout = timeoutMs < 0;
-      const deadline = noTimeout ? Infinity : Date.now() + timeoutMs;
-      while (noTimeout || Date.now() < deadline) {
-        context.runtime.executePendingJobs();
+      let failure = "Promise timed out — execution interrupted";
+      while (!overBudget()) {
+        this.runGuest(() => context.runtime.executePendingJobs());
         const state = context.getPromiseState(result.value);
         if (state.type === "fulfilled") {
           const value = context.dump(state.value);
@@ -490,15 +534,17 @@ export class ReplSession {
           result.value.dispose();
           return { ok: false, error, ...drainLogs() };
         }
+        // The guest has no timers or I/O of its own, so with no host call in
+        // flight nothing can ever settle the promise.
+        if (this.pendingHostCalls === 0) {
+          failure = "Promise never settles — nothing it awaits is pending";
+          break;
+        }
         await new Promise((r) => setTimeout(r, 1));
       }
 
       result.value.dispose();
-      return {
-        ok: false,
-        error: { message: "Promise timed out — execution interrupted" },
-        ...drainLogs(),
-      };
+      return { ok: false, error: { message: failure }, ...drainLogs() };
     } finally {
       this.ptcCallsRemaining = null;
     }
@@ -579,6 +625,7 @@ export class ReplSession {
         (inputHandle: QuickJSHandle) => {
           const input = context.dump(inputHandle);
           const promise = context.newPromise();
+          this.pendingHostCalls++;
           (async () => {
             try {
               this.consumePtcBudget(camelName);
@@ -600,8 +647,12 @@ export class ReplSession {
               const err = context.newError(`Tool '${t.name}' failed: ${msg}`);
               promise.reject(err);
               err.dispose();
+            } finally {
+              this.pendingHostCalls--;
             }
-            promise.settled.then(context.runtime.executePendingJobs);
+            promise.settled.then(() =>
+              this.runGuest(() => context.runtime.executePendingJobs()),
+            );
           })();
           return promise.handle;
         },
@@ -647,6 +698,7 @@ export class ReplSession {
     const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
       const input = context.dump(inputHandle);
       const promise = context.newPromise();
+      this.pendingHostCalls++;
 
       (async () => {
         try {
@@ -736,8 +788,12 @@ export class ReplSession {
           const err = context.newError(msg);
           promise.reject(err);
           err.dispose();
+        } finally {
+          this.pendingHostCalls--;
         }
-        promise.settled.then(context.runtime.executePendingJobs);
+        promise.settled.then(() =>
+          this.runGuest(() => context.runtime.executePendingJobs()),
+        );
       })();
 
       return promise.handle;
