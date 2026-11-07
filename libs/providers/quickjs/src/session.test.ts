@@ -342,6 +342,21 @@ describe("REPL Engine", () => {
       expect(result.error?.message).toContain("interrupted");
     });
 
+    it("should keep tools working after disposing a session whose job was interrupted", async () => {
+      const interrupted = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 50)],
+      });
+      await interrupted.eval("await tools.slowRead({}); while (true) {}", 200);
+      interrupted.dispose();
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("echo", 0)],
+      });
+      const result = await session.eval("await tools.echo({})", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("echo done");
+    });
+
     it("should fail fast on a promise nothing can settle", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
       const startedAt = Date.now();

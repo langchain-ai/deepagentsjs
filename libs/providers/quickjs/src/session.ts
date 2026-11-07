@@ -361,6 +361,16 @@ export class ReplSession {
     }
   }
 
+  /**
+   * Run the runtime's pending jobs as guest execution. An exception that stops
+   * the queue (an interrupt included) comes back as a handle this call owns:
+   * left undisposed, it keeps an object alive and `JS_FreeRuntime` aborts the
+   * shared WASM module when the session is disposed.
+   */
+  private runPendingJobs(context: QuickJSAsyncContext): void {
+    this.runGuest(() => context.runtime.executePendingJobs()).dispose();
+  }
+
   private elapsedExecutionMs(): number {
     return (
       this.executionMs +
@@ -520,7 +530,7 @@ export class ReplSession {
 
       let failure = "Promise timed out — execution interrupted";
       while (!overBudget()) {
-        this.runGuest(() => context.runtime.executePendingJobs());
+        this.runPendingJobs(context);
         const state = context.getPromiseState(result.value);
         if (state.type === "fulfilled") {
           const value = context.dump(state.value);
@@ -650,9 +660,7 @@ export class ReplSession {
             } finally {
               this.pendingHostCalls--;
             }
-            promise.settled.then(() =>
-              this.runGuest(() => context.runtime.executePendingJobs()),
-            );
+            promise.settled.then(() => this.runPendingJobs(context));
           })();
           return promise.handle;
         },
@@ -791,9 +799,7 @@ export class ReplSession {
         } finally {
           this.pendingHostCalls--;
         }
-        promise.settled.then(() =>
-          this.runGuest(() => context.runtime.executePendingJobs()),
-        );
+        promise.settled.then(() => this.runPendingJobs(context));
       })();
 
       return promise.handle;
