@@ -1067,3 +1067,96 @@ describe("StoreBackend", () => {
     });
   });
 });
+
+it("reports a failing upload write as storage_error, not invalid_path", async () => {
+  const failing = Object.assign(Object.create(InMemoryStore.prototype), {
+    put: async () => {
+      throw new Error("disk quota exceeded");
+    },
+  });
+
+  const backend = new StoreBackend({
+    store: failing as any,
+    namespace: ["repro"],
+  });
+
+  // Regression: every failure collapsed to "invalid_path", including a
+  // storage fault the caller might have retried.
+  const res = await backend.uploadFiles([
+    ["/notes.txt", new TextEncoder().encode("hello")],
+  ]);
+  expect(res[0].error).toBe("storage_error");
+});
+
+it("reports a failing download read as storage_error, not file_not_found", async () => {
+  const failing = Object.assign(Object.create(InMemoryStore.prototype), {
+    get: async () => {
+      throw new Error("connection reset");
+    },
+  });
+
+  const backend = new StoreBackend({
+    store: failing as any,
+    namespace: ["repro"],
+  });
+
+  // Regression: a transient read failure was indistinguishable from a
+  // missing file, so callers never retried.
+  const res = await backend.downloadFiles(["/notes.txt"]);
+  expect(res[0].error).toBe("storage_error");
+  expect(res[0].content).toBeNull();
+});
+
+it("still reports a genuinely missing download as file_not_found", async () => {
+  const { runtime } = makeConfig();
+  const backend = new StoreBackend(runtime);
+
+  const res = await backend.downloadFiles(["/absent.txt"]);
+  expect(res[0].error).toBe("file_not_found");
+});
+
+it("reports corrupt stored data separately from missing data", async () => {
+  const { store } = makeConfig();
+  const namespace = ["transfer-errors"];
+  const backend = new StoreBackend({ store, namespace });
+  await store.put(namespace, "/corrupt.txt", { content: 42 });
+  const results = await backend.downloadFiles(["/corrupt.txt", "/missing.txt"]);
+  expect(results).toEqual([
+    { path: "/corrupt.txt", content: null, error: "storage_error" },
+    { path: "/missing.txt", content: null, error: "file_not_found" },
+  ]);
+});
+
+it("continues a transfer batch after individual storage failures", async () => {
+  const { store } = makeConfig();
+  const namespace = ["transfer-errors"];
+  const backend = new StoreBackend({ store, namespace });
+  const originalPut = store.put.bind(store);
+  vi.spyOn(store, "put").mockImplementation(async (ns, key, value) => {
+    if (key === "/fail.txt") throw new Error("quota exceeded");
+    return originalPut(ns, key, value);
+  });
+  const bytes = new TextEncoder().encode("hello");
+  expect(
+    await backend.uploadFiles([
+      ["/fail.txt", bytes],
+      ["/ok.txt", bytes],
+    ]),
+  ).toEqual([
+    { path: "/fail.txt", error: "storage_error" },
+    { path: "/ok.txt", error: null },
+  ]);
+  const originalGet = store.get.bind(store);
+  vi.spyOn(store, "get").mockImplementation(async (ns, key) => {
+    if (key === "/fail.txt") throw new Error("connection reset");
+    return originalGet(ns, key);
+  });
+  const downloaded = await backend.downloadFiles(["/fail.txt", "/ok.txt"]);
+  expect(downloaded[0]).toEqual({
+    path: "/fail.txt",
+    content: null,
+    error: "storage_error",
+  });
+  expect(downloaded[1].error).toBeNull();
+  expect(new TextDecoder().decode(downloaded[1].content!)).toBe("hello");
+});
