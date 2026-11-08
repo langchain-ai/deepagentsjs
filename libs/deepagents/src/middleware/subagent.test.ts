@@ -433,6 +433,264 @@ description: A skill for the subagent
   });
 });
 
+describe("Subagent file updates", () => {
+  const taskCalls = (names: string[]) =>
+    new AIMessage({
+      content: "",
+      tool_calls: names.map((name, i) => ({
+        id: `task_${i}`,
+        name: "task",
+        args: { description: name, subagent_type: name },
+      })),
+    });
+
+  const fileToolCall = (name: string, args: Record<string, unknown>) =>
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "file_call", name, args }],
+    });
+
+  it.each(["edit_file", "write_file", "delete"])(
+    "preserves %s changes in either parallel task order and with a single editor",
+    async (toolName) => {
+      for (const order of [
+        ["editor", "idle"],
+        ["idle", "editor"],
+        ["editor"],
+      ]) {
+        const agent = createDeepAgent({
+          model: new SequentialFakeChatModel({
+            responses: [taskCalls(order), "done"],
+          }),
+          subagents: [
+            {
+              name: "editor",
+              description: "Edits the parent file",
+              systemPrompt: "Edit the file",
+              model: new SequentialFakeChatModel({
+                responses: [
+                  fileToolCall(
+                    toolName,
+                    toolName === "edit_file"
+                      ? {
+                          file_path: "/a.txt",
+                          old_string: "v1",
+                          new_string: "v2",
+                        }
+                      : toolName === "write_file"
+                        ? { file_path: "/a.txt", content: "v2" }
+                        : { file_path: "/a.txt" },
+                  ),
+                  "edited",
+                ],
+              }),
+            },
+            {
+              name: "idle",
+              description: "Reads without editing",
+              systemPrompt: "Read the file",
+              model: new SequentialFakeChatModel({
+                responses: [
+                  fileToolCall("read_file", { file_path: "/a.txt" }),
+                  "read",
+                ],
+              }),
+            },
+          ],
+        });
+        const result = await agent.invoke({
+          messages: [new HumanMessage("go")],
+          files: { "/a.txt": createFileData("v1") },
+        });
+        expect(result.files?.["/a.txt"]?.content, order.join(" then ")).toBe(
+          toolName === "delete" ? undefined : "v2",
+        );
+      }
+    },
+  );
+
+  it.each(["invoke", "stream"] as const)(
+    "preserves distinct sibling edits and nested file access through %s",
+    async (method) => {
+      const worker = createDeepAgent({
+        model: new SequentialFakeChatModel({
+          responses: [taskCalls(["nested"]), "worker done"],
+        }),
+        subagents: [
+          {
+            name: "nested",
+            description: "Edits a parent file",
+            systemPrompt: "Edit",
+            model: new SequentialFakeChatModel({
+              responses: [
+                fileToolCall("edit_file", {
+                  file_path: "/a.txt",
+                  old_string: "v1",
+                  new_string: "v2",
+                }),
+                "nested done",
+              ],
+            }),
+          },
+        ],
+      });
+      const agent = createDeepAgent({
+        model: new SequentialFakeChatModel({
+          responses: [taskCalls(["worker", "sibling"]), "done"],
+        }),
+        subagents: [
+          {
+            name: "worker",
+            description: "Delegates an edit",
+            runnable: worker,
+          },
+          {
+            name: "sibling",
+            description: "Edits another file",
+            systemPrompt: "Edit",
+            model: new SequentialFakeChatModel({
+              responses: [
+                fileToolCall("edit_file", {
+                  file_path: "/b.txt",
+                  old_string: "before",
+                  new_string: "after",
+                }),
+                "sibling done",
+              ],
+            }),
+          },
+        ],
+      });
+      const input = {
+        messages: [new HumanMessage("go")],
+        files: {
+          "/a.txt": createFileData("v1"),
+          "/b.txt": createFileData("before"),
+        },
+      };
+      let result;
+      if (method === "stream") {
+        for await (const state of await agent.stream(input, {
+          streamMode: "values",
+        }))
+          result = state;
+      } else {
+        result = await agent.invoke(input);
+      }
+      expect(result?.files?.["/a.txt"].content).toBe("v2");
+      expect(result?.files?.["/b.txt"].content).toBe("after");
+    },
+  );
+
+  it("preserves inherited files when a compiled runnable returns a partial update", async () => {
+    const kept = createFileData("keep me");
+    const changed = createFileData("new");
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [taskCalls(["worker"]), "done"],
+      }),
+      subagents: [
+        {
+          name: "worker",
+          description: "Returns a partial update",
+          runnable: RunnableLambda.from(async () => ({
+            messages: [new AIMessage("updated")],
+            files: { "/changed.txt": changed, "/deleted.txt": null },
+          })),
+        },
+      ],
+    });
+    const result = await agent.invoke({
+      messages: [new HumanMessage("go")],
+      files: {
+        "/kept.txt": kept,
+        "/changed.txt": createFileData("old"),
+        "/deleted.txt": createFileData("delete me"),
+      },
+    });
+    expect(result.files).toEqual({
+      "/kept.txt": kept,
+      "/changed.txt": changed,
+    });
+  });
+
+  it("returns only changed, added and deleted files, omitting unchanged copies", async () => {
+    const updates: Record<string, unknown>[] = [];
+    const capture = createMiddleware({
+      name: "CaptureTaskUpdates",
+      wrapToolCall: async (request, handler) => {
+        const result = await handler(request);
+        if (request.toolCall.name === "task" && "update" in result) {
+          updates.push(result.update as Record<string, unknown>);
+        }
+        return result;
+      },
+    });
+    const original = {
+      "/unchanged.txt": createFileData("unchanged", undefined, "v1"),
+      "/text.txt": createFileData("unchanged text"),
+      "/binary.bin": createFileData(new Uint8Array([0, 1, 255])),
+      "/changed.txt": createFileData("old"),
+      "/deleted.txt": createFileData("delete me"),
+    };
+    const changed = createFileData("new");
+    const added = createFileData("added");
+    const agent = createDeepAgent({
+      model: new SequentialFakeChatModel({
+        responses: [taskCalls(["worker", "idle"]), "done"],
+      }),
+      middleware: [capture],
+      subagents: [
+        {
+          name: "worker",
+          description: "Returns a new file snapshot",
+          runnable: RunnableLambda.from(async (state: Record<string, any>) => {
+            expect(state.files).toEqual(original);
+            return {
+              messages: [new AIMessage("updated")],
+              files: {
+                "/unchanged.txt": structuredClone(
+                  state.files["/unchanged.txt"],
+                ),
+                "/binary.bin": structuredClone(state.files["/binary.bin"]),
+                "/text.txt": structuredClone(state.files["/text.txt"]),
+                "/changed.txt": changed,
+                "/added.txt": added,
+                "/deleted.txt": null,
+              },
+            };
+          }),
+        },
+        {
+          name: "idle",
+          description: "Returns unchanged copies",
+          runnable: RunnableLambda.from(async (state: Record<string, any>) => ({
+            messages: [new AIMessage("idle")],
+            files: structuredClone(state.files),
+          })),
+        },
+      ],
+    });
+    const result = await agent.invoke({
+      messages: [new HumanMessage("go")],
+      files: original,
+    });
+    expect(updates.find((update) => "files" in update)?.files).toEqual({
+      "/changed.txt": changed,
+      "/added.txt": added,
+      "/deleted.txt": null,
+    });
+    expect(updates.filter((update) => "files" in update)).toHaveLength(1);
+    expect(result.files).toEqual({
+      "/unchanged.txt": original["/unchanged.txt"],
+      "/binary.bin": original["/binary.bin"],
+      "/text.txt": original["/text.txt"],
+      "/changed.txt": changed,
+      "/added.txt": added,
+    });
+  });
+});
+
 describe("Subagent summarization state isolation", () => {
   const summarizationEvent = {
     cutoffIndex: 40,
