@@ -23,6 +23,7 @@ import type {
   QuickJSAsyncContext,
   QuickJSAsyncRuntime,
   QuickJSAsyncWASMModule,
+  QuickJSDeferredPromise,
 } from "quickjs-emscripten-core";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 
@@ -229,6 +230,20 @@ class ConsoleBuffer {
   }
 }
 
+interface HostCall {
+  promise: QuickJSDeferredPromise;
+  /** The eval stopped waiting on it: its result must not reach the guest. */
+  detached: boolean;
+  /** Its promise and resolvers have been disposed. */
+  freed: boolean;
+}
+
+function errorMessage(e: unknown): string {
+  return e != null && typeof (e as Error).message === "string"
+    ? (e as Error).message
+    : String(e);
+}
+
 /**
  * Sandboxed JavaScript REPL session backed by QuickJS WASM.
  *
@@ -258,8 +273,10 @@ export class ReplSession {
   private executionMs = 0;
   /** Start of the guest execution currently running, if any. */
   private executionStartedAt: number | null = null;
-  /** `tools.*` and `task()` calls whose host promise has not settled yet. */
-  private pendingHostCalls = 0;
+  /** `tools.*` and `task()` calls the current eval is still waiting on. */
+  private inFlight = new Set<HostCall>();
+  /** Calls an eval stopped waiting on; their results are dropped when they settle. */
+  private detached = new Set<HostCall>();
 
   /** Allowed keys in the subagent input object. */
   private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
@@ -377,6 +394,86 @@ export class ReplSession {
    */
   private dumpGuest(context: QuickJSAsyncContext, handle: QuickJSHandle) {
     return this.runGuest(() => context.dump(handle));
+  }
+
+  /**
+   * Start a host call that settles a guest promise. Each call belongs to the
+   * eval that started it, as in Python's per-eval TaskGroup: the eval waits for
+   * it on success and detaches it otherwise, so no call outlives its eval.
+   * `work` returns a function that builds the guest value, which runs only if
+   * the call is still attached.
+   */
+  private startHostCall(
+    context: QuickJSAsyncContext,
+    work: () => Promise<() => QuickJSHandle>,
+  ): QuickJSHandle {
+    const call: HostCall = {
+      promise: context.newPromise(),
+      detached: false,
+      freed: false,
+    };
+    this.inFlight.add(call);
+    void (async () => {
+      try {
+        const toGuest = await work();
+        if (!call.detached) {
+          const value = toGuest();
+          call.promise.resolve(value);
+          value.dispose();
+        }
+      } catch (e: unknown) {
+        if (!call.detached) {
+          const err = context.newError(errorMessage(e));
+          call.promise.reject(err);
+          err.dispose();
+        }
+      } finally {
+        this.inFlight.delete(call);
+        if (this.detached.delete(call)) this.freeHostCall(call);
+      }
+      if (!call.detached) {
+        call.promise.settled.then(() => this.runPendingJobs(context));
+      }
+    })();
+    return call.promise.handle;
+  }
+
+  /** Stop waiting on the current eval's calls; they no longer touch the guest. */
+  private detachInFlight(): void {
+    for (const call of this.inFlight) {
+      call.detached = true;
+      this.detached.add(call);
+    }
+    this.inFlight.clear();
+  }
+
+  /**
+   * Free a call's promise and resolvers. A call left holding them when the
+   * session is disposed makes `JS_FreeRuntime` abort the shared WASM module.
+   */
+  private freeHostCall(call: HostCall): void {
+    if (call.freed) return;
+    call.freed = true;
+    try {
+      call.promise.dispose();
+    } catch {
+      /* the context may already be gone */
+    }
+  }
+
+  /**
+   * Run the eval's un-awaited host calls to completion, as Python's TaskGroup
+   * does. Waiting is not charged to the budget; code they resume is.
+   */
+  private async awaitInFlight(
+    context: QuickJSAsyncContext,
+    overBudget: () => boolean,
+  ): Promise<void> {
+    while (this.inFlight.size > 0 && !overBudget()) {
+      this.runPendingJobs(context);
+      if (this.inFlight.size === 0) break;
+      await new Promise((r) => setTimeout(r, 1));
+    }
   }
 
   private elapsedExecutionMs(): number {
@@ -539,6 +636,7 @@ export class ReplSession {
       const promiseState = context.getPromiseState(result.value);
 
       if (promiseState.type === "fulfilled") {
+        await this.awaitInFlight(context, overBudget);
         if (promiseState.notAPromise) {
           return settle(true, result.value);
         }
@@ -557,6 +655,9 @@ export class ReplSession {
         this.runPendingJobs(context);
         const state = context.getPromiseState(result.value);
         if (state.type === "fulfilled" || state.type === "rejected") {
+          if (state.type === "fulfilled") {
+            await this.awaitInFlight(context, overBudget);
+          }
           const settled =
             state.type === "fulfilled"
               ? settle(true, state.value)
@@ -568,7 +669,7 @@ export class ReplSession {
         if (overBudget()) break;
         // The guest has no timers or I/O of its own, so with no host call in
         // flight nothing can ever settle the promise.
-        if (this.pendingHostCalls === 0) {
+        if (this.inFlight.size === 0) {
           result.value.dispose();
           return {
             ok: false,
@@ -584,11 +685,15 @@ export class ReplSession {
       result.value.dispose();
       return timedOut();
     } finally {
+      this.detachInFlight();
       this.ptcCallsRemaining = null;
     }
   }
 
   dispose(): void {
+    this.detachInFlight();
+    for (const call of this.detached) this.freeHostCall(call);
+    this.detached.clear();
     try {
       this.context?.dispose();
     } catch {
@@ -662,9 +767,7 @@ export class ReplSession {
         camelName,
         (inputHandle: QuickJSHandle) => {
           const input = context.dump(inputHandle);
-          const promise = context.newPromise();
-          this.pendingHostCalls++;
-          (async () => {
+          return this.startHostCall(context, async () => {
             try {
               this.consumePtcBudget(camelName);
               const rawInput =
@@ -674,23 +777,13 @@ export class ReplSession {
               if (t.name === "read_file") {
                 text = stripLineNumbers(text);
               }
-              const val = context.newString(text);
-              promise.resolve(val);
-              val.dispose();
+              return () => context.newString(text);
             } catch (e: unknown) {
-              const msg =
-                e != null && typeof (e as Error).message === "string"
-                  ? (e as Error).message
-                  : String(e);
-              const err = context.newError(`Tool '${t.name}' failed: ${msg}`);
-              promise.reject(err);
-              err.dispose();
-            } finally {
-              this.pendingHostCalls--;
+              throw new Error(`Tool '${t.name}' failed: ${errorMessage(e)}`, {
+                cause: e,
+              });
             }
-            promise.settled.then(() => this.runPendingJobs(context));
-          })();
-          return promise.handle;
+          });
         },
       );
       context.setProp(toolsNs, camelName, fnHandle);
@@ -733,104 +826,85 @@ export class ReplSession {
 
     const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
       const input = context.dump(inputHandle);
-      const promise = context.newPromise();
-      this.pendingHostCalls++;
 
-      (async () => {
-        try {
-          if (
-            input == null ||
-            typeof input !== "object" ||
-            Array.isArray(input)
-          ) {
-            throw new Error("task: expected an object argument");
-          }
-          const raw = input as Record<string, unknown>;
-
-          // Accept snake_case aliases so models don't need to know our convention
-          const obj: Record<string, unknown> = { ...raw };
-          if ("subagent_type" in obj) {
-            obj.subagentType ??= obj.subagent_type;
-            delete obj.subagent_type;
-          }
-          if ("response_schema" in obj) {
-            obj.responseSchema ??= obj.response_schema;
-            delete obj.response_schema;
-          }
-
-          const unknownKeys = Object.keys(obj).filter(
-            (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
-          );
-          if (unknownKeys.length > 0) {
-            throw new Error(
-              `task: unknown keys: ${unknownKeys.join(", ")}. ` +
-                `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
-            );
-          }
-
-          const { description, subagentType, responseSchema } = obj;
-
-          if (typeof description !== "string" || description.length === 0) {
-            throw new Error(
-              "task: 'description' is required and must be a non-empty string",
-            );
-          }
-          if (typeof subagentType !== "string" || subagentType.length === 0) {
-            throw new Error(
-              "task: 'subagentType' is required and must be a non-empty string",
-            );
-          }
-          if (
-            responseSchema !== undefined &&
-            (responseSchema == null ||
-              typeof responseSchema !== "object" ||
-              Array.isArray(responseSchema))
-          ) {
-            throw new Error(
-              "task: 'responseSchema' must be a plain object (JSON Schema) when provided",
-            );
-          }
-
-          const result = await queue.add(() =>
-            ref.current({
-              description: description as string,
-              subagentType: subagentType as string,
-              ...(responseSchema !== undefined && {
-                responseSchema: responseSchema as Record<string, unknown>,
-              }),
-            }),
-          );
-          if (typeof result === "string") {
-            const val = context.newString(result);
-            promise.resolve(val);
-            val.dispose();
-          } else {
-            const jsonResult = context.evalCode(`(${JSON.stringify(result)})`);
-            if (jsonResult.error) {
-              const errDump = context.dump(jsonResult.error);
-              jsonResult.error.dispose();
-              throw new Error(
-                `task: failed to marshal structured response: ${JSON.stringify(errDump)}`,
-              );
-            }
-            promise.resolve(jsonResult.value);
-            jsonResult.value.dispose();
-          }
-        } catch (e: unknown) {
-          const msg =
-            e != null && typeof (e as Error).message === "string"
-              ? (e as Error).message
-              : String(e);
-          const err = context.newError(msg);
-          promise.reject(err);
-          err.dispose();
-        } finally {
-          this.pendingHostCalls--;
+      return this.startHostCall(context, async () => {
+        if (
+          input == null ||
+          typeof input !== "object" ||
+          Array.isArray(input)
+        ) {
+          throw new Error("task: expected an object argument");
         }
-        promise.settled.then(() => this.runPendingJobs(context));
-      })();
+        const raw = input as Record<string, unknown>;
 
-      return promise.handle;
+        // Accept snake_case aliases so models don't need to know our convention
+        const obj: Record<string, unknown> = { ...raw };
+        if ("subagent_type" in obj) {
+          obj.subagentType ??= obj.subagent_type;
+          delete obj.subagent_type;
+        }
+        if ("response_schema" in obj) {
+          obj.responseSchema ??= obj.response_schema;
+          delete obj.response_schema;
+        }
+
+        const unknownKeys = Object.keys(obj).filter(
+          (k) => !ReplSession.SUBAGENT_ALLOWED_KEYS.has(k),
+        );
+        if (unknownKeys.length > 0) {
+          throw new Error(
+            `task: unknown keys: ${unknownKeys.join(", ")}. ` +
+              `Allowed: ${[...ReplSession.SUBAGENT_ALLOWED_KEYS].join(", ")}`,
+          );
+        }
+
+        const { description, subagentType, responseSchema } = obj;
+
+        if (typeof description !== "string" || description.length === 0) {
+          throw new Error(
+            "task: 'description' is required and must be a non-empty string",
+          );
+        }
+        if (typeof subagentType !== "string" || subagentType.length === 0) {
+          throw new Error(
+            "task: 'subagentType' is required and must be a non-empty string",
+          );
+        }
+        if (
+          responseSchema !== undefined &&
+          (responseSchema == null ||
+            typeof responseSchema !== "object" ||
+            Array.isArray(responseSchema))
+        ) {
+          throw new Error(
+            "task: 'responseSchema' must be a plain object (JSON Schema) when provided",
+          );
+        }
+
+        const result = await queue.add(() =>
+          ref.current({
+            description: description as string,
+            subagentType: subagentType as string,
+            ...(responseSchema !== undefined && {
+              responseSchema: responseSchema as Record<string, unknown>,
+            }),
+          }),
+        );
+        if (typeof result === "string") {
+          return () => context.newString(result);
+        }
+        return () => {
+          const jsonResult = context.evalCode(`(${JSON.stringify(result)})`);
+          if (jsonResult.error) {
+            const errDump = context.dump(jsonResult.error);
+            jsonResult.error.dispose();
+            throw new Error(
+              `task: failed to marshal structured response: ${JSON.stringify(errDump)}`,
+            );
+          }
+          return jsonResult.value;
+        };
+      });
     });
 
     context.setProp(context.global, "task", hostFn);

@@ -391,6 +391,103 @@ describe("REPL Engine", () => {
     });
   });
 
+  describe("host calls are scoped to their eval", () => {
+    function trackedTool(name: string, ms: number, finished: string[]) {
+      return tool(
+        async () => {
+          await new Promise((r) => setTimeout(r, ms));
+          finished.push(name);
+          return `${name} done`;
+        },
+        { name, description: name, schema: z.object({}) },
+      );
+    }
+
+    it("should wait for a call the eval did not await", async () => {
+      const finished: string[] = [];
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 100, finished)],
+      });
+      const result = await session.eval(
+        'tools.slowRead({}); "returned"',
+        TIMEOUT,
+      );
+      expect(result).toMatchObject({ ok: true, value: "returned" });
+      expect(finished).toEqual(["slow_read"]);
+    });
+
+    it("should not charge the wait for an un-awaited call to the budget", async () => {
+      const finished: string[] = [];
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, finished)],
+      });
+      const result = await session.eval('tools.slowRead({}); "returned"', 200);
+      expect(result).toMatchObject({ ok: true, value: "returned" });
+      expect(finished).toEqual(["slow_read"]);
+    });
+
+    it("should let a later eval await a promise an earlier eval started", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 100, [])],
+      });
+      await session.eval("globalThis.p = tools.slowRead({})", TIMEOUT);
+      const result = await session.eval("await p", TIMEOUT);
+      expect(result).toMatchObject({ ok: true, value: "slow_read done" });
+    });
+
+    it("should not keep a later eval waiting on a call an interrupted eval left running", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 1000, [])],
+      });
+      const interrupted = await session.eval(
+        "tools.slowRead({}); while (true) {}",
+        200,
+      );
+      expect(interrupted.error?.message).toContain("interrupted");
+
+      const startedAt = Date.now();
+      const result = await session.eval("await new Promise(() => {})", 5000);
+      expect(result.error?.message).toContain("never settles");
+      expect(Date.now() - startedAt).toBeLessThan(200);
+    });
+
+    it("should not run a detached call's continuation in a later eval", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [
+          trackedTool("slow_read", 50, []),
+          trackedTool("other", 150, []),
+        ],
+      });
+      await session.eval(
+        "tools.slowRead({}).then(() => { while (true) {} }); throw new Error('stop')",
+        200,
+      );
+      const result = await session.eval("await tools.other({})", 200);
+      expect(result).toMatchObject({ ok: true, value: "other done" });
+    });
+
+    it("should dispose a session with a call in flight without breaking later tool calls", async () => {
+      const finished: string[] = [];
+      const interrupted = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 100, finished)],
+      });
+      const rejected = await interrupted.eval(
+        "tools.slowRead({}); throw new Error('stop')",
+        TIMEOUT,
+      );
+      expect(rejected.ok).toBe(false);
+      interrupted.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+      expect(finished).toEqual(["slow_read"]);
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("echo", 0, [])],
+      });
+      const result = await session.eval("await tools.echo({})", TIMEOUT);
+      expect(result).toMatchObject({ ok: true, value: "echo done" });
+    });
+  });
+
   describe("sandbox isolation", () => {
     it("should not expose process", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
