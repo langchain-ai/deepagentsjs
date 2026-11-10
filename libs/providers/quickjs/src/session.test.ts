@@ -466,6 +466,51 @@ describe("REPL Engine", () => {
       expect(result).toMatchObject({ ok: true, value: "other done" });
     });
 
+    it("should time out when code resumed by an un-awaited call runs away", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 50, [])],
+      });
+      const result = await session.eval(
+        'tools.slowRead({}).then(() => { while (true) {} }); "ok"',
+        200,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should run concurrent evals on one session one at a time", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, [])],
+      });
+      await session.eval("1", TIMEOUT);
+      const [awaiting, throwing] = await Promise.all([
+        session.eval("await tools.slowRead({})", TIMEOUT),
+        session.eval("throw new Error('stop')", TIMEOUT),
+      ]);
+      expect(awaiting).toMatchObject({ ok: true, value: "slow_read done" });
+      expect(throwing.ok).toBe(false);
+      expect(throwing.error?.message).toBe("stop");
+    });
+
+    it("should end an eval cleanly when its session is disposed mid-eval", async () => {
+      const disposedMidEval = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, [])],
+      });
+      const pending = disposedMidEval.eval("await tools.slowRead({})", TIMEOUT);
+      await new Promise((r) => setTimeout(r, 50));
+      disposedMidEval.dispose();
+      const result = await pending;
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("disposed");
+      await new Promise((r) => setTimeout(r, 350));
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("echo", 0, [])],
+      });
+      const after = await session.eval("await tools.echo({})", TIMEOUT);
+      expect(after).toMatchObject({ ok: true, value: "echo done" });
+    });
+
     it("should dispose a session with a call in flight without breaking later tool calls", async () => {
       const finished: string[] = [];
       const interrupted = ReplSession.getOrCreate(uniqueThreadId(), {

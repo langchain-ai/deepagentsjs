@@ -277,6 +277,10 @@ export class ReplSession {
   private inFlight = new Set<HostCall>();
   /** Calls an eval stopped waiting on; their results are dropped when they settle. */
   private detached = new Set<HostCall>();
+  /** Handles the running eval holds across an await; `dispose()` frees them. */
+  private heldHandles = new Set<QuickJSHandle>();
+  /** Tail of the evals queued on this session; they run one at a time. */
+  private evalChain: Promise<unknown> = Promise.resolve();
 
   /** Allowed keys in the subagent input object. */
   private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
@@ -438,6 +442,16 @@ export class ReplSession {
     return call.promise.handle;
   }
 
+  private hold(handle: QuickJSHandle): void {
+    this.heldHandles.add(handle);
+  }
+
+  /** Free a handle the eval held, unless `dispose()` already has. */
+  private release(handle: QuickJSHandle): void {
+    this.heldHandles.delete(handle);
+    if (handle.alive) handle.dispose();
+  }
+
   /** Stop waiting on the current eval's calls; they no longer touch the guest. */
   private detachInFlight(): void {
     for (const call of this.inFlight) {
@@ -469,7 +483,11 @@ export class ReplSession {
     context: QuickJSAsyncContext,
     overBudget: () => boolean,
   ): Promise<void> {
-    while (this.inFlight.size > 0 && !overBudget()) {
+    while (
+      this.inFlight.size > 0 &&
+      !overBudget() &&
+      this.context === context
+    ) {
       this.runPendingJobs(context);
       if (this.inFlight.size === 0) break;
       await new Promise((r) => setTimeout(r, 1));
@@ -578,6 +596,14 @@ export class ReplSession {
    * async IIFE.
    */
   async eval(code: string, timeoutMs: number): Promise<ReplResult> {
+    // Evals share the session's globals, budget and host calls, so they run
+    // one at a time; quickjs_rs likewise refuses concurrent evals on a context.
+    const run = this.evalChain.then(() => this.runEval(code, timeoutMs));
+    this.evalChain = run.catch(() => undefined);
+    return run;
+  }
+
+  private async runEval(code: string, timeoutMs: number): Promise<ReplResult> {
     await this.ensureStarted();
     const runtime = this.runtime!;
     const context = this.context!;
@@ -615,19 +641,40 @@ export class ReplSession {
     const settle = (ok: boolean, handle: QuickJSHandle): ReplResult => {
       interrupted = false;
       const dumped = this.dumpGuest(context, handle);
-      handle.dispose();
+      this.release(handle);
       if (interrupted) return timedOut();
       return ok
         ? { ok: true, value: dumped, ...drainLogs() }
         : { ok: false, error: dumped, ...drainLogs() };
+    };
+    const disposed = () => this.context !== context;
+    const sessionDisposed = (): ReplResult => ({
+      ok: false,
+      error: { message: "Session disposed while the eval was running" },
+      ...drainLogs(),
+    });
+    /**
+     * Wait for the eval's un-awaited calls. Code they resume runs under the
+     * budget, so an interrupt there, or calls still running when it runs out,
+     * make the eval a timeout.
+     */
+    const finishCalls = async (): Promise<ReplResult | null> => {
+      interrupted = false;
+      await this.awaitInFlight(context, overBudget);
+      if (disposed()) return sessionDisposed();
+      if (interrupted || this.inFlight.size > 0) return timedOut();
+      return null;
     };
     try {
       runtime.setInterruptHandler(interruptHandler);
 
       const transformed = transformForEval(code);
       const result = await sharedEvalQueue.enqueue(() =>
-        this.runGuestAsync(() => context.evalCodeAsync(transformed)),
+        disposed()
+          ? Promise.resolve(null)
+          : this.runGuestAsync(() => context.evalCodeAsync(transformed)),
       );
+      if (result === null || disposed()) return sessionDisposed();
 
       if (result.error) {
         return settle(false, result.error);
@@ -636,12 +683,19 @@ export class ReplSession {
       const promiseState = context.getPromiseState(result.value);
 
       if (promiseState.type === "fulfilled") {
-        await this.awaitInFlight(context, overBudget);
+        this.hold(result.value);
+        if (!promiseState.notAPromise) this.hold(promiseState.value);
+        const failed = await finishCalls();
+        if (failed) {
+          if (!promiseState.notAPromise) this.release(promiseState.value);
+          this.release(result.value);
+          return failed;
+        }
         if (promiseState.notAPromise) {
           return settle(true, result.value);
         }
         const settled = settle(true, promiseState.value);
-        result.value.dispose();
+        this.release(result.value);
         return settled;
       }
 
@@ -651,18 +705,26 @@ export class ReplSession {
         return settled;
       }
 
+      this.hold(result.value);
+
       while (!overBudget()) {
         this.runPendingJobs(context);
         const state = context.getPromiseState(result.value);
-        if (state.type === "fulfilled" || state.type === "rejected") {
-          if (state.type === "fulfilled") {
-            await this.awaitInFlight(context, overBudget);
+        if (state.type === "fulfilled") {
+          this.hold(state.value);
+          const failed = await finishCalls();
+          if (failed) {
+            this.release(state.value);
+            this.release(result.value);
+            return failed;
           }
-          const settled =
-            state.type === "fulfilled"
-              ? settle(true, state.value)
-              : settle(false, state.error);
-          result.value.dispose();
+          const settled = settle(true, state.value);
+          this.release(result.value);
+          return settled;
+        }
+        if (state.type === "rejected") {
+          const settled = settle(false, state.error);
+          this.release(result.value);
           return settled;
         }
         // A job stopped for running over budget leaves the promise pending.
@@ -670,7 +732,7 @@ export class ReplSession {
         // The guest has no timers or I/O of its own, so with no host call in
         // flight nothing can ever settle the promise.
         if (this.inFlight.size === 0) {
-          result.value.dispose();
+          this.release(result.value);
           return {
             ok: false,
             error: {
@@ -680,9 +742,10 @@ export class ReplSession {
           };
         }
         await new Promise((r) => setTimeout(r, 1));
+        if (disposed()) return sessionDisposed();
       }
 
-      result.value.dispose();
+      this.release(result.value);
       return timedOut();
     } finally {
       this.detachInFlight();
@@ -694,6 +757,14 @@ export class ReplSession {
     this.detachInFlight();
     for (const call of this.detached) this.freeHostCall(call);
     this.detached.clear();
+    for (const handle of this.heldHandles) {
+      try {
+        if (handle.alive) handle.dispose();
+      } catch {
+        /* may already be disposed */
+      }
+    }
+    this.heldHandles.clear();
     try {
       this.context?.dispose();
     } catch {
