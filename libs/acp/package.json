@@ -57,6 +57,7 @@
     "@vitest/coverage-v8": "^5.0.2",
     "@vitest/ui": "^5.0.2",
     "dotenv": "^18.0.4",
+    "langchain": "^1.6.2",
     "tsdown": "^0.23.4",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2",
@@ -64,7 +65,8 @@
   },
   "peerDependencies": {
     "@langchain/core": "^1.1.40",
-    "@langchain/langgraph": "^1.4.10"
+    "@langchain/langgraph": "^1.4.10",
+    "langchain": "^1.6.2"
   },
   "exports": {
     ".": {

@@ -31,6 +31,11 @@ import {
   ToolMessage,
 } from "@langchain/core/messages";
 import type { InteropZodObject } from "@langchain/core/utils/types";
+import {
+  createMiddleware,
+  type ToolCallHandler,
+  type ToolCallRequest,
+} from "langchain";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 
 import type {
@@ -845,51 +850,64 @@ export class DeepAgentsServer {
         args: Object.keys(toolCall.args),
       });
 
-      // Send tool call notification
-      await this.sendToolCall(session.id, conn, toolCall);
+      // The notification and permission request are sent by the permission
+      // middleware before the tool runs; here we only track the call.
       activeToolCalls.set(toolCall.id, toolCall);
-
-      const decision = await this.requestToolPermission(
-        session,
-        conn,
-        toolCall,
-      );
-
-      if (decision === "reject") {
-        this.log("Tool call rejected by user:", {
-          sessionId: session.id,
-          toolId: toolCall.id,
-          tool: toolCall.name,
-        });
-        toolCall.status = "failed";
-        toolCall.result = "Tool call rejected by user.";
-        await this.sendToolCallUpdate(session.id, conn, toolCall);
-        activeToolCalls.delete(toolCall.id);
-        if (this.currentPromptAbortController) {
-          this.currentPromptAbortController.abort();
-        }
-        continue;
-      }
-
-      if (decision === "cancelled") {
-        this.log("Tool call permission cancelled:", {
-          sessionId: session.id,
-          toolId: toolCall.id,
-          tool: toolCall.name,
-        });
-        toolCall.status = "cancelled";
-        await this.sendToolCallUpdate(session.id, conn, toolCall);
-        activeToolCalls.delete(toolCall.id);
-        if (this.currentPromptAbortController) {
-          this.currentPromptAbortController.abort();
-        }
-        continue;
-      }
-
-      // Update to in_progress
-      toolCall.status = "in_progress";
-      await this.sendToolCallUpdate(session.id, conn, toolCall);
     }
+  }
+
+  /**
+   * Ask the client for permission before a tool runs. Anything other than an
+   * explicit allow (rejection, cancellation, failed request, unknown session)
+   * skips the tool and cancels the turn.
+   */
+  private async gateToolCall(
+    request: ToolCallRequest,
+    handler: ToolCallHandler,
+  ) {
+    const threadId = request.runtime.configurable?.thread_id;
+    const session = [...this.sessions.values()].find(
+      (s) => s.threadId === threadId,
+    );
+    const conn = this.connection;
+    const toolCall: ToolCallInfo = {
+      id: request.toolCall.id ?? crypto.randomUUID(),
+      name: request.toolCall.name,
+      args: request.toolCall.args,
+      status: "pending",
+    };
+
+    let decision: "allow" | "reject" | "cancelled" = "reject";
+    if (session && conn) {
+      await this.sendToolCall(session.id, conn, toolCall);
+      decision = await this.requestToolPermission(session, conn, toolCall);
+    }
+
+    if (decision !== "allow" || !session || !conn) {
+      this.log("Tool call not permitted:", {
+        sessionId: session?.id,
+        toolId: toolCall.id,
+        tool: toolCall.name,
+        decision,
+      });
+      toolCall.status = decision === "cancelled" ? "cancelled" : "failed";
+      const content = "Tool call rejected by user.";
+      toolCall.result = content;
+      if (session && conn) {
+        await this.sendToolCallUpdate(session.id, conn, toolCall);
+      }
+      this.currentPromptAbortController?.abort();
+      return new ToolMessage({
+        content,
+        tool_call_id: toolCall.id,
+        name: toolCall.name,
+        status: "error",
+      });
+    }
+
+    toolCall.status = "in_progress";
+    await this.sendToolCallUpdate(session.id, conn, toolCall);
+    return handler(request);
   }
 
   /**
@@ -1048,8 +1066,8 @@ export class DeepAgentsServer {
       }
       return "allow";
     } catch (err) {
-      this.log("Permission request failed:", err);
-      return "allow";
+      this.log("Permission request failed, denying tool call:", err);
+      return "reject";
     }
   }
 
@@ -1326,7 +1344,14 @@ export class DeepAgentsServer {
       model: config.model,
       tools: config.tools,
       systemPrompt: config.systemPrompt,
-      middleware: config.middleware,
+      middleware: [
+        ...(config.middleware ?? []),
+        createMiddleware({
+          name: "ACPPermissionMiddleware",
+          wrapToolCall: (request, handler) =>
+            this.gateToolCall(request, handler),
+        }),
+      ],
       subagents: config.subagents,
       responseFormat: config.responseFormat,
       contextSchema: config.contextSchema as InteropZodObject | undefined,

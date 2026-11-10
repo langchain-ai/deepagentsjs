@@ -1113,7 +1113,7 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
     expect(result).toBe("cancelled");
   });
 
-  it("should fall back to allow on permission request error", async () => {
+  it("should reject on permission request error", async () => {
     const { serverAny } = createServerWithSession();
     const mockConn = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
@@ -1131,7 +1131,7 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
       sampleToolCall,
     );
 
-    expect(result).toBe("allow");
+    expect(result).toBe("reject");
   });
 
   it("should send correct options in permission request", async () => {
