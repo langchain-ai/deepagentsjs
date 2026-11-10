@@ -636,8 +636,8 @@ importers:
         specifier: ^3.3.3
         version: 3.3.3
       langsmith:
-        specifier: '>=0.7.1 <0.10.0'
-        version: 0.8.9(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.223.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.45.1(@aws-sdk/credential-provider-node@3.972.91)(@smithy/signature-v4@5.7.5)(ws@8.22.0)(zod@4.6.7))(ws@8.22.0)
+        specifier: '>=0.11.0 <1.0.0'
+        version: 0.11.5(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.223.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.45.1(@aws-sdk/credential-provider-node@3.972.91)(@smithy/signature-v4@5.7.5)(ws@8.22.0)(zod@4.6.7))(ws@8.22.0)
       micromatch:
         specifier: ^4.0.8
         version: 4.0.8
@@ -2937,26 +2937,6 @@ packages:
 
   langsmith@0.11.5:
     resolution: {integrity: sha512-sKKiRmQIogYR2w5KREP9cHF5LWwa+DJAkLwl9G0sTBQE6v5DaWA/ekBS0rZGlDoo6A8TFz37wRkESI+jF2XqDg==}
-    peerDependencies:
-      '@opentelemetry/api': '*'
-      '@opentelemetry/exporter-trace-otlp-proto': '*'
-      '@opentelemetry/sdk-trace-base': '*'
-      openai: '*'
-      ws: '>=7'
-    peerDependenciesMeta:
-      '@opentelemetry/api':
-        optional: true
-      '@opentelemetry/exporter-trace-otlp-proto':
-        optional: true
-      '@opentelemetry/sdk-trace-base':
-        optional: true
-      openai:
-        optional: true
-      ws:
-        optional: true
-
-  langsmith@0.8.9:
-    resolution: {integrity: sha512-6ikTB5SO+3SlBQ/+oH8K/JzhglxB8AM4RAe5bHzgWSEIHTgTe+b71bSjf1fDvlYuEXoiPn6uP10BbczrbznUnA==}
     peerDependencies:
       '@opentelemetry/api': '*'
       '@opentelemetry/exporter-trace-otlp-proto': '*'
@@ -5844,16 +5824,6 @@ snapshots:
       - ws
 
   langsmith@0.11.5(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.223.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.45.1(@aws-sdk/credential-provider-node@3.972.91)(@smithy/signature-v4@5.7.5)(ws@8.22.0)(zod@4.6.7))(ws@8.22.0):
-    dependencies:
-      p-queue: 6.6.2
-    optionalDependencies:
-      '@opentelemetry/api': 1.10.0
-      '@opentelemetry/exporter-trace-otlp-proto': 0.223.0(@opentelemetry/api@1.10.0)
-      '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.10.0)
-      openai: 7.45.1(@aws-sdk/credential-provider-node@3.972.91)(@smithy/signature-v4@5.7.5)(ws@8.22.0)(zod@4.6.7)
-      ws: 8.22.0
-
-  langsmith@0.8.9(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.223.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.45.1(@aws-sdk/credential-provider-node@3.972.91)(@smithy/signature-v4@5.7.5)(ws@8.22.0)(zod@4.6.7))(ws@8.22.0):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
