@@ -1753,6 +1753,45 @@ describe("Subagent checkpoint namespace", () => {
     ).toEqual(["Do task", "SUBAGENT_RESPONSE"]);
   });
 
+  it("records the namespace of a subagent ended by its own beforeAgent hook", async () => {
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer,
+      subagents: [
+        worker(fakeModel().respond(new AIMessage("UNREACHED")), {
+          middleware: [
+            createMiddleware({
+              name: "EndEarlyMiddleware",
+              beforeAgent: {
+                canJumpTo: ["end"],
+                hook: () => ({
+                  jumpTo: "end",
+                  messages: [new AIMessage("ENDED_EARLY")],
+                }),
+              },
+            }),
+          ],
+        }),
+      ],
+    });
+    const threadId = "ended-early-subagent-checkpoint-namespace";
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("ENDED_EARLY");
+    const namespaces = [...(await subagentNamespaces(checkpointer, threadId))];
+    expect(namespaces).toHaveLength(1);
+    expect(toolMessage?.artifact).toEqual({ checkpoint_ns: namespaces[0] });
+    expect(
+      await messagesSavedUnder(checkpointer, threadId, namespaces[0]),
+    ).toEqual(["Do task", "ENDED_EARLY"]);
+  });
+
   it.each(["isolated", "fork"] as const)(
     "records the full namespace, with the parent subagent's segments, for a task call inside a subagent (%s)",
     async (mode) => {

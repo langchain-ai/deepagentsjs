@@ -564,11 +564,11 @@ function createCheckpointNsMiddleware(): AgentMiddleware {
       const nodeNs = runtime.configurable?.checkpoint_ns;
       if (typeof nodeNs !== "string") return undefined;
       // LangGraph separates namespace segments with `|`.
-      const end = nodeNs.lastIndexOf("|");
+      const separatorIndex = nodeNs.lastIndexOf("|");
       // A graph run on its own rather than by the task tool has nothing to
       // record.
-      if (end === -1) return undefined;
-      return { [CHECKPOINT_NS_KEY]: nodeNs.slice(0, end) };
+      if (separatorIndex === -1) return undefined;
+      return { [CHECKPOINT_NS_KEY]: nodeNs.slice(0, separatorIndex) };
     },
   });
 }
