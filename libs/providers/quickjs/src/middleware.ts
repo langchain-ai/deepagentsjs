@@ -14,7 +14,10 @@ import {
 } from "langchain";
 import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { z } from "zod/v4";
-import type { StructuredToolInterface } from "@langchain/core/tools";
+import type {
+  StructuredToolInterface,
+  ToolRuntime,
+} from "@langchain/core/tools";
 import { SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY } from "deepagents";
 
 import dedent from "dedent";
@@ -53,6 +56,11 @@ import type * as _messages from "@langchain/core/messages";
 import { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 const DEFAULT_TOOL_NAME = "eval";
+
+/** Private (underscore) state: never part of the agent's input or output. */
+const QuickJSStateSchema = z.object({
+  _quickjsSessionId: z.string().optional(),
+});
 
 /**
  * Render the subagent dispatch prompt section for the system message.
@@ -493,10 +501,21 @@ export function createCodeInterpreterMiddleware(
     };
   }
 
+  // Runs of one agent share this middleware and, for subagents, the parent's
+  // thread_id, so each run keys its session on an id minted in `beforeAgent`.
+  const sessionKeyFor = (
+    state: { _quickjsSessionId?: string } | undefined,
+    threadId: string,
+  ) => state?._quickjsSessionId ?? `${threadId}:${middlewareId}`;
+
   const evalTool = tool(
-    async (input, config: LangGraphRunnableConfig) => {
+    async (
+      input,
+      config: LangGraphRunnableConfig &
+        Partial<ToolRuntime<typeof QuickJSStateSchema>>,
+    ) => {
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
-      const sessionKey = `${threadId}:${middlewareId}`;
+      const sessionKey = sessionKeyFor(config.state, threadId);
 
       const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
@@ -543,7 +562,9 @@ export function createCodeInterpreterMiddleware(
   return createMiddleware({
     name: "CodeInterpreterMiddleware",
     tracePolicy: { processInputs: omitPayload },
+    stateSchema: QuickJSStateSchema,
     tools: [evalTool],
+    beforeAgent: () => ({ _quickjsSessionId: crypto.randomUUID() }),
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools);
@@ -576,10 +597,9 @@ export function createCodeInterpreterMiddleware(
         .concat(cachedPtcPrompt || "");
       return handler({ ...request, systemMessage });
     },
-    afterAgent: async (_state, runtime) => {
+    afterAgent: async (state, runtime) => {
       const threadId = runtime.configurable?.thread_id ?? DEFAULT_SESSION_ID;
-      const sessionKey = `${threadId}:${middlewareId}`;
-      ReplSession.deleteSession(sessionKey);
+      ReplSession.deleteSession(sessionKeyFor(state, threadId));
     },
   });
 }
