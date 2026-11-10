@@ -731,11 +731,15 @@ async function resolveRealPath(
 /**
  * Check whether `path` is permitted under `rules` for `operation`.
  *
- * Returns the canonical path to hand the backend, or an error string to
- * surface to the model. The decision covers every form of the target: the
- * lexical canonical path (dot and empty segments dropped) and, when the
- * backend has a realpath hook, the symlink-resolved path it would actually
- * touch. A deny on either blocks the call.
+ * Returns the canonical path, the `target` to hand the backend for a
+ * single-file operation, or an error string to surface to the model. The
+ * decision covers every form of the target: the lexical canonical path (dot
+ * and empty segments dropped) and, when the backend has a realpath hook, the
+ * symlink-resolved path it would actually touch. A deny on either blocks the
+ * call.
+ *
+ * `target` is the path with its parent resolved once and checked, so a
+ * symlink swapped after the check cannot redirect the operation.
  *
  * Never throws: an invalid path (non-absolute, or containing `..` or `~`), one
  * the backend cannot resolve, or a denied one is a recoverable tool error, not
@@ -748,12 +752,15 @@ async function checkPermission(
   rules: FilesystemPermission[],
   operation: FilesystemOperation,
   path: string,
-): Promise<{ path: string; error?: undefined } | { error: string }> {
+): Promise<
+  { path: string; target: string; error?: undefined } | { error: string }
+> {
   if (rules.length === 0) {
-    return { path };
+    return { path, target: path };
   }
 
   let canonical: string;
+  let target: string;
   let real: string;
   try {
     canonical = validatePath(path);
@@ -762,7 +769,8 @@ async function checkPermission(
         error: `Error: permission denied for ${operation} on ${canonical}`,
       };
     }
-    real = await resolveRealPath(backend, canonical);
+    target = await resolveParentRealPath(backend, canonical);
+    real = await resolveRealPath(backend, target);
   } catch (error) {
     return { error: `Error: ${getErrorMessage(error)}` };
   }
@@ -776,7 +784,7 @@ async function checkPermission(
     };
   }
 
-  return { path: canonical };
+  return { path: canonical, target };
 }
 
 /**
@@ -1052,10 +1060,11 @@ function parentPath(path: string): string {
 }
 
 /**
- * Resolve the path a delete of `target` would actually remove. Backends unlink
- * a symlink leaf rather than following it, so only the parent is resolved.
+ * Resolve symlinks in the parent of `target`, keeping its leaf as given.
+ * Backends refuse to follow (or, for delete, unlink) a symlinked leaf, so this
+ * is the path a single-file operation actually touches.
  */
-async function resolveDeleteRealPath(
+async function resolveParentRealPath(
   backend: BackendProtocolV2,
   target: string,
 ): Promise<string> {
@@ -1345,7 +1354,7 @@ function createReadFileTool(
       );
 
       const readResult = await resolvedBackend.read(
-        permission.path,
+        permission.target,
         offset,
         limit,
       );
@@ -1493,7 +1502,7 @@ function createWriteFileTool(
       }
 
       const { file_path, content } = input;
-      const result = await resolvedBackend.write(permission.path, content);
+      const result = await resolvedBackend.write(permission.target, content);
 
       if (result.error) {
         return toolError(runtime, "write_file", result.error);
@@ -1563,7 +1572,7 @@ function createEditFileTool(
 
       const { file_path, old_string, new_string, replace_all = false } = input;
       const result = await resolvedBackend.edit(
-        permission.path,
+        permission.target,
         old_string,
         new_string,
         replace_all,
@@ -1660,10 +1669,11 @@ function createDeleteTool(
         );
       }
 
+      let deleteTarget = validatedPath;
       if (permissions.length > 0) {
         let realTarget: string;
         try {
-          realTarget = await resolveDeleteRealPath(
+          realTarget = await resolveParentRealPath(
             resolvedBackend,
             validatedPath,
           );
@@ -1688,6 +1698,7 @@ function createDeleteTool(
             );
           }
         }
+        deleteTarget = realTarget;
       }
 
       if (!supportsDelete(resolvedBackend)) {
@@ -1698,7 +1709,7 @@ function createDeleteTool(
         );
       }
 
-      const result: DeleteResult = await resolvedBackend.delete(validatedPath);
+      const result: DeleteResult = await resolvedBackend.delete(deleteTarget);
       if (result.error) {
         return toolError(runtime, "delete", result.error);
       }

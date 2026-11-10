@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createFilesystemMiddleware, findDeleteDenyPatterns } from "./fs.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 import { FilesystemBackend } from "../backends/filesystem.js";
+import { getRealpath, setRealpath } from "../backends/realpath.js";
 import type { FilesystemPermission } from "../permissions/types.js";
 import * as fs from "node:fs/promises";
 import fsPromises from "node:fs/promises";
@@ -1587,6 +1588,52 @@ describe.skipIf(process.platform === "win32")(
       await expect(
         fs.stat(path.join(root, "secret", "key")),
       ).resolves.toBeDefined();
+    });
+
+    it("operates on the checked target when an intermediate symlink is swapped after the check", async () => {
+      await fs.mkdir(path.join(root, "public"));
+      await fs.writeFile(path.join(root, "public", "key"), "PUBLIC");
+      const swap = path.join(root, "work", "swap");
+      await fs.symlink(path.join("..", "public"), swap);
+
+      // Repoint the symlink at the denied directory right after the first
+      // resolution, i.e. between the permission decision and the operation.
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: true,
+      });
+      const realpath = getRealpath(backend)!;
+      let swapped = false;
+      setRealpath(backend, async (p) => {
+        const resolved = await realpath(p);
+        if (!swapped) {
+          swapped = true;
+          await fs.unlink(swap);
+          await fs.symlink(path.join("..", "secret"), swap);
+        }
+        return resolved;
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [deny(["/secret/**"])],
+      });
+
+      const read = await getTool(middleware, "read_file").invoke({
+        file_path: "/work/swap/key",
+      });
+      expect(resultText(read)).toContain("PUBLIC");
+      expect(resultText(read)).not.toContain("TOPSECRET");
+
+      await fs.unlink(swap);
+      await fs.symlink(path.join("..", "public"), swap);
+      swapped = false;
+      await getTool(middleware, "write_file").invoke({
+        file_path: "/work/swap/key",
+        content: "OVERWRITTEN",
+      });
+      expect(await fs.readFile(path.join(root, "secret", "key"), "utf8")).toBe(
+        "TOPSECRET",
+      );
     });
 
     it("blocks a symlink that resolves outside the virtual root", async () => {
