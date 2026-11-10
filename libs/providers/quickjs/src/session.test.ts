@@ -526,22 +526,23 @@ describe("REPL Engine", () => {
       await new Promise((r) => setTimeout(r, 350));
     });
 
-    it("should fail fast instead of queueing an eval started by its own task()", async () => {
-      let nested: Awaited<ReturnType<ReplSession["eval"]>> | undefined;
-      const dispatch = vi.fn(async () => {
-        nested = await session.eval("40 + 2", TIMEOUT);
-        return "subagent done";
-      });
+    it("should queue a sibling eval behind one awaiting task()", async () => {
+      const dispatch = vi.fn(
+        () =>
+          new Promise<string>((r) => setTimeout(() => r("subagent done"), 200)),
+      );
       session = ReplSession.getOrCreate(uniqueThreadId(), {
         subagentBridge: { dispatch, maxConcurrency: 2 },
       });
-      const result = await session.eval(
+      const first = session.eval(
         'await task({ description: "d", subagentType: "general" })',
         TIMEOUT,
       );
-      expect(result).toMatchObject({ ok: true, value: "subagent done" });
-      expect(nested?.ok).toBe(false);
-      expect(nested?.error?.message).toContain("busy");
+      await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
+      const sibling = await session.eval("40 + 2", TIMEOUT);
+      const awaiting = await first;
+      expect(awaiting).toMatchObject({ ok: true, value: "subagent done" });
+      expect(sibling).toMatchObject({ ok: true, value: 42 });
     });
 
     it.each([
@@ -554,7 +555,7 @@ describe("REPL Engine", () => {
         "task({ description: 'd', subagentType: 'general' }); while (true) {}",
       ],
     ])(
-      "should not stay busy after an eval that %s leaves a task() running",
+      "should run the next eval after one that %s leaves a task() running",
       async (_name, code) => {
         const dispatch = vi.fn(
           () => new Promise<string>((r) => setTimeout(() => r("late"), 500)),

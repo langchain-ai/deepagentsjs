@@ -232,7 +232,6 @@ class ConsoleBuffer {
 
 interface HostCall {
   promise: QuickJSDeferredPromise;
-  kind: "tool" | "task";
   /** The eval stopped waiting on it: its result must not reach the guest. */
   detached: boolean;
   /** Its promise and resolvers have been disposed. */
@@ -412,12 +411,10 @@ export class ReplSession {
    */
   private startHostCall(
     context: QuickJSAsyncContext,
-    kind: HostCall["kind"],
     work: () => Promise<() => QuickJSHandle>,
   ): QuickJSHandle {
     const call: HostCall = {
       promise: context.newPromise(),
-      kind,
       detached: false,
       freed: false,
     };
@@ -599,23 +596,14 @@ export class ReplSession {
    * hoists top-level declarations to globalThis for cross-eval
    * persistence, auto-returns the last expression, and wraps in an
    * async IIFE.
+   *
+   * Evals on a session run one at a time, in call order. Don't eval on a
+   * session from inside its own subagent dispatch: that eval would wait for
+   * the one waiting on it. The middleware rejects such nested evals.
    */
   async eval(code: string, timeoutMs: number): Promise<ReplResult> {
     // Evals share the session's globals, budget and host calls, so they run
     // one at a time; quickjs_rs likewise refuses concurrent evals on a context.
-    // An eval started by a subagent this session's own task() is waiting on
-    // would queue behind that wait forever, so it fails fast instead.
-    if ([...this.inFlight].some((call) => call.kind === "task")) {
-      return Promise.resolve({
-        ok: false,
-        error: {
-          message:
-            "REPL session busy: an eval on it is waiting on task(). Run this again once that eval finishes.",
-        },
-        logs: [],
-        logsDroppedChars: 0,
-      });
-    }
     const generation = this.generation;
     const run = this.evalChain.then(() =>
       this.generation === generation
@@ -884,7 +872,7 @@ export class ReplSession {
         camelName,
         (inputHandle: QuickJSHandle) => {
           const input = context.dump(inputHandle);
-          return this.startHostCall(context, "tool", async () => {
+          return this.startHostCall(context, async () => {
             try {
               this.consumePtcBudget(camelName);
               const rawInput =
@@ -944,7 +932,7 @@ export class ReplSession {
     const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
       const input = context.dump(inputHandle);
 
-      return this.startHostCall(context, "task", async () => {
+      return this.startHostCall(context, async () => {
         if (
           input == null ||
           typeof input !== "object" ||
