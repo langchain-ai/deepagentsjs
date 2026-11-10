@@ -46,6 +46,18 @@ export const DEFAULT_SUBAGENT_PROMPT =
 // Marks a fork's own state so the task tool can refuse recursive delegation.
 const FORKED_CONTEXT_KEY = "_deepagentsForkedContext";
 
+/**
+ * Set on a subagent built from a spec to the namespace its run is checkpointed
+ * under; the task tool returns it as its `ToolMessage`'s artifact. See
+ * `createCheckpointNsMiddleware`.
+ *
+ * Not underscore-prefixed: langchain leaves `_` keys out of an agent's output,
+ * and the task tool reads this one off the subagent's `invoke` result. That
+ * also leaves it in the subagent's input schema, so `EXCLUDED_STATE_KEYS` and
+ * `FORK_EXCLUDED_STATE_KEYS` keep it out of what a subagent receives.
+ */
+const CHECKPOINT_NS_KEY = "deepagentsCheckpointNs";
+
 const FORK_RECURSION_REFUSAL =
   "You are a subagent and cannot delegate to another subagent. Complete this task yourself instead of calling this tool again.";
 
@@ -74,6 +86,8 @@ const CALL_COUNT_STATE_KEYS = [
  * State keys excluded when passing state to subagents and when returning
  * updates from subagents. Summarization keys are excluded because their
  * cutoffIndex is only valid against the message list it was computed from.
+ * The checkpoint namespace names one subagent run: a child's would replace the
+ * namespace its caller recorded for itself.
  */
 const EXCLUDED_STATE_KEYS = [
   "messages",
@@ -87,6 +101,7 @@ const EXCLUDED_STATE_KEYS = [
   "_summarizationSessionId",
   "_skillToolsDisclosed",
   FORKED_CONTEXT_KEY,
+  CHECKPOINT_NS_KEY,
 ] as const;
 
 /**
@@ -101,7 +116,8 @@ const EXCLUDED_STATE_KEYS = [
  * parent's last loaded list.
  *
  * Call counts stay excluded: a fork inherits the parent's middleware, so
- * sharing them collides on the parent's channel.
+ * sharing them collides on the parent's channel. The checkpoint namespace names
+ * the parent's run; the fork records its own.
  */
 const FORK_EXCLUDED_STATE_KEYS = [
   "structuredResponse",
@@ -110,6 +126,7 @@ const FORK_EXCLUDED_STATE_KEYS = [
   "_summarizationEvent",
   "_summarizationSessionId",
   "_skillToolsDisclosed",
+  CHECKPOINT_NS_KEY,
 ] as const;
 
 /**
@@ -448,7 +465,6 @@ const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
 function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
-  checkpointNs: string | undefined,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
 
@@ -477,6 +493,11 @@ function returnCommandWithStateUpdate(
     }
   }
 
+  // A subagent built from a spec records the namespace it saved its checkpoints
+  // under, so a client can load its history from it. The model never sees
+  // `artifact`.
+  const checkpointNs = result[CHECKPOINT_NS_KEY];
+
   return new Command({
     update: {
       ...stateUpdate,
@@ -485,9 +506,6 @@ function returnCommandWithStateUpdate(
           content,
           tool_call_id: toolCallId,
           name: "task",
-          // The subagent saves its checkpoints under `checkpointNs`, so a
-          // client can load its history from it. The model never sees
-          // `artifact`.
           ...(checkpointNs
             ? { artifact: { checkpoint_ns: checkpointNs } }
             : {}),
@@ -495,70 +513,6 @@ function returnCommandWithStateUpdate(
       ],
     },
   });
-}
-
-type CompiledGraph = { lg_is_pregel: true; outputChannels: unknown };
-
-function isCompiledGraph(value: unknown): value is CompiledGraph {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "lg_is_pregel" in value &&
-    value.lg_is_pregel === true
-  );
-}
-
-/**
- * The compiled graph behind a subagent: the subagent itself, or the `graph` of
- * a `createAgent` agent. `undefined` for any other runnable.
- */
-function getCompiledGraph(subagent: unknown): CompiledGraph | undefined {
-  if (isCompiledGraph(subagent)) return subagent;
-  const graph = (subagent as { graph?: unknown }).graph;
-  return isCompiledGraph(graph) ? graph : undefined;
-}
-
-/**
- * Invoke a subagent, returning its final state and the namespace it
- * checkpointed under.
- *
- * A compiled subagent is streamed rather than invoked so its checkpoint events
- * report the namespace it saved under. LangGraph changes that namespace from
- * the `task` call's own for a second run in the same step (`<namespace>|1`)
- * and for `checkpointer: true` (task ids removed). No checkpoint event means
- * nothing was saved. Any other runnable is invoked and assumed to save under
- * the `task` call's namespace.
- */
-async function runSubagent(
-  subagent: Runnable,
-  state: Record<string, unknown>,
-  config: Record<string, any>,
-): Promise<{
-  result: Record<string, unknown>;
-  checkpointNs: string | undefined;
-}> {
-  const graph = getCompiledGraph(subagent);
-  if (graph === undefined) {
-    return {
-      result: (await subagent.invoke(state, config)) as Record<string, unknown>,
-      checkpointNs: config.configurable?.checkpoint_ns,
-    };
-  }
-  let result: Record<string, unknown> = {};
-  let checkpointNs: string | undefined;
-  // `Runnable.stream` is typed with `RunnableConfig`, which lacks LangGraph's
-  // `streamMode` and `outputKeys`.
-  const options: Record<string, any> = {
-    ...config,
-    streamMode: ["values", "checkpoints"],
-    outputKeys: graph.outputChannels,
-  };
-  const stream = await subagent.stream(state, options);
-  for await (const [mode, chunk] of stream as AsyncIterable<[string, any]>) {
-    if (mode === "values") result = chunk;
-    else checkpointNs ??= chunk.config.configurable?.checkpoint_ns;
-  }
-  return { result, checkpointNs };
 }
 
 /** Drop the trailing in-flight AIMessage with unresolved tool_calls. */
@@ -583,6 +537,39 @@ function createForkTaskToolMiddleware(
     stateSchema: ForkedContextStateSchema,
     tools: [taskTool],
     beforeAgent: () => ({ [FORKED_CONTEXT_KEY]: true }),
+  });
+}
+
+const CheckpointNsStateSchema = z.object({
+  [CHECKPOINT_NS_KEY]: z.string().optional(),
+});
+
+/**
+ * Records the namespace this subagent run is checkpointed under, for the task
+ * tool to return.
+ *
+ * A subagent saves under the namespace of the task call that runs it, which
+ * LangGraph extends to `<namespace>|1` for a second run in the same step, such
+ * as a retried task call. Each of the subagent's nodes runs under that
+ * namespace plus `|<node>:<taskId>`, so dropping the last segment gives the
+ * namespace the run is saved under.
+ */
+function createCheckpointNsMiddleware(): AgentMiddleware {
+  return createMiddleware({
+    name: "CheckpointNsMiddleware",
+    stateSchema: CheckpointNsStateSchema,
+    beforeAgent: (_state, runtime) => {
+      // `runtime.executionInfo` is typed but langchain doesn't pass it to
+      // hooks, so read this node's namespace from its config instead.
+      const nodeNs = runtime.configurable?.checkpoint_ns;
+      if (typeof nodeNs !== "string") return undefined;
+      // LangGraph separates namespace segments with `|`.
+      const end = nodeNs.lastIndexOf("|");
+      // A graph run on its own rather than by the task tool has nothing to
+      // record.
+      if (end === -1) return undefined;
+      return { [CHECKPOINT_NS_KEY]: nodeNs.slice(0, end) };
+    },
   });
 }
 
@@ -612,7 +599,11 @@ export function createSubAgent(
     throw new Error(`SubAgent '${spec.name}' must specify 'tools'`);
   }
 
-  const middleware: AgentMiddleware[] = [...(spec.middleware ?? [])];
+  // First, so no other `beforeAgent` hook can end the run before it records.
+  const middleware: AgentMiddleware[] = [
+    createCheckpointNsMiddleware(),
+    ...(spec.middleware ?? []),
+  ];
 
   if (spec.interruptOn) {
     middleware.push(
@@ -979,11 +970,10 @@ function createTaskTool(options: {
         ls_agent_type: "subagent",
       },
     };
-    const { result, checkpointNs } = await runSubagent(
-      subagent,
+    const result = (await subagent.invoke(
       subagentState,
       subagentConfig,
-    );
+    )) as Record<string, unknown>;
 
     if (!config.toolCall?.id) {
       if (result.structuredResponse != null) {
@@ -1009,11 +999,7 @@ function createTaskTool(options: {
       return content;
     }
 
-    return returnCommandWithStateUpdate(
-      result,
-      config.toolCall.id,
-      checkpointNs,
-    );
+    return returnCommandWithStateUpdate(result, config.toolCall.id);
   }
 
   const taskToolSchema = z.object({
