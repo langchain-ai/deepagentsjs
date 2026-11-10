@@ -232,6 +232,7 @@ class ConsoleBuffer {
 
 interface HostCall {
   promise: QuickJSDeferredPromise;
+  kind: "tool" | "task";
   /** The eval stopped waiting on it: its result must not reach the guest. */
   detached: boolean;
   /** Its promise and resolvers have been disposed. */
@@ -281,6 +282,8 @@ export class ReplSession {
   private heldHandles = new Set<QuickJSHandle>();
   /** Tail of the evals queued on this session; they run one at a time. */
   private evalChain: Promise<unknown> = Promise.resolve();
+  /** Bumped by `dispose()`, so evals queued before it don't restart the session. */
+  private generation = 0;
 
   /** Allowed keys in the subagent input object. */
   private static readonly SUBAGENT_ALLOWED_KEYS = new Set([
@@ -409,10 +412,12 @@ export class ReplSession {
    */
   private startHostCall(
     context: QuickJSAsyncContext,
+    kind: HostCall["kind"],
     work: () => Promise<() => QuickJSHandle>,
   ): QuickJSHandle {
     const call: HostCall = {
       promise: context.newPromise(),
+      kind,
       detached: false,
       freed: false,
     };
@@ -598,13 +603,50 @@ export class ReplSession {
   async eval(code: string, timeoutMs: number): Promise<ReplResult> {
     // Evals share the session's globals, budget and host calls, so they run
     // one at a time; quickjs_rs likewise refuses concurrent evals on a context.
-    const run = this.evalChain.then(() => this.runEval(code, timeoutMs));
+    // An eval started by a subagent this session's own task() is waiting on
+    // would queue behind that wait forever, so it fails fast instead.
+    if ([...this.inFlight].some((call) => call.kind === "task")) {
+      return Promise.resolve({
+        ok: false,
+        error: {
+          message:
+            "REPL session busy: an eval on it is waiting on task(). Run this again once that eval finishes.",
+        },
+        logs: [],
+        logsDroppedChars: 0,
+      });
+    }
+    const generation = this.generation;
+    const run = this.evalChain.then(() =>
+      this.generation === generation
+        ? this.runEval(code, timeoutMs, generation)
+        : {
+            ok: false,
+            error: { message: "Session disposed before the eval started" },
+            logs: [],
+            logsDroppedChars: 0,
+          },
+    );
     this.evalChain = run.catch(() => undefined);
     return run;
   }
 
-  private async runEval(code: string, timeoutMs: number): Promise<ReplResult> {
+  private async runEval(
+    code: string,
+    timeoutMs: number,
+    generation: number,
+  ): Promise<ReplResult> {
     await this.ensureStarted();
+    if (this.generation !== generation) {
+      // Disposed while starting up: free the runtime that was just built.
+      this.dispose();
+      return {
+        ok: false,
+        error: { message: "Session disposed before the eval started" },
+        logs: [],
+        logsDroppedChars: 0,
+      };
+    }
     const runtime = this.runtime!;
     const context = this.context!;
 
@@ -754,6 +796,7 @@ export class ReplSession {
   }
 
   dispose(): void {
+    this.generation++;
     this.detachInFlight();
     for (const call of this.detached) this.freeHostCall(call);
     this.detached.clear();
@@ -777,7 +820,10 @@ export class ReplSession {
     }
     this.runtime = null;
     this.context = null;
-    ReplSession.sessions.delete(this.id);
+    // A stale instance must not remove the session that replaced it.
+    if (ReplSession.sessions.get(this.id) === this) {
+      ReplSession.sessions.delete(this.id);
+    }
   }
 
   toJSON(): { id: string } {
@@ -838,7 +884,7 @@ export class ReplSession {
         camelName,
         (inputHandle: QuickJSHandle) => {
           const input = context.dump(inputHandle);
-          return this.startHostCall(context, async () => {
+          return this.startHostCall(context, "tool", async () => {
             try {
               this.consumePtcBudget(camelName);
               const rawInput =
@@ -898,7 +944,7 @@ export class ReplSession {
     const hostFn = context.newFunction("task", (inputHandle: QuickJSHandle) => {
       const input = context.dump(inputHandle);
 
-      return this.startHostCall(context, async () => {
+      return this.startHostCall(context, "task", async () => {
         if (
           input == null ||
           typeof input !== "object" ||

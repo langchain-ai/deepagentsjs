@@ -511,6 +511,83 @@ describe("REPL Engine", () => {
       expect(after).toMatchObject({ ok: true, value: "echo done" });
     });
 
+    it("should not start an eval queued before the session was disposed", async () => {
+      const disposedMidEval = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, [])],
+      });
+      const running = disposedMidEval.eval("await tools.slowRead({})", TIMEOUT);
+      const queued = disposedMidEval.eval("1", TIMEOUT);
+      await new Promise((r) => setTimeout(r, 50));
+      disposedMidEval.dispose();
+      expect((await running).error?.message).toContain("disposed");
+      expect((await queued).error?.message).toBe(
+        "Session disposed before the eval started",
+      );
+      await new Promise((r) => setTimeout(r, 350));
+    });
+
+    it("should fail fast instead of queueing an eval started by its own task()", async () => {
+      let nested: Awaited<ReturnType<ReplSession["eval"]>> | undefined;
+      const dispatch = vi.fn(async () => {
+        nested = await session.eval("40 + 2", TIMEOUT);
+        return "subagent done";
+      });
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency: 2 },
+      });
+      const result = await session.eval(
+        'await task({ description: "d", subagentType: "general" })',
+        TIMEOUT,
+      );
+      expect(result).toMatchObject({ ok: true, value: "subagent done" });
+      expect(nested?.ok).toBe(false);
+      expect(nested?.error?.message).toContain("busy");
+    });
+
+    it.each([
+      [
+        "rejects",
+        "task({ description: 'd', subagentType: 'general' }); throw new Error('stop')",
+      ],
+      [
+        "times out",
+        "task({ description: 'd', subagentType: 'general' }); while (true) {}",
+      ],
+    ])(
+      "should not stay busy after an eval that %s leaves a task() running",
+      async (_name, code) => {
+        const dispatch = vi.fn(
+          () => new Promise<string>((r) => setTimeout(() => r("late"), 500)),
+        );
+        session = ReplSession.getOrCreate(uniqueThreadId(), {
+          subagentBridge: { dispatch, maxConcurrency: 2 },
+        });
+        const first = await session.eval(code, 200);
+        expect(first.ok).toBe(false);
+        const next = await session.eval("1 + 1", TIMEOUT);
+        expect(next).toMatchObject({ ok: true, value: 2 });
+      },
+    );
+
+    it("should restart lazily after being disposed mid-task()", async () => {
+      const dispatch = vi.fn(
+        () => new Promise<string>((r) => setTimeout(() => r("late"), 500)),
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency: 2 },
+      });
+      const pending = session.eval(
+        "await task({ description: 'd', subagentType: 'general' })",
+        TIMEOUT,
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      session.dispose();
+      expect((await pending).error?.message).toContain("disposed");
+      const next = await session.eval("1 + 1", TIMEOUT);
+      expect(next).toMatchObject({ ok: true, value: 2 });
+      await new Promise((r) => setTimeout(r, 500));
+    });
+
     it("should dispose a session with a call in flight without breaking later tool calls", async () => {
       const finished: string[] = [];
       const interrupted = ReplSession.getOrCreate(uniqueThreadId(), {
@@ -1090,6 +1167,15 @@ describe("REPL Engine", () => {
   });
 
   describe("session deletion", () => {
+    it("should not remove a replacement session when a stale one is disposed", () => {
+      const stale = ReplSession.getOrCreate("replaced-key");
+      stale.dispose();
+      const replacement = ReplSession.getOrCreate("replaced-key");
+      stale.dispose();
+      expect(ReplSession.get("replaced-key")).toBe(replacement);
+      replacement.dispose();
+    });
+
     it("should dispose and remove an existing session", () => {
       const session = ReplSession.getOrCreate("test-key");
       expect(ReplSession.get("test-key")).toBe(session);
