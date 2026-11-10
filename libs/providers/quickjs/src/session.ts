@@ -371,6 +371,14 @@ export class ReplSession {
     this.runGuest(() => context.runtime.executePendingJobs()).dispose();
   }
 
+  /**
+   * Convert a guest value to a host value. `dump` runs guest code
+   * (`toJSON`, getters), so it is charged to the budget like any other.
+   */
+  private dumpGuest(context: QuickJSAsyncContext, handle: QuickJSHandle) {
+    return this.runGuest(() => context.dump(handle));
+  }
+
   private elapsedExecutionMs(): number {
     return (
       this.executionMs +
@@ -493,8 +501,31 @@ export class ReplSession {
     const noTimeout = timeoutMs < 0;
     const overBudget = () =>
       !noTimeout && this.elapsedExecutionMs() > timeoutMs;
+    // Records that the handler stopped guest code, so a dump it cut short is
+    // reported as a timeout rather than as the fallback string `dump` returns.
+    let interrupted = false;
+    const interruptHandler = () => {
+      if (!overBudget()) return false;
+      interrupted = true;
+      return true;
+    };
+    const timedOut = (): ReplResult => ({
+      ok: false,
+      error: { message: "Promise timed out — execution interrupted" },
+      ...drainLogs(),
+    });
+    /** Convert and free a settled value or reason. */
+    const settle = (ok: boolean, handle: QuickJSHandle): ReplResult => {
+      interrupted = false;
+      const dumped = this.dumpGuest(context, handle);
+      handle.dispose();
+      if (interrupted) return timedOut();
+      return ok
+        ? { ok: true, value: dumped, ...drainLogs() }
+        : { ok: false, error: dumped, ...drainLogs() };
+    };
     try {
-      runtime.setInterruptHandler(overBudget);
+      runtime.setInterruptHandler(interruptHandler);
 
       const transformed = transformForEval(code);
       const result = await sharedEvalQueue.enqueue(() =>
@@ -502,59 +533,56 @@ export class ReplSession {
       );
 
       if (result.error) {
-        const error = context.dump(result.error);
-        result.error.dispose();
-        return { ok: false, error, ...drainLogs() };
+        return settle(false, result.error);
       }
 
       const promiseState = context.getPromiseState(result.value);
 
       if (promiseState.type === "fulfilled") {
         if (promiseState.notAPromise) {
-          const value = context.dump(result.value);
-          result.value.dispose();
-          return { ok: true, value, ...drainLogs() };
+          return settle(true, result.value);
         }
-        const value = context.dump(promiseState.value);
-        promiseState.value.dispose();
+        const settled = settle(true, promiseState.value);
         result.value.dispose();
-        return { ok: true, value, ...drainLogs() };
+        return settled;
       }
 
       if (promiseState.type === "rejected") {
-        const error = context.dump(promiseState.error);
-        promiseState.error.dispose();
+        const settled = settle(false, promiseState.error);
         result.value.dispose();
-        return { ok: false, error, ...drainLogs() };
+        return settled;
       }
 
-      let failure = "Promise timed out — execution interrupted";
       while (!overBudget()) {
         this.runPendingJobs(context);
         const state = context.getPromiseState(result.value);
-        if (state.type === "fulfilled") {
-          const value = context.dump(state.value);
-          state.value.dispose();
+        if (state.type === "fulfilled" || state.type === "rejected") {
+          const settled =
+            state.type === "fulfilled"
+              ? settle(true, state.value)
+              : settle(false, state.error);
           result.value.dispose();
-          return { ok: true, value, ...drainLogs() };
+          return settled;
         }
-        if (state.type === "rejected") {
-          const error = context.dump(state.error);
-          state.error.dispose();
-          result.value.dispose();
-          return { ok: false, error, ...drainLogs() };
-        }
+        // A job stopped for running over budget leaves the promise pending.
+        if (overBudget()) break;
         // The guest has no timers or I/O of its own, so with no host call in
         // flight nothing can ever settle the promise.
         if (this.pendingHostCalls === 0) {
-          failure = "Promise never settles — nothing it awaits is pending";
-          break;
+          result.value.dispose();
+          return {
+            ok: false,
+            error: {
+              message: "Promise never settles — nothing it awaits is pending",
+            },
+            ...drainLogs(),
+          };
         }
         await new Promise((r) => setTimeout(r, 1));
       }
 
       result.value.dispose();
-      return { ok: false, error: { message: failure }, ...drainLogs() };
+      return timedOut();
     } finally {
       this.ptcCallsRemaining = null;
     }

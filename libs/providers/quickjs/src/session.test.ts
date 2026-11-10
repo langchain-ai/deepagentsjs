@@ -357,6 +357,30 @@ describe("REPL Engine", () => {
       expect(result.value).toBe("echo done");
     });
 
+    it.each([
+      ["a result's toJSON", "({ toJSON() { while (true) {} } })"],
+      [
+        "a thrown object's getter",
+        "throw { get message() { while (true) {} } }",
+      ],
+      [
+        "an awaited result's toJSON",
+        "await null; ({ toJSON() { while (true) {} } })",
+      ],
+    ])("should interrupt a loop in %s", async (_name, code) => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(code, 200);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should report a loop of awaits as a timeout", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("while (true) await null", 200);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
     it("should fail fast on a promise nothing can settle", async () => {
       session = ReplSession.getOrCreate(uniqueThreadId());
       const startedAt = Date.now();
