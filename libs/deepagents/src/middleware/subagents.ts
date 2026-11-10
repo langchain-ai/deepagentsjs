@@ -21,6 +21,7 @@ import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import type { Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { refusalIn, refusalNotice, refusalNoticeFor } from "./refusal.js";
 import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
 import { appendToSystemMessage } from "./utils.js";
@@ -454,8 +455,13 @@ function returnCommandWithStateUpdate(
 
   let content: string | ContentBlock[];
 
+  const refusal = refusalIn(
+    (result.messages as BaseMessage[] | undefined)?.at(-1),
+  );
   if (result.structuredResponse != null) {
     content = JSON.stringify(result.structuredResponse);
+  } else if (refusal) {
+    content = refusalNotice(refusal);
   } else {
     // Walk back to the last AIMessage with non-empty text and forward only that
     // text as a string. Anthropic sometimes emits a trailing empty `end_turn`
@@ -915,10 +921,18 @@ function createTaskTool(options: {
         ls_agent_type: "subagent",
       },
     };
-    const result = (await subagent.invoke(
-      subagentState,
-      subagentConfig,
-    )) as Record<string, unknown>;
+    let result: Record<string, unknown>;
+    try {
+      result = (await subagent.invoke(subagentState, subagentConfig)) as Record<
+        string,
+        unknown
+      >;
+    } catch (error) {
+      // A refusal is reported to the parent agent instead of failing its run.
+      const notice = refusalNoticeFor(error);
+      if (notice === undefined) throw error;
+      return notice;
+    }
 
     if (!config.toolCall?.id) {
       if (result.structuredResponse != null) {
@@ -926,6 +940,8 @@ function createTaskTool(options: {
       }
       const messages = result.messages as BaseMessage[];
       const lastMessage = messages?.[messages.length - 1];
+      const refusal = refusalIn(lastMessage);
+      if (refusal) return refusalNotice(refusal);
       let content: string | ContentBlock[] =
         lastMessage?.content || "Task completed";
       if (Array.isArray(content)) {
