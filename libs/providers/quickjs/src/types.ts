@@ -27,7 +27,11 @@ export interface CodeInterpreterMiddlewareOptions {
   maxStackSizeBytes?: number;
 
   /**
-   * Execution timeout in milliseconds per evaluation.
+   * Execution budget in milliseconds per evaluation. It counts only time
+   * spent running JavaScript: time spent awaiting host calls such as
+   * `tools.*` or `task()` is not counted, so it does not bound an eval's
+   * total wall-clock duration. An eval also waits, uncounted, for host calls
+   * it started but did not await.
    * Set to `null` to disable the timeout entirely; negative values and
    * `Infinity` are treated the same way. Zero and `NaN` are rejected.
    *
