@@ -2,6 +2,6 @@
 "deepagents": patch
 ---
 
-fix(deepagents): run file operations on the path the permission check resolved
+fix(deepagents): bind filesystem permission decisions to the target the operation uses
 
-`read_file`, `write_file`, `edit_file` and `delete` now hand the backend the symlink-resolved path that was checked, so swapping an intermediate symlink between the check and the operation can no longer reach a denied target.
+`read_file`, `write_file`, `edit_file` and `delete` now run on the resolved path that was checked. On Linux, `FilesystemBackend` also holds the parent directory open and makes the final decision on its real location, so swapping a symlink or directory after the check cannot reach a denied target.

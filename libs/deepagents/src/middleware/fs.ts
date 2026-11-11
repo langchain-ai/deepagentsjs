@@ -32,9 +32,11 @@ import type {
   BackendProtocolV2,
   BackendRuntime,
   DeleteResult,
+  EditResult,
   FileData,
   LsResult,
   ReadResult,
+  WriteResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -604,6 +606,7 @@ import {
 } from "../permissions/enforce.js";
 import { CompositeBackend } from "../backends/composite.js";
 import { getRealpath } from "../backends/realpath.js";
+import { getPin } from "../backends/pin.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -785,6 +788,37 @@ async function checkPermission(
   }
 
   return { path: canonical, target };
+}
+
+/**
+ * Run a single-path `operation` on `target` through the backend's pin hook when
+ * rules are configured and the backend has one, so the final decision is made
+ * on the directory the operation actually uses. `isDenied` receives the real
+ * path. Without a hook, `operation` runs on the path `checkPermission` resolved.
+ */
+async function runBoundToTarget<T extends { error?: string }>(
+  backend: BackendProtocolV2,
+  rules: FilesystemPermission[],
+  target: string,
+  options: { create: boolean; describe: string },
+  isDenied: (realPath: string) => boolean,
+  operation: () => Promise<T>,
+): Promise<T | { error: string }> {
+  const pin = rules.length > 0 ? getPin(backend) : undefined;
+  if (pin === undefined) {
+    return operation();
+  }
+  return pin(
+    target,
+    { create: options.create },
+    (realPath) => {
+      const real = validatePath(realPath);
+      return isDenied(real)
+        ? `Error: permission denied for ${options.describe} (resolves to ${real})`
+        : undefined;
+    },
+    operation,
+  );
 }
 
 /**
@@ -1353,10 +1387,13 @@ function createReadFileTool(
         requestedLimit,
       );
 
-      const readResult = await resolvedBackend.read(
+      const readResult: ReadResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
         permission.target,
-        offset,
-        limit,
+        { create: false, describe: `read on ${permission.path}` },
+        (real) => decidePathAccess(permissions, "read", real) === "deny",
+        async () => resolvedBackend.read(permission.target, offset, limit),
       );
       if (readResult.error) {
         return toolError(runtime, "read_file", `Error: ${readResult.error}`);
@@ -1502,7 +1539,14 @@ function createWriteFileTool(
       }
 
       const { file_path, content } = input;
-      const result = await resolvedBackend.write(permission.target, content);
+      const result: WriteResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        { create: true, describe: `write on ${permission.path}` },
+        (real) => decidePathAccess(permissions, "write", real) === "deny",
+        async () => resolvedBackend.write(permission.target, content),
+      );
 
       if (result.error) {
         return toolError(runtime, "write_file", result.error);
@@ -1571,11 +1615,19 @@ function createEditFileTool(
       }
 
       const { file_path, old_string, new_string, replace_all = false } = input;
-      const result = await resolvedBackend.edit(
+      const result: EditResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
         permission.target,
-        old_string,
-        new_string,
-        replace_all,
+        { create: false, describe: `write on ${permission.path}` },
+        (real) => decidePathAccess(permissions, "write", real) === "deny",
+        async () =>
+          resolvedBackend.edit(
+            permission.target,
+            old_string,
+            new_string,
+            replace_all,
+          ),
       );
 
       if (result.error) {
@@ -1709,7 +1761,15 @@ function createDeleteTool(
         );
       }
 
-      const result: DeleteResult = await resolvedBackend.delete(deleteTarget);
+      const result: DeleteResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        deleteTarget,
+        { create: false, describe: `write on ${validatedPath}` },
+        (real) =>
+          findDeleteDenyPatterns(permissions, real, hasDescendants).length > 0,
+        async () => resolvedBackend.delete(deleteTarget),
+      );
       if (result.error) {
         return toolError(runtime, "delete", result.error);
       }

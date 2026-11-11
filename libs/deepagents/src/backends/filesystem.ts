@@ -8,6 +8,7 @@
  *   and optional glob include filtering, while preserving virtual path behavior
  */
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import path from "node:path";
@@ -39,8 +40,34 @@ import {
   performStringReplacement,
 } from "./utils.js";
 import { setRealpath } from "./realpath.js";
+import { setPin, type AuthorizeFn, type PinOptions } from "./pin.js";
 
 const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
+
+/**
+ * Linux exposes each open descriptor as `/proc/self/fd/<n>`: reading the link
+ * gives the real path of what is open, and resolving through it stays inside
+ * that directory. Elsewhere the pin hook is not installed.
+ */
+const PROC_FD = "/proc/self/fd";
+const SUPPORTS_PIN = process.platform === "linux" && fsSync.existsSync(PROC_FD);
+const DIR_FLAGS = fsSync.constants.O_RDONLY | fsSync.constants.O_DIRECTORY;
+
+/** A parent directory held open for one operation by `runPinned`. */
+interface PinnedDir {
+  /** The directory's path as `resolvePath` produces it. */
+  parent: string;
+  handle: fs.FileHandle;
+}
+
+function errorMessage(error: unknown): string {
+  return typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+    ? error.message
+    : String(error);
+}
 
 /** A Windows drive root (`C:\`) or network-share root (`\\server\share\`). */
 const WIN32_VOLUME_ROOT =
@@ -79,6 +106,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
   protected cwd: string;
   protected virtualMode: boolean;
   private maxFileSizeBytes: number;
+  private readonly pinnedDir = new AsyncLocalStorage<PinnedDir>();
 
   constructor(
     options: {
@@ -92,6 +120,11 @@ export class FilesystemBackend implements BackendProtocolV2 {
     this.virtualMode = virtualMode;
     this.maxFileSizeBytes = maxFileSizeMb * 1024 * 1024;
     setRealpath(this, (key) => this.resolveRealPath(key));
+    if (SUPPORTS_PIN) {
+      setPin(this, (key, options, authorize, operation) =>
+        this.runPinned(key, options, authorize, operation),
+      );
+    }
   }
 
   /**
@@ -218,8 +251,14 @@ export class FilesystemBackend implements BackendProtocolV2 {
         anchor = parent;
       }
     }
-    const realPath = path.join(realAnchor, ...missing);
+    return this.toToolPath(path.join(realAnchor, ...missing), key);
+  }
 
+  /**
+   * Map a native real path to the tool path form. Paths inside the root keep
+   * the root's configured form; in virtual mode a path outside the root throws.
+   */
+  private async toToolPath(realPath: string, key: string): Promise<string> {
     let realRoot: string;
     try {
       realRoot = await fs.realpath(this.cwd);
@@ -241,6 +280,126 @@ export class FilesystemBackend implements BackendProtocolV2 {
     return toSlashRootedPath(
       insideRoot ? path.join(this.cwd, relative) : realPath,
     );
+  }
+
+  /**
+   * {@link PinFn} implementation. Opens the deepest existing directory above
+   * `key`, authorizes the real path the kernel reports for it, creates any
+   * missing directories beneath it without following symlinks (when
+   * `options.create`), then runs `operation` with I/O on `key` routed through
+   * the open directory. A path component swapped after the directory is
+   * opened cannot redirect the operation.
+   */
+  private async runPinned<T extends { error?: string }>(
+    key: string,
+    options: PinOptions,
+    authorize: AuthorizeFn,
+    operation: () => Promise<T>,
+  ): Promise<T | { error: string }> {
+    let pinned: PinnedDir | { error: string } | undefined;
+    try {
+      pinned = await this.pinParent(key, options, authorize);
+    } catch (error) {
+      return { error: `Error: ${errorMessage(error)}` };
+    }
+    if (pinned === undefined) {
+      return operation();
+    }
+    if (!("handle" in pinned)) {
+      return pinned;
+    }
+    try {
+      return await this.pinnedDir.run(pinned, operation);
+    } finally {
+      await pinned.handle.close();
+    }
+  }
+
+  /**
+   * Open and authorize the parent directory for {@link runPinned}. Returns
+   * `undefined` when `key` has no parent to pin (the root).
+   */
+  private async pinParent(
+    key: string,
+    options: PinOptions,
+    authorize: AuthorizeFn,
+  ): Promise<PinnedDir | { error: string } | undefined> {
+    const target = this.resolvePath(key);
+    const parent = path.dirname(target);
+    if (parent === target || (this.virtualMode && target === this.cwd)) {
+      return undefined;
+    }
+
+    const missing: string[] = [];
+    let dir = parent;
+    let handle: fs.FileHandle | undefined;
+    while (handle === undefined) {
+      try {
+        handle = await fs.open(dir, DIR_FLAGS);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        const next = path.dirname(dir);
+        if ((code !== "ENOENT" && code !== "ENOTDIR") || next === dir) {
+          throw error;
+        }
+        missing.unshift(path.basename(dir));
+        dir = next;
+      }
+    }
+
+    try {
+      const realDir = await fs.readlink(`${PROC_FD}/${handle.fd}`);
+      const realPath = await this.toToolPath(
+        path.join(realDir, ...missing, path.basename(target)),
+        key,
+      );
+      const denied = await authorize(realPath);
+      if (denied !== undefined) {
+        await handle.close();
+        return { error: denied };
+      }
+      if (missing.length > 0 && !options.create) {
+        await handle.close();
+        return { error: `Error: '${key}' not found` };
+      }
+
+      for (const segment of missing) {
+        const child = `${PROC_FD}/${handle.fd}/${segment}`;
+        try {
+          await fs.mkdir(child);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+            throw error;
+          }
+        }
+        const next = await fs.open(
+          child,
+          DIR_FLAGS | fsSync.constants.O_NOFOLLOW,
+        );
+        const previous = handle;
+        handle = next;
+        await previous.close();
+      }
+      return { parent, handle };
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
+  }
+
+  /**
+   * The path to use for I/O on `resolvedPath`: routed through the directory
+   * pinned by {@link runPinned} when it is the parent, otherwise unchanged.
+   */
+  private ioPath(resolvedPath: string): string {
+    return this.pinnedPath(resolvedPath) ?? resolvedPath;
+  }
+
+  private pinnedPath(resolvedPath: string): string | undefined {
+    const pinned = this.pinnedDir.getStore();
+    return pinned !== undefined && path.dirname(resolvedPath) === pinned.parent
+      ? `${PROC_FD}/${pinned.handle.fd}/${path.basename(resolvedPath)}`
+      : undefined;
   }
 
   /**
@@ -368,18 +527,19 @@ export class FilesystemBackend implements BackendProtocolV2 {
       await this.assertRealPathWithinRoot(resolvedPath, filePath, {
         includeLeaf: true,
       });
+      const ioPath = this.ioPath(resolvedPath);
 
       const mimeType = getMimeType(filePath);
       const isBinary = !isTextMimeType(mimeType);
 
       let content: string;
       if (SUPPORTS_NOFOLLOW) {
-        const stat = await fs.stat(resolvedPath);
+        const stat = await fs.stat(ioPath);
         if (!stat.isFile()) {
           return { error: `File '${filePath}' not found` };
         }
         const fd = await fs.open(
-          resolvedPath,
+          ioPath,
           fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
         try {
@@ -392,7 +552,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
           await fd.close();
         }
       } else {
-        const stat = await fs.lstat(resolvedPath);
+        const stat = await fs.lstat(ioPath);
         if (stat.isSymbolicLink()) {
           return { error: `Symlinks are not allowed: ${filePath}` };
         }
@@ -400,10 +560,10 @@ export class FilesystemBackend implements BackendProtocolV2 {
           return { error: `File '${filePath}' not found` };
         }
         if (isBinary) {
-          const buffer = await fs.readFile(resolvedPath);
+          const buffer = await fs.readFile(ioPath);
           return { content: new Uint8Array(buffer), mimeType };
         }
-        content = await fs.readFile(resolvedPath, "utf-8");
+        content = await fs.readFile(ioPath, "utf-8");
       }
 
       const emptyMsg = checkEmptyContent(content);
@@ -530,12 +690,13 @@ export class FilesystemBackend implements BackendProtocolV2 {
       await this.assertRealPathWithinRoot(resolvedPath, filePath, {
         includeLeaf: true,
       });
+      const ioPath = this.ioPath(resolvedPath);
 
       const mimeType = getMimeType(filePath);
       const isBinary = !isTextMimeType(mimeType);
 
       try {
-        const stat = await fs.lstat(resolvedPath);
+        const stat = await fs.lstat(ioPath);
         if (stat.isSymbolicLink()) {
           return {
             error: `Cannot write to ${filePath} because it is a symlink. Symlinks are not allowed.`,
@@ -545,7 +706,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         // File doesn't exist, good to proceed
       }
 
-      await fs.mkdir(path.dirname(resolvedPath), { recursive: true });
+      await fs.mkdir(path.dirname(ioPath), { recursive: true });
 
       if (SUPPORTS_NOFOLLOW) {
         const flags =
@@ -554,7 +715,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
           fsSync.constants.O_TRUNC |
           fsSync.constants.O_NOFOLLOW;
 
-        const fd = await fs.open(resolvedPath, flags, 0o644);
+        const fd = await fs.open(ioPath, flags, 0o644);
         try {
           if (isBinary) {
             const buffer = Buffer.from(content, "base64");
@@ -568,9 +729,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
       } else {
         if (isBinary) {
           const buffer = Buffer.from(content, "base64");
-          await fs.writeFile(resolvedPath, buffer);
+          await fs.writeFile(ioPath, buffer);
         } else {
-          await fs.writeFile(resolvedPath, content, "utf-8");
+          await fs.writeFile(ioPath, content, "utf-8");
         }
       }
 
@@ -605,7 +766,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
         return { path: filePath, filesUpdate: null };
       }
 
-      const deletePath = await this.resolveDeletePath(resolvedPath, filePath);
+      const deletePath =
+        this.pinnedPath(resolvedPath) ??
+        (await this.resolveDeletePath(resolvedPath, filePath));
       const stat = await fs.lstat(deletePath).catch(() => null);
 
       if (!stat) {
@@ -646,17 +809,18 @@ export class FilesystemBackend implements BackendProtocolV2 {
       await this.assertRealPathWithinRoot(resolvedPath, filePath, {
         includeLeaf: true,
       });
+      const ioPath = this.ioPath(resolvedPath);
 
       let content: string;
 
       if (SUPPORTS_NOFOLLOW) {
-        const stat = await fs.stat(resolvedPath);
+        const stat = await fs.stat(ioPath);
         if (!stat.isFile()) {
           return { error: `Error: File '${filePath}' not found` };
         }
 
         const fd = await fs.open(
-          resolvedPath,
+          ioPath,
           fsSync.constants.O_RDONLY | fsSync.constants.O_NOFOLLOW,
         );
         try {
@@ -665,14 +829,14 @@ export class FilesystemBackend implements BackendProtocolV2 {
           await fd.close();
         }
       } else {
-        const stat = await fs.lstat(resolvedPath);
+        const stat = await fs.lstat(ioPath);
         if (stat.isSymbolicLink()) {
           return { error: `Error: Symlinks are not allowed: ${filePath}` };
         }
         if (!stat.isFile()) {
           return { error: `Error: File '${filePath}' not found` };
         }
-        content = await fs.readFile(resolvedPath, "utf-8");
+        content = await fs.readFile(ioPath, "utf-8");
       }
 
       const result = performStringReplacement(
@@ -695,14 +859,14 @@ export class FilesystemBackend implements BackendProtocolV2 {
           fsSync.constants.O_TRUNC |
           fsSync.constants.O_NOFOLLOW;
 
-        const fd = await fs.open(resolvedPath, flags);
+        const fd = await fs.open(ioPath, flags);
         try {
           await fd.writeFile(newContent, "utf-8");
         } finally {
           await fd.close();
         }
       } else {
-        await fs.writeFile(resolvedPath, newContent, "utf-8");
+        await fs.writeFile(ioPath, newContent, "utf-8");
       }
 
       return { path: filePath, filesUpdate: null, occurrences: occurrences };
