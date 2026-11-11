@@ -1094,8 +1094,27 @@ export class FilesystemBackend implements BackendProtocolV2 {
         await this.assertRealPathWithinRoot(resolvedPath, filePath, {
           includeLeaf: true,
         });
-        const content = await fs.readFile(resolvedPath);
-        responses.push({ path: filePath, content, error: null });
+        // O_NONBLOCK keeps the open from blocking on a FIFO with no writer;
+        // the regular-file check then refuses FIFOs and devices.
+        const fd = await fs.open(
+          resolvedPath,
+          fsSync.constants.O_RDONLY | (fsSync.constants.O_NONBLOCK ?? 0),
+        );
+        try {
+          const stat = await fd.stat();
+          if (!stat.isFile()) {
+            responses.push({
+              path: filePath,
+              content: null,
+              error: stat.isDirectory() ? "is_directory" : "file_not_found",
+            });
+            continue;
+          }
+          const content = await fd.readFile();
+          responses.push({ path: filePath, content, error: null });
+        } finally {
+          await fd.close();
+        }
       } catch (e: any) {
         if (e.code === "ENOENT") {
           responses.push({
