@@ -1868,7 +1868,7 @@ describe.runIf(process.platform === "linux")(
     });
 
     it("reports errors by path, not by descriptor", async () => {
-      await fs.writeFile(path.join(root, "afile"), "x");
+      await fs.writeFile(path.join(root, "plainfile"), "x");
       const middleware = createFilesystemMiddleware({
         backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
         permissions: [deny(["/secret/**"])],
@@ -1882,7 +1882,7 @@ describe.runIf(process.platform === "linux")(
           file_path: "/nodir/missing",
         }),
         await getTool(middleware, "write_file").invoke({
-          file_path: "/afile/x",
+          file_path: "/plainfile/x",
           content: "x",
         }),
       ];
