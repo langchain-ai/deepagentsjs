@@ -778,6 +778,12 @@ async function checkPermission(
     return { error: `Error: ${getErrorMessage(error)}` };
   }
 
+  if (crossesRoute(backend, canonical, target)) {
+    return {
+      error: `Error: ${canonical} resolves to ${target}, which is served by a different backend`,
+    };
+  }
+
   if (
     real !== canonical &&
     decidePathAccess(rules, operation, real) === "deny"
@@ -795,12 +801,15 @@ async function checkPermission(
  * rules are configured and the backend has one, so the final decision is made
  * on the directory the operation actually uses. `isDenied` receives the real
  * path. Without a hook, `operation` runs on the path `checkPermission` resolved.
+ *
+ * Errors raised here, rather than by `operation`, start with `errorPrefix` so
+ * they match how the calling tool formats backend errors.
  */
 async function runBoundToTarget<T extends { error?: string }>(
   backend: BackendProtocolV2,
   rules: FilesystemPermission[],
   target: string,
-  options: { create: boolean; describe: string },
+  options: { create: boolean; describe: string; errorPrefix: string },
   isDenied: (realPath: string) => boolean,
   operation: () => Promise<T>,
 ): Promise<T | { error: string }> {
@@ -808,16 +817,54 @@ async function runBoundToTarget<T extends { error?: string }>(
   if (pin === undefined) {
     return operation();
   }
-  return pin(
-    target,
-    { create: options.create },
-    (realPath) => {
-      const real = validatePath(realPath);
-      return isDenied(real)
-        ? `Error: permission denied for ${options.describe} (resolves to ${real})`
-        : undefined;
-    },
-    operation,
+  const { create, describe, errorPrefix } = options;
+  let operationStarted = false;
+  try {
+    return await pin(
+      target,
+      { create },
+      (realPath) => {
+        const real = validatePath(realPath);
+        return isDenied(real)
+          ? `${errorPrefix}permission denied for ${describe} (resolves to ${real})`
+          : undefined;
+      },
+      () => {
+        operationStarted = true;
+        return operation();
+      },
+    );
+  } catch (error) {
+    if (operationStarted) {
+      throw error;
+    }
+    return {
+      error: `${errorPrefix}${describe} failed: ${getErrorMessage(error)}`,
+    };
+  }
+}
+
+/**
+ * Whether `target` is served by a different `CompositeBackend` route than
+ * `requested`. Symlink resolution must not move an operation to another
+ * backend.
+ */
+function crossesRoute(
+  backend: BackendProtocolV2,
+  requested: string,
+  target: string,
+): boolean {
+  const resolveBackendForPath = (
+    backend as {
+      resolveBackendForPath?: (path: string) => [BackendProtocolV2, string];
+    }
+  ).resolveBackendForPath;
+  if (typeof resolveBackendForPath !== "function" || requested === target) {
+    return false;
+  }
+  return (
+    resolveBackendForPath.call(backend, requested)[0] !==
+    resolveBackendForPath.call(backend, target)[0]
   );
 }
 
@@ -1391,7 +1438,11 @@ function createReadFileTool(
         resolvedBackend,
         permissions,
         permission.target,
-        { create: false, describe: `read on ${permission.path}` },
+        {
+          create: false,
+          describe: `read on ${permission.path}`,
+          errorPrefix: "",
+        },
         (real) => decidePathAccess(permissions, "read", real) === "deny",
         async () => resolvedBackend.read(permission.target, offset, limit),
       );
@@ -1543,7 +1594,11 @@ function createWriteFileTool(
         resolvedBackend,
         permissions,
         permission.target,
-        { create: true, describe: `write on ${permission.path}` },
+        {
+          create: true,
+          describe: `write on ${permission.path}`,
+          errorPrefix: "Error: ",
+        },
         (real) => decidePathAccess(permissions, "write", real) === "deny",
         async () => resolvedBackend.write(permission.target, content),
       );
@@ -1619,7 +1674,11 @@ function createEditFileTool(
         resolvedBackend,
         permissions,
         permission.target,
-        { create: false, describe: `write on ${permission.path}` },
+        {
+          create: false,
+          describe: `write on ${permission.path}`,
+          errorPrefix: "Error: ",
+        },
         (real) => decidePathAccess(permissions, "write", real) === "deny",
         async () =>
           resolvedBackend.edit(
@@ -1736,6 +1795,13 @@ function createDeleteTool(
             `Error: ${getErrorMessage(error)}`,
           );
         }
+        if (crossesRoute(resolvedBackend, validatedPath, realTarget)) {
+          return toolError(
+            runtime,
+            "delete",
+            `Error: ${validatedPath} resolves to ${realTarget}, which is served by a different backend`,
+          );
+        }
         if (realTarget !== validatedPath) {
           const realDenyingPatterns = findDeleteDenyPatterns(
             permissions,
@@ -1765,7 +1831,11 @@ function createDeleteTool(
         resolvedBackend,
         permissions,
         deleteTarget,
-        { create: false, describe: `write on ${validatedPath}` },
+        {
+          create: false,
+          describe: `write on ${validatedPath}`,
+          errorPrefix: "Error: ",
+        },
         (real) =>
           findDeleteDenyPatterns(permissions, real, hasDescendants).length > 0,
         async () => resolvedBackend.delete(deleteTarget),
@@ -1775,7 +1845,7 @@ function createDeleteTool(
       }
 
       const message = new ToolMessage({
-        content: `Deleted ${result.path ?? validatedPath}`,
+        content: `Deleted ${result.path === undefined || result.path === deleteTarget ? validatedPath : result.path}`,
         tool_call_id: runtime.toolCall?.id as string,
         name: "delete",
         metadata: result.metadata,

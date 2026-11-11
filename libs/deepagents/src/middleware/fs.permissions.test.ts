@@ -1867,6 +1867,66 @@ describe.runIf(process.platform === "linux")(
       expect(resultText(result)).not.toContain("TOPSECRET");
     });
 
+    it("reports errors by path, not by descriptor", async () => {
+      await fs.writeFile(path.join(root, "afile"), "x");
+      const middleware = createFilesystemMiddleware({
+        backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+        permissions: [deny(["/secret/**"])],
+      });
+
+      const results = [
+        await getTool(middleware, "read_file").invoke({
+          file_path: "/public/missing",
+        }),
+        await getTool(middleware, "read_file").invoke({
+          file_path: "/nodir/missing",
+        }),
+        await getTool(middleware, "write_file").invoke({
+          file_path: "/afile/x",
+          content: "x",
+        }),
+      ];
+      for (const result of results) {
+        expect(resultStatus(result)).toBe("error");
+        expect(resultText(result)).not.toContain("/proc/self/fd");
+        expect(resultText(result)).not.toContain("Error: Error:");
+      }
+    });
+
+    it("delete reports the requested path", async () => {
+      await fs.symlink("public", path.join(root, "swap"));
+      const result = await getTool(
+        createFilesystemMiddleware({
+          backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          permissions: [deny(["/secret/**"])],
+        }),
+        "delete",
+      ).invoke({ file_path: "/swap/key" });
+      expect(resultText(result)).toBe("Deleted /swap/key");
+    });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "works in a directory that can be entered but not listed",
+      async () => {
+        await fs.chmod(path.join(root, "public"), 0o311);
+        try {
+          const result = await getTool(
+            createFilesystemMiddleware({
+              backend: new FilesystemBackend({
+                rootDir: root,
+                virtualMode: true,
+              }),
+              permissions: [deny(["/secret/**"])],
+            }),
+            "read_file",
+          ).invoke({ file_path: "/public/key" });
+          expect(resultText(result)).toContain("PUBLIC");
+        } finally {
+          await fs.chmod(path.join(root, "public"), 0o755);
+        }
+      },
+    );
+
     it("read_file through a CompositeBackend route reads the checked file", async () => {
       const routed = new FilesystemBackend({
         rootDir: root,
@@ -1886,6 +1946,63 @@ describe.runIf(process.platform === "linux")(
       });
       expect(resultText(result)).toContain("PUBLIC");
       expect(resultText(result)).not.toContain("TOPSECRET");
+    });
+  },
+);
+
+describe.skipIf(process.platform === "win32")(
+  "symlinks do not move an operation to another CompositeBackend route",
+  () => {
+    let root: string;
+    let routed: string;
+
+    beforeEach(async () => {
+      root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-route-"));
+      routed = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-route-"));
+      await fs.mkdir(path.join(root, "mem"));
+      await fs.writeFile(path.join(root, "mem", "x"), "DEFAULT");
+      await fs.writeFile(path.join(routed, "x"), "ROUTED");
+      await fs.symlink("mem", path.join(root, "link"));
+    });
+
+    afterEach(async () => {
+      await fs.rm(root, { recursive: true, force: true });
+      await fs.rm(routed, { recursive: true, force: true });
+    });
+
+    function middleware() {
+      return createFilesystemMiddleware({
+        backend: new CompositeBackend(
+          new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          {
+            "/mem/": new FilesystemBackend({
+              rootDir: routed,
+              virtualMode: true,
+            }),
+          },
+        ),
+        permissions: [deny(["/nothing/**"])],
+      });
+    }
+
+    it("refuses write_file", async () => {
+      const result = await getTool(middleware(), "write_file").invoke({
+        file_path: "/link/x",
+        content: "WRITTEN",
+      });
+      expect(resultText(result)).toContain("served by a different backend");
+      expect(await fs.readFile(path.join(routed, "x"), "utf8")).toBe("ROUTED");
+      expect(await fs.readFile(path.join(root, "mem", "x"), "utf8")).toBe(
+        "DEFAULT",
+      );
+    });
+
+    it("refuses delete", async () => {
+      const result = await getTool(middleware(), "delete").invoke({
+        file_path: "/link/x",
+      });
+      expect(resultText(result)).toContain("served by a different backend");
+      expect(fsSync.existsSync(path.join(routed, "x"))).toBe(true);
     });
   },
 );

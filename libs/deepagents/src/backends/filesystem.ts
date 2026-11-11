@@ -51,7 +51,12 @@ const SUPPORTS_NOFOLLOW = fsSync.constants.O_NOFOLLOW !== undefined;
  */
 const PROC_FD = "/proc/self/fd";
 const SUPPORTS_PIN = process.platform === "linux" && fsSync.existsSync(PROC_FD);
-const DIR_FLAGS = fsSync.constants.O_RDONLY | fsSync.constants.O_DIRECTORY;
+/**
+ * `O_PATH` (not exported by Node; this is its value on every Linux architecture
+ * Node supports) pins a directory without needing read permission on it.
+ */
+const O_PATH = 0o10000000;
+const DIR_FLAGS = O_PATH | fsSync.constants.O_DIRECTORY;
 
 /** A parent directory held open for one operation by `runPinned`. */
 interface PinnedDir {
@@ -60,13 +65,11 @@ interface PinnedDir {
   handle: fs.FileHandle;
 }
 
-function errorMessage(error: unknown): string {
-  return typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-    ? error.message
-    : String(error);
+function notFound(nativePath: string): NodeJS.ErrnoException {
+  return Object.assign(
+    new Error(`ENOENT: no such file or directory, '${nativePath}'`),
+    { code: "ENOENT" },
+  );
 }
 
 /** A Windows drive root (`C:\`) or network-share root (`\\server\share\`). */
@@ -296,20 +299,23 @@ export class FilesystemBackend implements BackendProtocolV2 {
     authorize: AuthorizeFn,
     operation: () => Promise<T>,
   ): Promise<T | { error: string }> {
-    let pinned: PinnedDir | { error: string } | undefined;
-    try {
-      pinned = await this.pinParent(key, options, authorize);
-    } catch (error) {
-      return { error: `Error: ${errorMessage(error)}` };
-    }
+    const pinned = await this.pinParent(key, options, authorize);
     if (pinned === undefined) {
       return operation();
     }
     if (!("handle" in pinned)) {
       return pinned;
     }
+    const fdPath = `${PROC_FD}/${pinned.handle.fd}/`;
     try {
-      return await this.pinnedDir.run(pinned, operation);
+      const result = await this.pinnedDir.run(pinned, operation);
+      // Report the directory as the caller named it, not by descriptor.
+      return typeof result.error === "string"
+        ? {
+            ...result,
+            error: result.error.replaceAll(fdPath, `${pinned.parent}/`),
+          }
+        : result;
     } finally {
       await pinned.handle.close();
     }
@@ -317,7 +323,8 @@ export class FilesystemBackend implements BackendProtocolV2 {
 
   /**
    * Open and authorize the parent directory for {@link runPinned}. Returns
-   * `undefined` when `key` has no parent to pin (the root).
+   * `undefined` when `key` has no parent to pin (the root), and throws when
+   * the directory cannot be pinned.
    */
   private async pinParent(
     key: string,
@@ -347,8 +354,12 @@ export class FilesystemBackend implements BackendProtocolV2 {
       }
     }
 
+    let current = dir;
     try {
       const realDir = await fs.readlink(`${PROC_FD}/${handle.fd}`);
+      if (realDir.endsWith(" (deleted)")) {
+        throw notFound(dir);
+      }
       const realPath = await this.toToolPath(
         path.join(realDir, ...missing, path.basename(target)),
         key,
@@ -359,8 +370,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
         return { error: denied };
       }
       if (missing.length > 0 && !options.create) {
-        await handle.close();
-        return { error: `Error: '${key}' not found` };
+        throw notFound(target);
       }
 
       for (const segment of missing) {
@@ -378,10 +388,22 @@ export class FilesystemBackend implements BackendProtocolV2 {
         );
         const previous = handle;
         handle = next;
+        current = path.join(current, segment);
         await previous.close();
       }
       return { parent, handle };
     } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof error.message === "string"
+      ) {
+        error.message = error.message.replaceAll(
+          `${PROC_FD}/${handle.fd}/`,
+          `${current}/`,
+        );
+      }
       await handle.close();
       throw error;
     }

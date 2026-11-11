@@ -19,7 +19,8 @@ export interface PinOptions {
 /**
  * Pins the parent of `path`, calls `authorize` with the target's real path,
  * and runs `operation` with I/O on `path` bound to the pinned directory.
- * Failures before `operation` runs are returned as `{ error }`, never thrown.
+ * Returns `{ error }` when `authorize` denies, and throws when the directory
+ * cannot be pinned.
  */
 export type PinFn = <T extends { error?: string }>(
   path: string,
