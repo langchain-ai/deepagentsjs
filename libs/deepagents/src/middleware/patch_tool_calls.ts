@@ -7,6 +7,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { RemoveMessage, type BaseMessage } from "@langchain/core/messages";
 import { REMOVE_ALL_MESSAGES } from "@langchain/langgraph";
 
@@ -135,6 +136,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
 export function createPatchToolCallsMiddleware() {
   return createMiddleware({
     name: "patchToolCallsMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     beforeAgent: async (state) => {
       const messages = state.messages;
 

@@ -298,6 +298,317 @@ describe("REPL Engine", () => {
       expect(result.ok).toBe(false);
       expect(result.error?.message).toContain("interrupted");
     });
+
+    function slowTool(name: string, ms: number) {
+      return tool(
+        async () => {
+          await new Promise((r) => setTimeout(r, ms));
+          return `${name} done`;
+        },
+        { name, description: name, schema: z.object({}) },
+      );
+    }
+
+    it("should not count time spent awaiting a tool", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 500)],
+      });
+      const result = await session.eval("await tools.slowRead({})", 200);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("slow_read done");
+    });
+
+    it("should not count time spent awaiting tools in sequence", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 300), slowTool("slow_save", 300)],
+      });
+      const result = await session.eval(
+        "await tools.slowRead({}); await tools.slowSave({})",
+        200,
+      );
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("slow_save done");
+    });
+
+    it("should still interrupt a loop that runs after a tool call", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 50)],
+      });
+      const result = await session.eval(
+        "await tools.slowRead({}); while (true) {}",
+        200,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should keep tools working after disposing a session whose job was interrupted", async () => {
+      const interrupted = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("slow_read", 50)],
+      });
+      await interrupted.eval("await tools.slowRead({}); while (true) {}", 200);
+      interrupted.dispose();
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [slowTool("echo", 0)],
+      });
+      const result = await session.eval("await tools.echo({})", TIMEOUT);
+      expect(result.ok).toBe(true);
+      expect(result.value).toBe("echo done");
+    });
+
+    it.each([
+      ["a result's toJSON", "({ toJSON() { while (true) {} } })"],
+      [
+        "a thrown object's getter",
+        "throw { get message() { while (true) {} } }",
+      ],
+      [
+        "an awaited result's toJSON",
+        "await null; ({ toJSON() { while (true) {} } })",
+      ],
+    ])("should interrupt a loop in %s", async (_name, code) => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval(code, 200);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should report a loop of awaits as a timeout", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const result = await session.eval("while (true) await null", 200);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should fail fast on a promise nothing can settle", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId());
+      const startedAt = Date.now();
+      const result = await session.eval("await new Promise(() => {})", 5000);
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("never settles");
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+    });
+  });
+
+  describe("host calls are scoped to their eval", () => {
+    function trackedTool(name: string, ms: number, finished: string[]) {
+      return tool(
+        async () => {
+          await new Promise((r) => setTimeout(r, ms));
+          finished.push(name);
+          return `${name} done`;
+        },
+        { name, description: name, schema: z.object({}) },
+      );
+    }
+
+    it("should wait for a call the eval did not await", async () => {
+      const finished: string[] = [];
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 100, finished)],
+      });
+      const result = await session.eval(
+        'tools.slowRead({}); "returned"',
+        TIMEOUT,
+      );
+      expect(result).toMatchObject({ ok: true, value: "returned" });
+      expect(finished).toEqual(["slow_read"]);
+    });
+
+    it("should not charge the wait for an un-awaited call to the budget", async () => {
+      const finished: string[] = [];
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, finished)],
+      });
+      const result = await session.eval('tools.slowRead({}); "returned"', 200);
+      expect(result).toMatchObject({ ok: true, value: "returned" });
+      expect(finished).toEqual(["slow_read"]);
+    });
+
+    it("should let a later eval await a promise an earlier eval started", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 100, [])],
+      });
+      await session.eval("globalThis.p = tools.slowRead({})", TIMEOUT);
+      const result = await session.eval("await p", TIMEOUT);
+      expect(result).toMatchObject({ ok: true, value: "slow_read done" });
+    });
+
+    it("should not keep a later eval waiting on a call an interrupted eval left running", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 1000, [])],
+      });
+      const interrupted = await session.eval(
+        "tools.slowRead({}); while (true) {}",
+        200,
+      );
+      expect(interrupted.error?.message).toContain("interrupted");
+
+      const startedAt = Date.now();
+      const result = await session.eval("await new Promise(() => {})", 5000);
+      expect(result.error?.message).toContain("never settles");
+      expect(Date.now() - startedAt).toBeLessThan(200);
+    });
+
+    it("should not run a detached call's continuation in a later eval", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [
+          trackedTool("slow_read", 50, []),
+          trackedTool("other", 150, []),
+        ],
+      });
+      await session.eval(
+        "tools.slowRead({}).then(() => { while (true) {} }); throw new Error('stop')",
+        200,
+      );
+      const result = await session.eval("await tools.other({})", 200);
+      expect(result).toMatchObject({ ok: true, value: "other done" });
+    });
+
+    it("should time out when code resumed by an un-awaited call runs away", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 50, [])],
+      });
+      const result = await session.eval(
+        'tools.slowRead({}).then(() => { while (true) {} }); "ok"',
+        200,
+      );
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("interrupted");
+    });
+
+    it("should run concurrent evals on one session one at a time", async () => {
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, [])],
+      });
+      await session.eval("1", TIMEOUT);
+      const [awaiting, throwing] = await Promise.all([
+        session.eval("await tools.slowRead({})", TIMEOUT),
+        session.eval("throw new Error('stop')", TIMEOUT),
+      ]);
+      expect(awaiting).toMatchObject({ ok: true, value: "slow_read done" });
+      expect(throwing.ok).toBe(false);
+      expect(throwing.error?.message).toBe("stop");
+    });
+
+    it("should end an eval cleanly when its session is disposed mid-eval", async () => {
+      const disposedMidEval = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, [])],
+      });
+      const pending = disposedMidEval.eval("await tools.slowRead({})", TIMEOUT);
+      await new Promise((r) => setTimeout(r, 50));
+      disposedMidEval.dispose();
+      const result = await pending;
+      expect(result.ok).toBe(false);
+      expect(result.error?.message).toContain("disposed");
+      await new Promise((r) => setTimeout(r, 350));
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("echo", 0, [])],
+      });
+      const after = await session.eval("await tools.echo({})", TIMEOUT);
+      expect(after).toMatchObject({ ok: true, value: "echo done" });
+    });
+
+    it("should not start an eval queued before the session was disposed", async () => {
+      const disposedMidEval = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 300, [])],
+      });
+      const running = disposedMidEval.eval("await tools.slowRead({})", TIMEOUT);
+      const queued = disposedMidEval.eval("1", TIMEOUT);
+      await new Promise((r) => setTimeout(r, 50));
+      disposedMidEval.dispose();
+      expect((await running).error?.message).toContain("disposed");
+      expect((await queued).error?.message).toBe(
+        "Session disposed before the eval started",
+      );
+      await new Promise((r) => setTimeout(r, 350));
+    });
+
+    it("should queue a sibling eval behind one awaiting task()", async () => {
+      const dispatch = vi.fn(
+        () =>
+          new Promise<string>((r) => setTimeout(() => r("subagent done"), 200)),
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency: 2 },
+      });
+      const first = session.eval(
+        'await task({ description: "d", subagentType: "general" })',
+        TIMEOUT,
+      );
+      await vi.waitFor(() => expect(dispatch).toHaveBeenCalled());
+      const sibling = await session.eval("40 + 2", TIMEOUT);
+      const awaiting = await first;
+      expect(awaiting).toMatchObject({ ok: true, value: "subagent done" });
+      expect(sibling).toMatchObject({ ok: true, value: 42 });
+    });
+
+    it.each([
+      [
+        "rejects",
+        "task({ description: 'd', subagentType: 'general' }); throw new Error('stop')",
+      ],
+      [
+        "times out",
+        "task({ description: 'd', subagentType: 'general' }); while (true) {}",
+      ],
+    ])(
+      "should run the next eval after one that %s leaves a task() running",
+      async (_name, code) => {
+        const dispatch = vi.fn(
+          () => new Promise<string>((r) => setTimeout(() => r("late"), 500)),
+        );
+        session = ReplSession.getOrCreate(uniqueThreadId(), {
+          subagentBridge: { dispatch, maxConcurrency: 2 },
+        });
+        const first = await session.eval(code, 200);
+        expect(first.ok).toBe(false);
+        const next = await session.eval("1 + 1", TIMEOUT);
+        expect(next).toMatchObject({ ok: true, value: 2 });
+      },
+    );
+
+    it("should restart lazily after being disposed mid-task()", async () => {
+      const dispatch = vi.fn(
+        () => new Promise<string>((r) => setTimeout(() => r("late"), 500)),
+      );
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        subagentBridge: { dispatch, maxConcurrency: 2 },
+      });
+      const pending = session.eval(
+        "await task({ description: 'd', subagentType: 'general' })",
+        TIMEOUT,
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      session.dispose();
+      expect((await pending).error?.message).toContain("disposed");
+      const next = await session.eval("1 + 1", TIMEOUT);
+      expect(next).toMatchObject({ ok: true, value: 2 });
+      await new Promise((r) => setTimeout(r, 500));
+    });
+
+    it("should dispose a session with a call in flight without breaking later tool calls", async () => {
+      const finished: string[] = [];
+      const interrupted = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("slow_read", 100, finished)],
+      });
+      const rejected = await interrupted.eval(
+        "tools.slowRead({}); throw new Error('stop')",
+        TIMEOUT,
+      );
+      expect(rejected.ok).toBe(false);
+      interrupted.dispose();
+      await new Promise((r) => setTimeout(r, 200));
+      expect(finished).toEqual(["slow_read"]);
+
+      session = ReplSession.getOrCreate(uniqueThreadId(), {
+        tools: [trackedTool("echo", 0, [])],
+      });
+      const result = await session.eval("await tools.echo({})", TIMEOUT);
+      expect(result).toMatchObject({ ok: true, value: "echo done" });
+    });
   });
 
   describe("sandbox isolation", () => {
@@ -857,6 +1168,15 @@ describe("REPL Engine", () => {
   });
 
   describe("session deletion", () => {
+    it("should not remove a replacement session when a stale one is disposed", () => {
+      const stale = ReplSession.getOrCreate("replaced-key");
+      stale.dispose();
+      const replacement = ReplSession.getOrCreate("replaced-key");
+      stale.dispose();
+      expect(ReplSession.get("replaced-key")).toBe(replacement);
+      replacement.dispose();
+    });
+
     it("should dispose and remove an existing session", () => {
       const session = ReplSession.getOrCreate("test-key");
       expect(ReplSession.get("test-key")).toBe(session);

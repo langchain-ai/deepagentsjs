@@ -52,6 +52,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import type { ConfigurableModel } from "langchain/chat_models/universal";
 import {
   Command,
@@ -1645,6 +1646,7 @@ export function createSkillsMiddleware<TContext = unknown>(
 
   return createMiddleware({
     name: "SkillsMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: SkillsStateSchema,
 
     async beforeModel(state) {

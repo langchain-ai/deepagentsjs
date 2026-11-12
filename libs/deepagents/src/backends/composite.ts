@@ -26,6 +26,7 @@ import {
 } from "./protocol.js";
 import { adaptBackendProtocol, adaptSandboxProtocol } from "./utils.js";
 import { getRealpath, setRealpath } from "./realpath.js";
+import { getPin, setPin, type AuthorizeFn, type PinOptions } from "./pin.js";
 
 /**
  * Backend that routes file operations to different backends based on path prefix.
@@ -66,6 +67,9 @@ export class CompositeBackend implements BackendProtocolV2 {
     );
 
     setRealpath(this, (path) => this.resolveRealPath(path));
+    setPin(this, (path, options, authorize, operation) =>
+      this.runPinned(path, options, authorize, operation),
+    );
   }
 
   /** Delegates to default backend's id if it is a sandbox, otherwise empty string. */
@@ -118,6 +122,39 @@ export class CompositeBackend implements BackendProtocolV2 {
     }
     const realpath = getRealpath(this.default);
     return realpath === undefined ? path : await realpath(path);
+  }
+
+  /**
+   * Pin via the backend that owns `path`, re-adding the route prefix to the
+   * real path it authorizes. Runs `operation` unpinned when that backend has
+   * no pin hook.
+   */
+  private runPinned<T extends { error?: string }>(
+    path: string,
+    options: PinOptions,
+    authorize: AuthorizeFn,
+    operation: () => Promise<T>,
+  ): Promise<T | { error: string }> {
+    for (const [routePrefix, backend] of this.sortedRoutes) {
+      if (this.isPathWithinRoute(path, routePrefix)) {
+        const pin = getPin(backend);
+        if (pin === undefined) {
+          return operation();
+        }
+        const prefix = routePrefix.slice(0, -1);
+        const suffix = path.substring(routePrefix.length);
+        return pin(
+          suffix ? "/" + suffix : "/",
+          options,
+          (realPath) => authorize(prefix + realPath),
+          operation,
+        );
+      }
+    }
+    const pin = getPin(this.default);
+    return pin === undefined
+      ? operation()
+      : pin(path, options, authorize, operation);
   }
 
   /**

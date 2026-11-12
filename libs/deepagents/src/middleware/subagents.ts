@@ -16,10 +16,12 @@ import {
   StructuredTool,
   context,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import { RunnableBinding, type Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { refusalIn, refusalNotice, refusalNoticeFor } from "./refusal.js";
 import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
 import { appendToSystemMessage } from "./utils.js";
@@ -454,8 +456,13 @@ function returnCommandWithStateUpdate(
 
   let content: string | ContentBlock[];
 
+  const refusal = refusalIn(
+    (result.messages as BaseMessage[] | undefined)?.at(-1),
+  );
   if (result.structuredResponse != null) {
     content = JSON.stringify(result.structuredResponse);
+  } else if (refusal) {
+    content = refusalNotice(refusal);
   } else {
     // Walk back to the last AIMessage with non-empty text and forward only that
     // text as a string. Anthropic sometimes emits a trailing empty `end_turn`
@@ -592,6 +599,7 @@ function createForkTaskToolMiddleware(
 ): AgentMiddleware {
   return createMiddleware({
     name: "forkTaskToolMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: ForkedContextStateSchema,
     tools: [taskTool],
     beforeAgent: () => ({ [FORKED_CONTEXT_KEY]: true }),
@@ -985,17 +993,31 @@ function createTaskTool(options: {
       metadata: {
         ...config.metadata,
         lc_agent_name: subagent_type,
+        // Traces and stream metadata carry this key; checkpointers that copy
+        // config metadata also store it, tying the subagent to its `task` call.
+        ...(config.toolCall?.id && {
+          lc_subagent_tool_call_id: config.toolCall.id,
+        }),
       },
       configurable: {
         ...config.configurable,
         ls_agent_type: "subagent",
       },
     };
-    const { result, checkpointNs } = await runSubagent(
-      subagent,
-      subagentState,
-      subagentConfig,
-    );
+    let result: Record<string, unknown>;
+    let checkpointNs: string | undefined;
+    try {
+      ({ result, checkpointNs } = await runSubagent(
+        subagent,
+        subagentState,
+        subagentConfig,
+      ));
+    } catch (error) {
+      // A refusal is reported to the parent agent instead of failing its run.
+      const notice = refusalNoticeFor(error);
+      if (notice === undefined) throw error;
+      return notice;
+    }
 
     if (!config.toolCall?.id) {
       if (result.structuredResponse != null) {
@@ -1003,6 +1025,8 @@ function createTaskTool(options: {
       }
       const messages = result.messages as BaseMessage[];
       const lastMessage = messages?.[messages.length - 1];
+      const refusal = refusalIn(lastMessage);
+      if (refusal) return refusalNotice(refusal);
       let content: string | ContentBlock[] =
         lastMessage?.content || "Task completed";
       if (Array.isArray(content)) {
@@ -1135,6 +1159,7 @@ export function createSubAgentMiddleware(options: SubAgentMiddlewareOptions) {
 
   return createMiddleware({
     name: "subAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     tools: [taskTool],
     wrapModelCall: async (request, handler) => {
       if (systemPrompt !== null) {

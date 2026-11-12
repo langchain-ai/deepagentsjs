@@ -18,6 +18,7 @@ import {
   type BuiltInState,
   type ToolRuntime,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import {
   addNotificationMetadata,
   AIMessage,
@@ -28,6 +29,7 @@ import {
   ToolMessage as CoreToolMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
+import { refusalIn, refusalNotice } from "./refusal.js";
 import { getCurrentRunTree } from "langsmith/traceable";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
@@ -1101,9 +1103,12 @@ export function finalContent(values: unknown): ContentBlock.Standard[] {
   }
   const last = messages[messages.length - 1];
   try {
-    return coerceMessageLikeToMessage(
+    const message = coerceMessageLikeToMessage(
       last as Parameters<typeof coerceMessageLikeToMessage>[0],
-    ).contentBlocks;
+    );
+    const refusal = refusalIn(message);
+    if (refusal) return [{ type: "text", text: refusalNotice(refusal) }];
+    return message.contentBlocks;
   } catch {
     // Another Agent Protocol server may send a shape LangChain can't read; keep its text.
     return [{ type: "text", text: messageText(last) }];
@@ -1946,6 +1951,7 @@ export function createAsyncSubAgentMiddleware(
 
   return createMiddleware({
     name: "asyncSubAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: AsyncTaskStateSchema,
     tools,
     beforeAgent: async (state) => {

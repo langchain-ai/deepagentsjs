@@ -2399,6 +2399,81 @@ describe("lc_agent_name propagation for subagents", () => {
   });
 });
 
+describe("lc_subagent_tool_call_id propagation for subagents", () => {
+  it("should pass each subagent the id of the task call that started it", async () => {
+    const callIdsByAgent = new Map<string, unknown>();
+    const identifyCall = tool(
+      (_input, config) => {
+        callIdsByAgent.set(
+          config.metadata?.lc_agent_name as string,
+          config.metadata?.lc_subagent_tool_call_id,
+        );
+        return "captured";
+      },
+      {
+        name: "identify_call",
+        description: "Capture lc_subagent_tool_call_id from metadata",
+        schema: z.object({}),
+      },
+    );
+    const parentModel = new FakeListChatModel({
+      responses: [
+        new AIMessage({
+          content: "",
+          tool_calls: [
+            {
+              id: "call_add",
+              name: "task",
+              args: { description: "Add", subagent_type: "adder" },
+            },
+            {
+              id: "call_multiply",
+              name: "task",
+              args: { description: "Multiply", subagent_type: "multiplier" },
+            },
+          ],
+        }) as unknown as string,
+        "Done",
+      ],
+    });
+    const agent = createDeepAgent({
+      model: parentModel,
+      subagents: ["adder", "multiplier"].map((name) => ({
+        name,
+        description: `Does ${name} work.`,
+        runnable: createAgent({
+          model: new FakeListChatModel({
+            responses: [
+              new AIMessage({
+                content: "",
+                tool_calls: [
+                  { id: `${name}_call`, name: "identify_call", args: {} },
+                ],
+              }) as unknown as string,
+              "Subagent done",
+            ],
+          }),
+          tools: [identifyCall],
+          name,
+        }),
+      })),
+    });
+
+    await agent.invoke(
+      { messages: [new HumanMessage("Test")] },
+      {
+        configurable: { thread_id: `test-lc-tool-call-id-${Date.now()}` },
+        recursionLimit: 50,
+      },
+    );
+
+    expect(Object.fromEntries(callIdsByAgent)).toEqual({
+      adder: "call_add",
+      multiplier: "call_multiply",
+    });
+  });
+});
+
 describe("Subagent tool inheritance", () => {
   beforeEach(() => {
     createAgentMock.mockClear();
@@ -2738,6 +2813,58 @@ describe("middleware override by name", () => {
       );
       expect(cacheEntries).toHaveLength(1);
       expect(cacheEntries[0]).toBe(custom);
+    }
+  });
+
+  it("adds modelRefusalMiddleware after custom middleware in every stack", () => {
+    const custom = namedMiddleware("CustomMiddleware");
+
+    createDeepAgent({
+      model: fakeModel,
+      name: "main",
+      middleware: [custom],
+      subagents: [
+        {
+          name: "helper",
+          description: "Helps.",
+          systemPrompt: "Help.",
+          middleware: [namedMiddleware("SpecMiddleware")],
+        },
+      ],
+    });
+
+    for (const agentName of ["main", "general-purpose", "helper"]) {
+      const names = getMiddlewareStack(agentName).map((entry) => entry.name);
+      expect(names.filter((n) => n === "modelRefusalMiddleware")).toHaveLength(
+        1,
+      );
+    }
+    // The general-purpose subagent does not inherit novel custom middleware.
+    for (const [agentName, own] of [
+      ["main", "CustomMiddleware"],
+      ["helper", "SpecMiddleware"],
+    ] as const) {
+      const names = getMiddlewareStack(agentName).map((entry) => entry.name);
+      expect(names.indexOf(own)).toBeGreaterThanOrEqual(0);
+      expect(names.indexOf("modelRefusalMiddleware")).toBeGreaterThan(
+        names.indexOf(own),
+      );
+    }
+  });
+
+  it("lets a harness profile exclude modelRefusalMiddleware", () => {
+    registerHarnessProfile("refusal-exclusion-test:model", {
+      excludedMiddleware: ["modelRefusalMiddleware"],
+    });
+
+    createDeepAgent({ model: "refusal-exclusion-test:model", name: "main" });
+
+    for (const agentName of ["main", "general-purpose"]) {
+      expect(
+        getMiddlewareStack(agentName).some(
+          (entry) => entry.name === "modelRefusalMiddleware",
+        ),
+      ).toBe(false);
     }
   });
 
@@ -3135,11 +3262,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("helper").slice(-5)).toEqual([
+      expect(names("helper").slice(-6)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "modelRefusalMiddleware",
         "UnsupportedContentMiddleware",
       ]);
       for (const agentName of ["main", "general-purpose"]) {
@@ -3172,11 +3300,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("forker").slice(-5)).toEqual([
+      expect(names("forker").slice(-6)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "modelRefusalMiddleware",
         "UnsupportedContentMiddleware",
       ]);
       for (const agentName of ["main", "general-purpose"]) {
@@ -3210,11 +3339,12 @@ describe("middleware override by name", () => {
       expect(
         stack.filter((entry) => entry.name === "SkillsMiddleware"),
       ).toEqual([own]);
-      expect(names("forker").slice(-5)).toEqual([
+      expect(names("forker").slice(-6)).toEqual([
         "Fallback",
         "SkillsMiddleware",
         "PromptCachingMiddleware",
         "CacheBreakpointMiddleware",
+        "modelRefusalMiddleware",
         "UnsupportedContentMiddleware",
       ]);
     });

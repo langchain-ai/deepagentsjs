@@ -1,6 +1,7 @@
 import { getConfig, isGraphBubbleUp } from "@langchain/langgraph";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { createMiddleware } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 import {
   currentRunId,
@@ -66,6 +67,7 @@ export function createParentNotifierMiddleware() {
 
   return createMiddleware({
     name: "parentNotifierMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     afterAgent: async (state) => {
       await report("success", { result: finalContent(state) });
     },
