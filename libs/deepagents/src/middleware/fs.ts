@@ -32,9 +32,11 @@ import type {
   BackendProtocolV2,
   BackendRuntime,
   DeleteResult,
+  EditResult,
   FileData,
   LsResult,
   ReadResult,
+  WriteResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -604,6 +606,7 @@ import {
 } from "../permissions/enforce.js";
 import { CompositeBackend } from "../backends/composite.js";
 import { getRealpath } from "../backends/realpath.js";
+import { getPin } from "../backends/pin.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -731,11 +734,15 @@ async function resolveRealPath(
 /**
  * Check whether `path` is permitted under `rules` for `operation`.
  *
- * Returns the canonical path to hand the backend, or an error string to
- * surface to the model. The decision covers every form of the target: the
- * lexical canonical path (dot and empty segments dropped) and, when the
- * backend has a realpath hook, the symlink-resolved path it would actually
- * touch. A deny on either blocks the call.
+ * Returns the canonical path, the `target` to hand the backend for a
+ * single-file operation, or an error string to surface to the model. The
+ * decision covers every form of the target: the lexical canonical path (dot
+ * and empty segments dropped) and, when the backend has a realpath hook, the
+ * symlink-resolved path it would actually touch. A deny on either blocks the
+ * call.
+ *
+ * `target` is the path with its parent resolved once and checked, so a
+ * symlink swapped after the check cannot redirect the operation.
  *
  * Never throws: an invalid path (non-absolute, or containing `..` or `~`), one
  * the backend cannot resolve, or a denied one is a recoverable tool error, not
@@ -748,12 +755,15 @@ async function checkPermission(
   rules: FilesystemPermission[],
   operation: FilesystemOperation,
   path: string,
-): Promise<{ path: string; error?: undefined } | { error: string }> {
+): Promise<
+  { path: string; target: string; error?: undefined } | { error: string }
+> {
   if (rules.length === 0) {
-    return { path };
+    return { path, target: path };
   }
 
   let canonical: string;
+  let target: string;
   let real: string;
   try {
     canonical = validatePath(path);
@@ -762,9 +772,16 @@ async function checkPermission(
         error: `Error: permission denied for ${operation} on ${canonical}`,
       };
     }
-    real = await resolveRealPath(backend, canonical);
+    target = await resolveParentRealPath(backend, canonical);
+    real = await resolveRealPath(backend, target);
   } catch (error) {
     return { error: `Error: ${getErrorMessage(error)}` };
+  }
+
+  if (crossesRoute(backend, canonical, target)) {
+    return {
+      error: `Error: ${canonical} resolves to ${target}, which is served by a different backend`,
+    };
   }
 
   if (
@@ -776,7 +793,79 @@ async function checkPermission(
     };
   }
 
-  return { path: canonical };
+  return { path: canonical, target };
+}
+
+/**
+ * Run a single-path `operation` on `target` through the backend's pin hook when
+ * rules are configured and the backend has one, so the final decision is made
+ * on the directory the operation actually uses. `isDenied` receives the real
+ * path. Without a hook, `operation` runs on the path `checkPermission` resolved.
+ *
+ * Errors raised here, rather than by `operation`, start with `errorPrefix` so
+ * they match how the calling tool formats backend errors.
+ */
+async function runBoundToTarget<T extends { error?: string }>(
+  backend: BackendProtocolV2,
+  rules: FilesystemPermission[],
+  target: string,
+  options: { create: boolean; describe: string; errorPrefix: string },
+  isDenied: (realPath: string) => boolean,
+  operation: () => Promise<T>,
+): Promise<T | { error: string }> {
+  const pin = rules.length > 0 ? getPin(backend) : undefined;
+  if (pin === undefined) {
+    return operation();
+  }
+  const { create, describe, errorPrefix } = options;
+  let operationStarted = false;
+  try {
+    return await pin(
+      target,
+      { create },
+      (realPath) => {
+        const real = validatePath(realPath);
+        return isDenied(real)
+          ? `${errorPrefix}permission denied for ${describe} (resolves to ${real})`
+          : undefined;
+      },
+      () => {
+        operationStarted = true;
+        return operation();
+      },
+    );
+  } catch (error) {
+    if (operationStarted) {
+      throw error;
+    }
+    return {
+      error: `${errorPrefix}${describe} failed: ${getErrorMessage(error)}`,
+    };
+  }
+}
+
+/**
+ * Whether `target` is served by a different `CompositeBackend` route than
+ * `requested`. Symlink resolution must not move an operation to another
+ * backend.
+ */
+function crossesRoute(
+  backend: BackendProtocolV2,
+  requested: string,
+  target: string,
+): boolean {
+  const resolveBackendForPath = (
+    backend as {
+      resolveBackendForPath?: (path: string) => [BackendProtocolV2, string];
+    }
+  ).resolveBackendForPath;
+  if (typeof resolveBackendForPath !== "function" || requested === target) {
+    return false;
+  }
+  return (
+    resolveBackendForPath.call(backend, requested)[0] !==
+    resolveBackendForPath.call(backend, target)[0]
+  );
 }
 
 /**
@@ -1052,10 +1141,11 @@ function parentPath(path: string): string {
 }
 
 /**
- * Resolve the path a delete of `target` would actually remove. Backends unlink
- * a symlink leaf rather than following it, so only the parent is resolved.
+ * Resolve symlinks in the parent of `target`, keeping its leaf as given.
+ * Backends refuse to follow (or, for delete, unlink) a symlinked leaf, so this
+ * is the path a single-file operation actually touches.
  */
-async function resolveDeleteRealPath(
+async function resolveParentRealPath(
   backend: BackendProtocolV2,
   target: string,
 ): Promise<string> {
@@ -1344,10 +1434,17 @@ function createReadFileTool(
         requestedLimit,
       );
 
-      const readResult = await resolvedBackend.read(
-        permission.path,
-        offset,
-        limit,
+      const readResult: ReadResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        {
+          create: false,
+          describe: `read on ${permission.path}`,
+          errorPrefix: "",
+        },
+        (real) => decidePathAccess(permissions, "read", real) === "deny",
+        async () => resolvedBackend.read(permission.target, offset, limit),
       );
       if (readResult.error) {
         return toolError(runtime, "read_file", `Error: ${readResult.error}`);
@@ -1493,7 +1590,18 @@ function createWriteFileTool(
       }
 
       const { file_path, content } = input;
-      const result = await resolvedBackend.write(permission.path, content);
+      const result: WriteResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        {
+          create: true,
+          describe: `write on ${permission.path}`,
+          errorPrefix: "Error: ",
+        },
+        (real) => decidePathAccess(permissions, "write", real) === "deny",
+        async () => resolvedBackend.write(permission.target, content),
+      );
 
       if (result.error) {
         return toolError(runtime, "write_file", result.error);
@@ -1562,11 +1670,23 @@ function createEditFileTool(
       }
 
       const { file_path, old_string, new_string, replace_all = false } = input;
-      const result = await resolvedBackend.edit(
-        permission.path,
-        old_string,
-        new_string,
-        replace_all,
+      const result: EditResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        {
+          create: false,
+          describe: `write on ${permission.path}`,
+          errorPrefix: "Error: ",
+        },
+        (real) => decidePathAccess(permissions, "write", real) === "deny",
+        async () =>
+          resolvedBackend.edit(
+            permission.target,
+            old_string,
+            new_string,
+            replace_all,
+          ),
       );
 
       if (result.error) {
@@ -1660,10 +1780,11 @@ function createDeleteTool(
         );
       }
 
+      let deleteTarget = validatedPath;
       if (permissions.length > 0) {
         let realTarget: string;
         try {
-          realTarget = await resolveDeleteRealPath(
+          realTarget = await resolveParentRealPath(
             resolvedBackend,
             validatedPath,
           );
@@ -1672,6 +1793,13 @@ function createDeleteTool(
             runtime,
             "delete",
             `Error: ${getErrorMessage(error)}`,
+          );
+        }
+        if (crossesRoute(resolvedBackend, validatedPath, realTarget)) {
+          return toolError(
+            runtime,
+            "delete",
+            `Error: ${validatedPath} resolves to ${realTarget}, which is served by a different backend`,
           );
         }
         if (realTarget !== validatedPath) {
@@ -1688,6 +1816,7 @@ function createDeleteTool(
             );
           }
         }
+        deleteTarget = realTarget;
       }
 
       if (!supportsDelete(resolvedBackend)) {
@@ -1698,13 +1827,25 @@ function createDeleteTool(
         );
       }
 
-      const result: DeleteResult = await resolvedBackend.delete(validatedPath);
+      const result: DeleteResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        deleteTarget,
+        {
+          create: false,
+          describe: `write on ${validatedPath}`,
+          errorPrefix: "Error: ",
+        },
+        (real) =>
+          findDeleteDenyPatterns(permissions, real, hasDescendants).length > 0,
+        async () => resolvedBackend.delete(deleteTarget),
+      );
       if (result.error) {
         return toolError(runtime, "delete", result.error);
       }
 
       const message = new ToolMessage({
-        content: `Deleted ${result.path ?? validatedPath}`,
+        content: `Deleted ${result.path === undefined || result.path === deleteTarget ? validatedPath : result.path}`,
         tool_call_id: runtime.toolCall?.id as string,
         name: "delete",
         metadata: result.metadata,
