@@ -1638,6 +1638,21 @@ describe("Subagent checkpoint namespace", () => {
     return messages?.map((message) => message.content);
   };
 
+  // A subagent graph that throws on its first run and answers
+  // "SUBAGENT_RESPONSE" on the next.
+  const subagentThatFailsOnce = () => {
+    let runs = 0;
+    return new StateGraph(MessagesAnnotation)
+      .addNode("work", () => {
+        runs += 1;
+        if (runs === 1) throw new Error("first run fails");
+        return { messages: [new AIMessage("SUBAGENT_RESPONSE")] };
+      })
+      .addEdge(START, "work")
+      .addEdge("work", END)
+      .compile();
+  };
+
   it("records the namespace holding the subagent's checkpoints on the task tool message", async () => {
     const subagentContent = "SUBAGENT_RESPONSE";
     const model = new FakeListChatModel({
@@ -1776,16 +1791,6 @@ describe("Subagent checkpoint namespace", () => {
   it("records the namespace of the run that finished when the task call is retried", async () => {
     // LangGraph saves a second subagent run in the same step under
     // `<namespace>|1`.
-    let runs = 0;
-    const flaky = new StateGraph(MessagesAnnotation)
-      .addNode("work", () => {
-        runs += 1;
-        if (runs === 1) throw new Error("first run fails");
-        return { messages: [new AIMessage("SUBAGENT_RESPONSE")] };
-      })
-      .addEdge(START, "work")
-      .addEdge("work", END)
-      .compile();
     const checkpointer = new MemorySaver();
     const agent = createDeepAgent({
       model: delegateOnce(),
@@ -1798,7 +1803,11 @@ describe("Subagent checkpoint namespace", () => {
         }),
       ],
       subagents: [
-        { name: "worker", description: "Fails once.", runnable: flaky },
+        {
+          name: "worker",
+          description: "Fails once.",
+          runnable: subagentThatFailsOnce(),
+        },
       ],
     });
     const threadId = "retried-subagent-checkpoint-namespace";
@@ -1817,6 +1826,73 @@ describe("Subagent checkpoint namespace", () => {
         toolMessage?.artifact?.checkpoint_ns,
       ),
     ).toEqual(["Do task", "SUBAGENT_RESPONSE"]);
+  });
+
+  it("records the namespace of the run that finished for a retried subagent graph wrapped in a RunnableBinding", async () => {
+    // `withListeners` wraps a compiled graph in a `RunnableBinding`. `task`
+    // must still stream the graph inside it: invoking the binding would record
+    // the task call's own namespace, not `<namespace>|1`.
+    const checkpointer = new MemorySaver();
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer,
+      middleware: [
+        toolRetryMiddleware({
+          maxRetries: 1,
+          initialDelayMs: 0,
+          jitter: false,
+        }),
+      ],
+      subagents: [
+        {
+          name: "worker",
+          description: "Fails once.",
+          runnable: subagentThatFailsOnce().withListeners({
+            onStart: () => {},
+          }),
+        },
+      ],
+    });
+    const threadId = "retried-wrapped-subagent-checkpoint-namespace";
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: threadId } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("SUBAGENT_RESPONSE");
+    expect(
+      await messagesSavedUnder(
+        checkpointer,
+        threadId,
+        toolMessage?.artifact?.checkpoint_ns,
+      ),
+    ).toEqual(["Do task", "SUBAGENT_RESPONSE"]);
+  });
+
+  it("still retries a subagent wrapped in withRetry", async () => {
+    // `RunnableRetry` is a `RunnableBinding` that retries `invoke` but not
+    // `stream`, so `task` must invoke it rather than stream the graph inside.
+    const agent = createDeepAgent({
+      model: delegateOnce(),
+      checkpointer: new MemorySaver(),
+      subagents: [
+        {
+          name: "worker",
+          description: "Fails once.",
+          runnable: subagentThatFailsOnce().withRetry({ stopAfterAttempt: 2 }),
+        },
+      ],
+    });
+
+    const result = await agent.invoke(
+      { messages: [new HumanMessage("Do something")] },
+      { configurable: { thread_id: "subagent-with-retry" } },
+    );
+
+    const toolMessage = result.messages.find(ToolMessage.isInstance);
+    expect(toolMessage?.content).toBe("SUBAGENT_RESPONSE");
   });
 
   it("records the namespace of a subagent compiled with checkpointer: true, which drops task ids", async () => {

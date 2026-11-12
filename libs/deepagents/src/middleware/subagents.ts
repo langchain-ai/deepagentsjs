@@ -18,7 +18,7 @@ import {
 } from "langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
-import type { Runnable } from "@langchain/core/runnables";
+import { RunnableBinding, type Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
@@ -508,13 +508,25 @@ function isCompiledGraph(value: unknown): value is CompiledGraph {
   );
 }
 
+function isRunnableRetry(runnable: unknown): boolean {
+  const constructor = (runnable as { constructor?: { lc_name?: () => string } })
+    .constructor;
+  return constructor?.lc_name?.() === "RunnableRetry";
+}
+
 /**
- * The compiled graph behind a subagent: the subagent itself, or the `graph` of
- * a `createAgent` agent. `undefined` for any other runnable.
+ * The compiled graph behind a subagent: the subagent itself, the `graph` of a
+ * `createAgent` agent, or the graph a `RunnableBinding` (such as
+ * `withListeners`) wraps. `undefined` for any other runnable, including a
+ * `RunnableRetry`, which retries `invoke` but not `stream`.
  */
 function getCompiledGraph(subagent: unknown): CompiledGraph | undefined {
-  if (isCompiledGraph(subagent)) return subagent;
-  const graph = (subagent as { graph?: unknown }).graph;
+  const unwrapped =
+    RunnableBinding.isRunnableBinding(subagent) && !isRunnableRetry(subagent)
+      ? subagent.bound
+      : subagent;
+  if (isCompiledGraph(unwrapped)) return unwrapped;
+  const graph = (unwrapped as { graph?: unknown }).graph;
   return isCompiledGraph(graph) ? graph : undefined;
 }
 
