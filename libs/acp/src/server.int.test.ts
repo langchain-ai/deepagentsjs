@@ -5,6 +5,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { AIMessage } from "@langchain/core/messages";
+import { fakeModel } from "@langchain/core/testing";
+import { FilesystemBackend } from "deepagents";
 import { DeepAgentsServer } from "./server.js";
 import { generateSessionId } from "./adapter.js";
 import type { SessionState } from "./types.js";
@@ -359,6 +365,105 @@ describe("DeepAgentsServer Integration", () => {
       expect(result.agentCapabilities.promptCapabilities).toBeDefined();
       expect(result.agentCapabilities.promptCapabilities.image).toBe(true);
     });
+  });
+});
+
+describe("Tool permission gate", () => {
+  let workspace: string;
+  let marker: string;
+  let gateServer: DeepAgentsServer;
+
+  beforeEach(() => {
+    workspace = fs.mkdtempSync(path.join(os.tmpdir(), "acp-permission-"));
+    marker = path.join(workspace, "marker.txt");
+  });
+
+  afterEach(() => {
+    gateServer?.stop();
+    fs.rmSync(workspace, { recursive: true, force: true });
+  });
+
+  /** Run one prompt where the model calls `write_file` once. */
+  async function runWriteFilePrompt(requestPermission: () => Promise<unknown>) {
+    gateServer = new DeepAgentsServer({
+      agents: {
+        name: "permission-agent",
+        model: fakeModel()
+          .respondWithTools([
+            {
+              name: "write_file",
+              id: "call_write",
+              args: { file_path: "/marker.txt", content: "written\n" },
+            },
+          ])
+          .respond(new AIMessage("done")),
+        backend: new FilesystemBackend({
+          rootDir: workspace,
+          virtualMode: true,
+        }),
+      },
+    });
+    const serverAny = gateServer as unknown as {
+      handleNewSession: (
+        params: Record<string, unknown>,
+        conn: unknown,
+      ) => Promise<{ sessionId: string }>;
+      handlePrompt: (
+        params: Record<string, unknown>,
+        conn: unknown,
+      ) => Promise<{ stopReason: string }>;
+    };
+    const conn = {
+      sessionUpdate: vi.fn().mockResolvedValue(undefined),
+      requestPermission: vi.fn(requestPermission),
+    };
+    const { sessionId } = await serverAny.handleNewSession(
+      { cwd: workspace },
+      conn,
+    );
+    const result = await serverAny.handlePrompt(
+      { sessionId, prompt: [{ type: "text", text: "write the marker" }] },
+      conn,
+    );
+    return { result, conn };
+  }
+
+  it("does not run the tool when the client has no permission handler", async () => {
+    const methodNotFound = Object.assign(
+      new Error("Method not found: session/request_permission"),
+      { code: -32601 },
+    );
+    const { result, conn } = await runWriteFilePrompt(() =>
+      Promise.reject(methodNotFound),
+    );
+
+    expect(conn.requestPermission).toHaveBeenCalledTimes(1);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result.stopReason).toBe("cancelled");
+  });
+
+  it("does not run the tool while the user is deciding, nor after a reject", async () => {
+    const seenDuringWait: boolean[] = [];
+    const { result } = await runWriteFilePrompt(async () => {
+      for (let i = 0; i < 5; i += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        seenDuringWait.push(fs.existsSync(marker));
+      }
+      return { outcome: { outcome: "selected", optionId: "reject-once" } };
+    });
+
+    expect(seenDuringWait).toEqual([false, false, false, false, false]);
+    expect(fs.existsSync(marker)).toBe(false);
+    expect(result.stopReason).toBe("cancelled");
+  });
+
+  it("runs the tool once the user allows it", async () => {
+    const { result } = await runWriteFilePrompt(async () => ({
+      outcome: { outcome: "selected", optionId: "allow-once" },
+    }));
+
+    expect(fs.readFileSync(marker, "utf8")).toBe("written\n");
+    expect(result.stopReason).toBe("end_turn");
   });
 });
 
