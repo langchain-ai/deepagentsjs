@@ -1925,6 +1925,7 @@ describe("createFilesystemMiddleware", () => {
       expect(parsedEdit.file_path).toBe("/foo/bar.txt");
       expect(parsedEdit.old_string).toBe("a");
       expect(parsedEdit.new_string).toBe("b");
+      expect(parsedEdit.edits).toEqual([]);
     });
 
     it("read_file guidance does not advertise unsupported call syntax", () => {
