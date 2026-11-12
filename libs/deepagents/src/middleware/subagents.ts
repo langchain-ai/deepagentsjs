@@ -19,7 +19,7 @@ import {
 import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
-import type { Runnable } from "@langchain/core/runnables";
+import { RunnableBinding, type Runnable } from "@langchain/core/runnables";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { refusalIn, refusalNotice, refusalNoticeFor } from "./refusal.js";
 import { FilesystemPermission } from "../permissions/types.js";
@@ -450,6 +450,7 @@ const INVALID_TOOL_MESSAGE_BLOCK_TYPES = [
 function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
+  checkpointNs: string | undefined,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
 
@@ -491,10 +492,96 @@ function returnCommandWithStateUpdate(
           content,
           tool_call_id: toolCallId,
           name: "task",
+          // The subagent saves its checkpoints under `checkpointNs`, so a
+          // client can load its history from it. The model never sees
+          // `artifact`.
+          ...(checkpointNs
+            ? { artifact: { checkpoint_ns: checkpointNs } }
+            : {}),
         }),
       ],
     },
   });
+}
+
+type CompiledGraph = { lg_is_pregel: true; outputChannels: unknown };
+
+function isCompiledGraph(value: unknown): value is CompiledGraph {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "lg_is_pregel" in value &&
+    value.lg_is_pregel === true
+  );
+}
+
+/**
+ * Whether `value` is a plain `RunnableBinding`, such as `withListeners`
+ * returns, and not a subclass. A subclass can override `invoke` with behaviour
+ * that streaming its inner graph would skip, such as the `RunnableRetry` from
+ * `withRetry`.
+ */
+function isPlainRunnableBinding(
+  value: unknown,
+): value is RunnableBinding<unknown, unknown> {
+  return (value as { constructor?: unknown })?.constructor === RunnableBinding;
+}
+
+/**
+ * The compiled graph behind a subagent: the subagent itself, the `graph` of a
+ * `createAgent` agent, or the graph a plain `RunnableBinding` wraps.
+ * `undefined` for any other runnable.
+ */
+function getCompiledGraph(subagent: unknown): CompiledGraph | undefined {
+  const unwrapped = isPlainRunnableBinding(subagent)
+    ? subagent.bound
+    : subagent;
+  if (isCompiledGraph(unwrapped)) return unwrapped;
+  const graph = (unwrapped as { graph?: unknown }).graph;
+  return isCompiledGraph(graph) ? graph : undefined;
+}
+
+/**
+ * Invoke a subagent, returning its final state and the namespace it
+ * checkpointed under.
+ *
+ * A compiled subagent is streamed rather than invoked so its checkpoint events
+ * report the namespace it saved under. LangGraph changes that namespace from
+ * the `task` call's own for a second run in the same step (`<namespace>|1`)
+ * and for `checkpointer: true` (task ids removed). No checkpoint event means
+ * nothing was saved. Any other runnable is invoked and assumed to save under
+ * the `task` call's namespace.
+ */
+async function runSubagent(
+  subagent: Runnable,
+  state: Record<string, unknown>,
+  config: Record<string, any>,
+): Promise<{
+  result: Record<string, unknown>;
+  checkpointNs: string | undefined;
+}> {
+  const graph = getCompiledGraph(subagent);
+  if (graph === undefined) {
+    return {
+      result: (await subagent.invoke(state, config)) as Record<string, unknown>,
+      checkpointNs: config.configurable?.checkpoint_ns,
+    };
+  }
+  let result: Record<string, unknown> = {};
+  let checkpointNs: string | undefined;
+  // `Runnable.stream` is typed with `RunnableConfig`, which lacks LangGraph's
+  // `streamMode` and `outputKeys`.
+  const options: Record<string, any> = {
+    ...config,
+    streamMode: ["values", "checkpoints"],
+    outputKeys: graph.outputChannels,
+  };
+  const stream = await subagent.stream(state, options);
+  for await (const [mode, chunk] of stream as AsyncIterable<[string, any]>) {
+    if (mode === "values") result = chunk;
+    else checkpointNs ??= chunk.config.configurable?.checkpoint_ns;
+  }
+  return { result, checkpointNs };
 }
 
 /** Drop the trailing in-flight AIMessage with unresolved tool_calls. */
@@ -922,11 +1009,13 @@ function createTaskTool(options: {
       },
     };
     let result: Record<string, unknown>;
+    let checkpointNs: string | undefined;
     try {
-      result = (await subagent.invoke(subagentState, subagentConfig)) as Record<
-        string,
-        unknown
-      >;
+      ({ result, checkpointNs } = await runSubagent(
+        subagent,
+        subagentState,
+        subagentConfig,
+      ));
     } catch (error) {
       // A refusal is reported to the parent agent instead of failing its run.
       const notice = refusalNoticeFor(error);
@@ -960,7 +1049,11 @@ function createTaskTool(options: {
       return content;
     }
 
-    return returnCommandWithStateUpdate(result, config.toolCall.id);
+    return returnCommandWithStateUpdate(
+      result,
+      config.toolCall.id,
+      checkpointNs,
+    );
   }
 
   const taskToolSchema = z.object({
