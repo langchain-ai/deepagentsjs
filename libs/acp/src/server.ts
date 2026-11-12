@@ -844,15 +844,10 @@ export class DeepAgentsServer {
         });
 
         if (AIMessage.isInstance(message)) {
-          await this.handleAIMessage(session, message as AIMessage, prompt);
+          await this.handleAIMessage(message as AIMessage, prompt);
         } else if (ToolMessage.isInstance(message)) {
           // Handle tool completion
-          await this.handleToolMessage(
-            session,
-            message as ToolMessage,
-            activeToolCalls,
-            conn,
-          );
+          await this.handleToolMessage(message as ToolMessage, prompt);
         }
       }
 
@@ -888,11 +883,10 @@ export class DeepAgentsServer {
    * Handle an AI message from the agent
    */
   private async handleAIMessage(
-    session: SessionState,
     message: AIMessage,
     prompt: ActivePrompt,
   ): Promise<void> {
-    const { conn } = prompt;
+    const { session, conn } = prompt;
     if (message.content && typeof message.content === "string") {
       const contentBlocks = langChainMessageToACP(message);
       const preview =
@@ -1025,12 +1019,7 @@ export class DeepAgentsServer {
           // the parent stream that `handleToolMessage` reads.
           const message = toolMessageFor(result, callId);
           if (message) {
-            await this.handleToolMessage(
-              prompt.session,
-              message,
-              prompt.activeToolCalls,
-              prompt.conn,
-            );
+            await this.handleToolMessage(message, prompt);
           }
           return result;
         }
@@ -1074,11 +1063,10 @@ export class DeepAgentsServer {
    * Handle a tool message (tool result) from the agent
    */
   private async handleToolMessage(
-    session: SessionState,
     message: ToolMessage,
-    activeToolCalls: Map<string, ToolCallInfo>,
-    conn: AgentSideConnection,
+    prompt: ActivePrompt,
   ): Promise<void> {
+    const { session, conn, activeToolCalls } = prompt;
     // Get the tool call ID from the message
     const toolCallId = message.tool_call_id;
     const toolCall = activeToolCalls.get(toolCallId);

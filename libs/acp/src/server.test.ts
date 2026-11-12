@@ -590,12 +590,7 @@ describe("DeepAgentsServer streaming", () => {
     });
 
     const serverAny = server as unknown as {
-      handleToolMessage: (
-        session: unknown,
-        message: unknown,
-        activeToolCalls: Map<string, unknown>,
-        conn: unknown,
-      ) => Promise<void>;
+      handleToolMessage: (message: unknown, prompt: unknown) => Promise<void>;
     };
 
     expect(typeof serverAny.handleToolMessage).toBe("function");
@@ -761,11 +756,7 @@ describe("Thinking / Reasoning Messages", () => {
         params: Record<string, unknown>,
         conn: unknown,
       ) => Promise<{ sessionId: string }>;
-      handleAIMessage: (
-        session: SessionState,
-        message: unknown,
-        prompt: unknown,
-      ) => Promise<void>;
+      handleAIMessage: (message: unknown, prompt: unknown) => Promise<void>;
       sessions: Map<string, SessionState>;
     };
 
@@ -785,7 +776,6 @@ describe("Thinking / Reasoning Messages", () => {
     };
     // Patch isInstance for mock
     await serverAny.handleAIMessage(
-      session,
       fakeAIMessage as any,
       activePrompt({ session, conn: mockConn }),
     );
@@ -817,11 +807,7 @@ describe("Thinking / Reasoning Messages", () => {
         params: Record<string, unknown>,
         conn: unknown,
       ) => Promise<{ sessionId: string }>;
-      handleAIMessage: (
-        session: SessionState,
-        message: unknown,
-        prompt: unknown,
-      ) => Promise<void>;
+      handleAIMessage: (message: unknown, prompt: unknown) => Promise<void>;
       sessions: Map<string, SessionState>;
     };
 
@@ -837,7 +823,6 @@ describe("Thinking / Reasoning Messages", () => {
     };
 
     await serverAny.handleAIMessage(
-      session,
       fakeAIMessage as any,
       activePrompt({ session, conn: mockConn }),
     );
@@ -1279,11 +1264,7 @@ describe("Tool permission gate (runs before the tool)", () => {
       sessions: Map<string, SessionState>;
       activePrompts: Map<string, ActivePrompt>;
       createToolPermissionMiddleware: () => Middleware;
-      handleAIMessage: (
-        session: SessionState,
-        message: unknown,
-        prompt: unknown,
-      ) => Promise<void>;
+      handleAIMessage: (message: unknown, prompt: unknown) => Promise<void>;
     };
     const conn = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
@@ -1491,10 +1472,9 @@ describe("Tool permission gate (runs before the tool)", () => {
 
   it("only announces tool calls from the stream, without asking", async () => {
     const requestPermission = vi.fn();
-    const { serverAny, session, prompt, conn } = await setup(requestPermission);
+    const { serverAny, prompt, conn } = await setup(requestPermission);
 
     await serverAny.handleAIMessage(
-      session,
       {
         content: "",
         tool_calls: [{ id: "call_1", name: "write_file", args: {} }],
@@ -1502,7 +1482,6 @@ describe("Tool permission gate (runs before the tool)", () => {
       prompt,
     );
     await serverAny.handleAIMessage(
-      session,
       {
         content: "",
         tool_calls: [{ id: "call_1", name: "write_file", args: {} }],
