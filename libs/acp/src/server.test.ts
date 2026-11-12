@@ -3,7 +3,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DeepAgentsServer } from "./server.js";
+import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import { DeepAgentsServer, type ActivePrompt } from "./server.js";
 import type {
   DeepAgentConfig,
   DeepAgentsServerOptions,
@@ -731,13 +732,19 @@ describe("Slash Commands", () => {
   });
 });
 
-function activePrompt(session: SessionState, conn: unknown) {
+function activePrompt({
+  session,
+  conn,
+}: {
+  session: SessionState;
+  conn: unknown;
+}): ActivePrompt {
   return {
     session,
-    conn,
+    conn: conn as AgentSideConnection,
     activeToolCalls: new Map<string, ToolCallInfo>(),
     announced: new Set<string>(),
-    signal: undefined as AbortSignal | undefined,
+    signal: undefined,
     abort: vi.fn(),
     permissionQueue: Promise.resolve(),
   };
@@ -780,7 +787,7 @@ describe("Thinking / Reasoning Messages", () => {
     await serverAny.handleAIMessage(
       session,
       fakeAIMessage as any,
-      activePrompt(session, mockConn),
+      activePrompt({ session, conn: mockConn }),
     );
 
     const calls = mockConn.sessionUpdate.mock.calls;
@@ -832,7 +839,7 @@ describe("Thinking / Reasoning Messages", () => {
     await serverAny.handleAIMessage(
       session,
       fakeAIMessage as any,
-      activePrompt(session, mockConn),
+      activePrompt({ session, conn: mockConn }),
     );
 
     const agentCalls = mockConn.sessionUpdate.mock.calls.filter(
@@ -1270,7 +1277,7 @@ describe("Tool permission gate (runs before the tool)", () => {
         conn: unknown,
       ) => Promise<{ sessionId: string }>;
       sessions: Map<string, SessionState>;
-      activePrompts: Map<string, ReturnType<typeof activePrompt>>;
+      activePrompts: Map<string, ActivePrompt>;
       createToolPermissionMiddleware: () => Middleware;
       handleAIMessage: (
         session: SessionState,
@@ -1284,7 +1291,7 @@ describe("Tool permission gate (runs before the tool)", () => {
     };
     const { sessionId } = await serverAny.handleNewSession({}, conn);
     const session = serverAny.sessions.get(sessionId)!;
-    const prompt = activePrompt(session, conn);
+    const prompt = activePrompt({ session, conn });
     serverAny.activePrompts.set(session.threadId, prompt);
     const middleware = serverAny.createToolPermissionMiddleware();
     const request = (id = "call_1", name = "write_file") => ({

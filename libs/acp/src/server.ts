@@ -132,8 +132,9 @@ function toolMessageFor(
 
 /**
  * State for a prompt being streamed, shared with the tool permission gate.
+ * Exported for tests; not part of the package's public API.
  */
-interface ActivePrompt {
+export interface ActivePrompt {
   session: SessionState;
   conn: AgentSideConnection;
   activeToolCalls: Map<string, ToolCallInfo>;
