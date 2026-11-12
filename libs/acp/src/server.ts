@@ -735,14 +735,12 @@ export class DeepAgentsServer {
     };
     this.activePrompts.set(session.threadId, prompt);
     try {
-      return await this.consumeAgentStream(
-        session,
+      return await this.consumeAgentStream({
         agent,
         humanMessage,
-        conn,
         prompt,
         config,
-      );
+      });
     } finally {
       if (this.activePrompts.get(session.threadId) === prompt) {
         this.activePrompts.delete(session.threadId);
@@ -753,15 +751,18 @@ export class DeepAgentsServer {
   /**
    * Consume the agent stream, forwarding messages and tool calls to the client
    */
-  private async consumeAgentStream(
-    session: SessionState,
-    agent: ReturnType<typeof createDeepAgent>,
-    humanMessage: HumanMessage,
-    conn: AgentSideConnection,
-    prompt: ActivePrompt,
-    config: { configurable: { thread_id: string }; signal?: AbortSignal },
-  ): Promise<StopReason> {
-    const { activeToolCalls } = prompt;
+  private async consumeAgentStream({
+    agent,
+    humanMessage,
+    prompt,
+    config,
+  }: {
+    agent: ReturnType<typeof createDeepAgent>;
+    humanMessage: HumanMessage;
+    prompt: ActivePrompt;
+    config: { configurable: { thread_id: string }; signal?: AbortSignal };
+  }): Promise<StopReason> {
+    const { session, conn, activeToolCalls } = prompt;
     let eventCount = 0;
 
     this.log("Starting agent stream:", {
