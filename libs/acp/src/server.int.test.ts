@@ -457,6 +457,90 @@ describe("Tool permission gate", () => {
     expect(result.stopReason).toBe("cancelled");
   });
 
+  it("prompts for a forked subagent's tool and reports its result", async () => {
+    gateServer = new DeepAgentsServer({
+      agents: {
+        name: "fork-agent",
+        model: fakeModel()
+          .respondWithTools([
+            {
+              name: "task",
+              id: "call_task",
+              args: {
+                description: "write the marker",
+                subagent_type: "worker",
+              },
+            },
+          ])
+          .respond(new AIMessage("parent done")),
+        subagents: [
+          {
+            name: "worker",
+            description: "Continues the current conversation",
+            mode: "fork",
+            model: fakeModel()
+              .respondWithTools([
+                {
+                  name: "write_file",
+                  id: "call_fork_write",
+                  args: { file_path: "/marker.txt", content: "forked\n" },
+                },
+              ])
+              .respond(new AIMessage("worker done")),
+          },
+        ],
+        backend: new FilesystemBackend({
+          rootDir: workspace,
+          virtualMode: true,
+        }),
+      },
+    });
+    const serverAny = gateServer as unknown as {
+      handleNewSession: (
+        params: Record<string, unknown>,
+        conn: unknown,
+      ) => Promise<{ sessionId: string }>;
+      handlePrompt: (
+        params: Record<string, unknown>,
+        conn: unknown,
+      ) => Promise<{ stopReason: string }>;
+    };
+    const conn = {
+      sessionUpdate: vi.fn().mockResolvedValue(undefined),
+      requestPermission: vi.fn(async () => ({
+        outcome: { outcome: "selected", optionId: "allow-once" },
+      })),
+    };
+    const { sessionId } = await serverAny.handleNewSession(
+      { cwd: workspace },
+      conn,
+    );
+    const result = await serverAny.handlePrompt(
+      { sessionId, prompt: [{ type: "text", text: "delegate" }] },
+      conn,
+    );
+
+    const asked = conn.requestPermission.mock.calls.map(
+      (c: any) => c[0].toolCall.toolCallId,
+    );
+    expect(asked).toEqual(["call_task", "call_fork_write"]);
+    expect(fs.readFileSync(marker, "utf8")).toBe("forked\n");
+    expect(result.stopReason).toBe("end_turn");
+
+    // The fork's result never reaches the parent stream; the gate reports it
+    // as soon as the tool finishes, not only when the turn ends.
+    const updates = conn.sessionUpdate.mock.calls.map((c: any) => c[0].update);
+    const forkCompleted = updates.findIndex(
+      (u: any) =>
+        u.toolCallId === "call_fork_write" && u.status === "completed",
+    );
+    const taskCompleted = updates.findIndex(
+      (u: any) => u.toolCallId === "call_task" && u.status === "completed",
+    );
+    expect(forkCompleted).toBeGreaterThanOrEqual(0);
+    expect(forkCompleted).toBeLessThan(taskCompleted);
+  });
+
   it("runs the tool once the user allows it", async () => {
     const { result } = await runWriteFilePrompt(async () => ({
       outcome: { outcome: "selected", optionId: "allow-once" },
