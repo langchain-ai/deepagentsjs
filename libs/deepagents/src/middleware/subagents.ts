@@ -515,23 +515,27 @@ function isCompiledGraph(value: unknown): value is CompiledGraph {
   );
 }
 
-function isRunnableRetry(runnable: unknown): boolean {
-  const constructor = (runnable as { constructor?: { lc_name?: () => string } })
-    .constructor;
-  return constructor?.lc_name?.() === "RunnableRetry";
+/**
+ * Whether `value` is a plain `RunnableBinding`, such as `withListeners`
+ * returns, and not a subclass. A subclass can override `invoke` with behaviour
+ * that streaming its inner graph would skip, such as the `RunnableRetry` from
+ * `withRetry`.
+ */
+function isPlainRunnableBinding(
+  value: unknown,
+): value is RunnableBinding<unknown, unknown> {
+  return (value as { constructor?: unknown })?.constructor === RunnableBinding;
 }
 
 /**
  * The compiled graph behind a subagent: the subagent itself, the `graph` of a
- * `createAgent` agent, or the graph a `RunnableBinding` (such as
- * `withListeners`) wraps. `undefined` for any other runnable, including a
- * `RunnableRetry`, which retries `invoke` but not `stream`.
+ * `createAgent` agent, or the graph a plain `RunnableBinding` wraps.
+ * `undefined` for any other runnable.
  */
 function getCompiledGraph(subagent: unknown): CompiledGraph | undefined {
-  const unwrapped =
-    RunnableBinding.isRunnableBinding(subagent) && !isRunnableRetry(subagent)
-      ? subagent.bound
-      : subagent;
+  const unwrapped = isPlainRunnableBinding(subagent)
+    ? subagent.bound
+    : subagent;
   if (isCompiledGraph(unwrapped)) return unwrapped;
   const graph = (unwrapped as { graph?: unknown }).graph;
   return isCompiledGraph(graph) ? graph : undefined;
