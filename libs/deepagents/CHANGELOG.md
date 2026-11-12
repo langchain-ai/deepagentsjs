@@ -1,5 +1,23 @@
 # deepagents
 
+## 1.16.5
+
+### Patch Changes
+
+- [#1046](https://github.com/langchain-ai/deepagentsjs/pull/1046) [`a7cb900`](https://github.com/langchain-ai/deepagentsjs/commit/a7cb90020ca886a533279774b1b7d9ee110060bf) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): bind filesystem permission decisions to the target the operation uses
+  
+  `read_file`, `write_file`, `edit_file` and `delete` now run on the resolved path that was checked, and refuse a path whose symlinks resolve into a different `CompositeBackend` route. On Linux, `FilesystemBackend` also holds the parent directory open and makes the final decision on its real location, so swapping a symlink or directory after the check cannot reach a denied target.
+
+- [#1051](https://github.com/langchain-ai/deepagentsjs/pull/1051) [`b9501d4`](https://github.com/langchain-ai/deepagentsjs/commit/b9501d4824e424d31e9786273e674a8f51243019) Thanks [@byhow](https://github.com/byhow)! - fix(deepagents): stop `FilesystemBackend.downloadFiles` hanging on a FIFO
+  
+  `downloadFiles` opens files without blocking and reports `file_not_found` for anything that is not a regular file or directory, so a FIFO no longer hangs the call and a device such as `/dev/zero` is no longer read without limit.
+
+- [#1000](https://github.com/langchain-ai/deepagentsjs/pull/1000) [`cca721d`](https://github.com/langchain-ai/deepagentsjs/commit/cca721d0289ca0f9eb1c483e2cbff1bc7dc07b81) Thanks [@byhow](https://github.com/byhow)! - Widen the `langsmith` peer range to `>=0.11.0 <1.0.0`, the range `langchain` 1.6 requires. The old range, `>=0.7.1 <0.10.0`, failed strict peer installs next to `langchain` 1.6 and let an install hold two `langsmith` copies.
+
+- [#1037](https://github.com/langchain-ai/deepagentsjs/pull/1037) [`2a9144b`](https://github.com/langchain-ai/deepagentsjs/commit/2a9144b4ceb801936e217037483020542bc1a937) Thanks [@richardscarrott](https://github.com/richardscarrott)! - feat(deepagents): record the subagent's checkpoint namespace on the `task` tool message
+  
+  The `task` tool's `ToolMessage` carries `artifact: { checkpoint_ns }`, the checkpoint namespace the subagent saved under. A client can load a finished subagent's history from that namespace instead of scanning the thread's history.
+
 ## 1.16.4
 
 ### Patch Changes
