@@ -32,6 +32,7 @@ import {
 } from "@langchain/core/messages";
 import type { InteropZodObject } from "@langchain/core/utils/types";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
+import { createMiddleware } from "langchain";
 
 import type {
   DeepAgentConfig,
@@ -112,6 +113,39 @@ const DEFAULT_COMMANDS = [
 ];
 
 /**
+ * The `ToolMessage` for `callId` in a tool result, which may be the message
+ * itself or a `Command` whose update carries it.
+ */
+function toolMessageFor(
+  result: unknown,
+  callId: string,
+): ToolMessage | undefined {
+  if (ToolMessage.isInstance(result)) return result;
+  const update = (result as { update?: unknown } | null)?.update;
+  const messages = (update as { messages?: unknown } | null)?.messages;
+  if (!Array.isArray(messages)) return undefined;
+  return messages.find(
+    (m): m is ToolMessage =>
+      ToolMessage.isInstance(m) && m.tool_call_id === callId,
+  );
+}
+
+/**
+ * State for a prompt being streamed, shared with the tool permission gate.
+ */
+interface ActivePrompt {
+  session: SessionState;
+  conn: AgentSideConnection;
+  activeToolCalls: Map<string, ToolCallInfo>;
+  /** Tool call ids already sent to the client as `tool_call`. */
+  announced: Set<string>;
+  signal?: AbortSignal;
+  abort: () => void;
+  /** Serializes permission requests within the prompt. */
+  permissionQueue: Promise<void>;
+}
+
+/**
  * DeepAgents ACP Server
  *
  * Wraps DeepAgents with the Agent Client Protocol, enabling communication
@@ -141,6 +175,8 @@ export class DeepAgentsServer {
   private clientCapabilities: ACPCapabilities = {};
   private isRunning = false;
   private currentPromptAbortController: AbortController | null = null;
+  /** Prompts being streamed, by thread id, for the tool permission gate. */
+  private activePrompts: Map<string, ActivePrompt> = new Map();
   private acpBackends: Map<string, ACPFilesystemBackend> = new Map();
 
   private readonly serverName: string;
@@ -686,6 +722,46 @@ export class DeepAgentsServer {
 
     // Track active tool calls
     const activeToolCalls = new Map<string, ToolCallInfo>();
+
+    const abortController = this.currentPromptAbortController;
+    const prompt: ActivePrompt = {
+      session,
+      conn,
+      activeToolCalls,
+      announced: new Set(),
+      signal: abortController?.signal,
+      abort: () => abortController?.abort(),
+      permissionQueue: Promise.resolve(),
+    };
+    this.activePrompts.set(session.threadId, prompt);
+    try {
+      return await this.consumeAgentStream(
+        session,
+        agent,
+        humanMessage,
+        conn,
+        prompt,
+        config,
+      );
+    } finally {
+      if (this.activePrompts.get(session.threadId) === prompt) {
+        this.activePrompts.delete(session.threadId);
+      }
+    }
+  }
+
+  /**
+   * Consume the agent stream, forwarding messages and tool calls to the client
+   */
+  private async consumeAgentStream(
+    session: SessionState,
+    agent: ReturnType<typeof createDeepAgent>,
+    humanMessage: HumanMessage,
+    conn: AgentSideConnection,
+    prompt: ActivePrompt,
+    config: { configurable: { thread_id: string }; signal?: AbortSignal },
+  ): Promise<StopReason> {
+    const { activeToolCalls } = prompt;
     let eventCount = 0;
 
     this.log("Starting agent stream:", {
@@ -766,12 +842,7 @@ export class DeepAgentsServer {
         });
 
         if (AIMessage.isInstance(message)) {
-          await this.handleAIMessage(
-            session,
-            message as AIMessage,
-            activeToolCalls,
-            conn,
-          );
+          await this.handleAIMessage(session, message as AIMessage, prompt);
         } else if (ToolMessage.isInstance(message)) {
           // Handle tool completion
           await this.handleToolMessage(
@@ -794,6 +865,15 @@ export class DeepAgentsServer {
       }
     }
 
+    // Close out any call whose result the stream did not carry.
+    for (const toolCall of activeToolCalls.values()) {
+      await this.sendToolCallUpdate(session.id, conn, {
+        ...toolCall,
+        status: "completed",
+      });
+    }
+    activeToolCalls.clear();
+
     this.log("Agent stream completed:", {
       sessionId: session.id,
       eventCount,
@@ -808,9 +888,9 @@ export class DeepAgentsServer {
   private async handleAIMessage(
     session: SessionState,
     message: AIMessage,
-    activeToolCalls: Map<string, ToolCallInfo>,
-    conn: AgentSideConnection,
+    prompt: ActivePrompt,
   ): Promise<void> {
+    const { conn } = prompt;
     if (message.content && typeof message.content === "string") {
       const contentBlocks = langChainMessageToACP(message);
       const preview =
@@ -837,59 +917,155 @@ export class DeepAgentsServer {
     // Handle tool calls
     const toolCalls = extractToolCalls(message);
 
+    // Announce each call to the client. The permission gate in front of the
+    // tools node (see `createToolPermissionMiddleware`) asks the user before
+    // the tool runs; this stream only reports what the agent is doing.
     for (const toolCall of toolCalls) {
-      this.log("Tool call started:", {
-        sessionId: session.id,
-        toolId: toolCall.id,
-        tool: toolCall.name,
-        args: Object.keys(toolCall.args),
-      });
-
-      // Send tool call notification
-      await this.sendToolCall(session.id, conn, toolCall);
-      activeToolCalls.set(toolCall.id, toolCall);
-
-      const decision = await this.requestToolPermission(
-        session,
-        conn,
-        toolCall,
-      );
-
-      if (decision === "reject") {
-        this.log("Tool call rejected by user:", {
-          sessionId: session.id,
-          toolId: toolCall.id,
-          tool: toolCall.name,
-        });
-        toolCall.status = "failed";
-        toolCall.result = "Tool call rejected by user.";
-        await this.sendToolCallUpdate(session.id, conn, toolCall);
-        activeToolCalls.delete(toolCall.id);
-        if (this.currentPromptAbortController) {
-          this.currentPromptAbortController.abort();
-        }
-        continue;
-      }
-
-      if (decision === "cancelled") {
-        this.log("Tool call permission cancelled:", {
-          sessionId: session.id,
-          toolId: toolCall.id,
-          tool: toolCall.name,
-        });
-        toolCall.status = "cancelled";
-        await this.sendToolCallUpdate(session.id, conn, toolCall);
-        activeToolCalls.delete(toolCall.id);
-        if (this.currentPromptAbortController) {
-          this.currentPromptAbortController.abort();
-        }
-        continue;
-      }
-
-      // Update to in_progress
-      toolCall.status = "in_progress";
-      await this.sendToolCallUpdate(session.id, conn, toolCall);
+      await this.announceToolCall(prompt, toolCall);
     }
+  }
+
+  /**
+   * Send the `tool_call` notification for a call once, from whichever of the
+   * stream or the permission gate sees it first.
+   */
+  private async announceToolCall(
+    prompt: ActivePrompt,
+    toolCall: ToolCallInfo,
+  ): Promise<ToolCallInfo> {
+    const existing = prompt.activeToolCalls.get(toolCall.id);
+    if (existing || prompt.announced.has(toolCall.id)) {
+      return existing ?? toolCall;
+    }
+    prompt.announced.add(toolCall.id);
+    prompt.activeToolCalls.set(toolCall.id, toolCall);
+    this.log("Tool call started:", {
+      sessionId: prompt.session.id,
+      toolId: toolCall.id,
+      tool: toolCall.name,
+      args: Object.keys(toolCall.args),
+    });
+    await this.sendToolCall(prompt.session.id, prompt.conn, toolCall);
+    return toolCall;
+  }
+
+  /**
+   * Middleware that asks the client for permission before each tool call runs.
+   *
+   * It wraps tool execution inside the graph, so the tool does not start until
+   * the user allows it. Anything other than an explicit allow (a rejection, a
+   * cancellation, a failed or unsupported permission request, or a call made
+   * outside an active prompt) returns an error result without running the tool.
+   *
+   * It covers the main agent's tools and forked subagents, which inherit custom
+   * middleware. Other subagents run their own tools once `task` is allowed.
+   * deepagents' core `wrapToolCall` middleware wraps this one, so it must keep
+   * calling `handler` before doing anything with the tool's effects.
+   */
+  private createToolPermissionMiddleware() {
+    return createMiddleware({
+      name: "ACPToolPermissionMiddleware",
+      wrapToolCall: async (request, handler) => {
+        const callId = request.toolCall.id ?? "";
+        const name = request.toolCall.name;
+        const threadId = request.runtime?.configurable?.thread_id;
+        const prompt =
+          threadId === undefined
+            ? undefined
+            : this.activePrompts.get(String(threadId));
+
+        const refuse = (content: string) =>
+          new ToolMessage({
+            content,
+            tool_call_id: callId,
+            name,
+            status: "error",
+          });
+
+        if (!prompt) {
+          this.log("Tool call refused: no active prompt", { tool: name });
+          return refuse("Tool call refused: no permission prompt is active.");
+        }
+
+        const toolCall = await this.announceToolCall(prompt, {
+          id: callId,
+          name,
+          args: (request.toolCall.args ?? {}) as Record<string, unknown>,
+          status: "pending",
+        });
+
+        // End the turn on anything but an allow before the next queued call
+        // is considered, so it is not put to the user.
+        const decision = await this.queuePermission(prompt, async () => {
+          if (prompt.signal?.aborted) return "cancelled" as const;
+          const answer = await this.requestToolPermission(
+            prompt.session,
+            prompt.conn,
+            toolCall,
+          );
+          // A cancel that arrived while the dialog was open wins over an allow.
+          if (answer === "allow" && prompt.signal?.aborted) {
+            return "cancelled" as const;
+          }
+          if (answer !== "allow") prompt.abort();
+          return answer;
+        });
+
+        if (decision === "allow") {
+          toolCall.status = "in_progress";
+          await this.sendToolCallUpdate(
+            prompt.session.id,
+            prompt.conn,
+            toolCall,
+          );
+          const result = await handler(request);
+          // Report the outcome here: a forked subagent's result never reaches
+          // the parent stream that `handleToolMessage` reads.
+          const message = toolMessageFor(result, callId);
+          if (message) {
+            await this.handleToolMessage(
+              prompt.session,
+              message,
+              prompt.activeToolCalls,
+              prompt.conn,
+            );
+          }
+          return result;
+        }
+
+        const rejected = decision === "reject";
+        this.log(
+          rejected
+            ? "Tool call rejected by user:"
+            : "Tool call permission cancelled:",
+          { sessionId: prompt.session.id, toolId: callId, tool: name },
+        );
+        const reason = rejected
+          ? "Tool call rejected by user."
+          : "Tool call cancelled.";
+        toolCall.status = rejected ? "failed" : "cancelled";
+        toolCall.result = reason;
+        await this.sendToolCallUpdate(prompt.session.id, prompt.conn, toolCall);
+        prompt.activeToolCalls.delete(callId);
+        return refuse(reason);
+      },
+    });
+  }
+
+  /**
+   * Run permission requests for one prompt one at a time, so parallel tool
+   * calls do not open several prompts on the client at once.
+   */
+  private queuePermission<T>(
+    prompt: ActivePrompt,
+    request: () => Promise<T>,
+  ): Promise<T> {
+    const result = prompt.permissionQueue.then(request);
+    prompt.permissionQueue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   /**
@@ -1043,13 +1219,16 @@ export class DeepAgentsServer {
         session.permissionDecisions.set(toolCall.name, "reject_always");
         return "reject";
       }
-      if (optionId === "reject-once") {
-        return "reject";
+      if (optionId === "allow-once") {
+        return "allow";
       }
-      return "allow";
+      // Reject anything else, including an option we did not offer.
+      return "reject";
     } catch (err) {
+      // Fail closed: a client that cannot ask the user (for example one that
+      // does not implement session/request_permission) must not approve.
       this.log("Permission request failed:", err);
-      return "allow";
+      return "reject";
     }
   }
 
@@ -1326,7 +1505,10 @@ export class DeepAgentsServer {
       model: config.model,
       tools: config.tools,
       systemPrompt: config.systemPrompt,
-      middleware: config.middleware,
+      middleware: [
+        this.createToolPermissionMiddleware(),
+        ...(config.middleware ?? []),
+      ],
       subagents: config.subagents,
       responseFormat: config.responseFormat,
       contextSchema: config.contextSchema as InteropZodObject | undefined,

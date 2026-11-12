@@ -731,6 +731,18 @@ describe("Slash Commands", () => {
   });
 });
 
+function activePrompt(session: SessionState, conn: unknown) {
+  return {
+    session,
+    conn,
+    activeToolCalls: new Map<string, ToolCallInfo>(),
+    announced: new Set<string>(),
+    signal: undefined as AbortSignal | undefined,
+    abort: vi.fn(),
+    permissionQueue: Promise.resolve(),
+  };
+}
+
 describe("Thinking / Reasoning Messages", () => {
   it("should route thinking blocks as thought chunks", async () => {
     const server = new DeepAgentsServer({
@@ -745,8 +757,7 @@ describe("Thinking / Reasoning Messages", () => {
       handleAIMessage: (
         session: SessionState,
         message: unknown,
-        activeToolCalls: Map<string, ToolCallInfo>,
-        conn: unknown,
+        prompt: unknown,
       ) => Promise<void>;
       sessions: Map<string, SessionState>;
     };
@@ -769,8 +780,7 @@ describe("Thinking / Reasoning Messages", () => {
     await serverAny.handleAIMessage(
       session,
       fakeAIMessage as any,
-      new Map(),
-      mockConn,
+      activePrompt(session, mockConn),
     );
 
     const calls = mockConn.sessionUpdate.mock.calls;
@@ -803,8 +813,7 @@ describe("Thinking / Reasoning Messages", () => {
       handleAIMessage: (
         session: SessionState,
         message: unknown,
-        activeToolCalls: Map<string, ToolCallInfo>,
-        conn: unknown,
+        prompt: unknown,
       ) => Promise<void>;
       sessions: Map<string, SessionState>;
     };
@@ -823,8 +832,7 @@ describe("Thinking / Reasoning Messages", () => {
     await serverAny.handleAIMessage(
       session,
       fakeAIMessage as any,
-      new Map(),
-      mockConn,
+      activePrompt(session, mockConn),
     );
 
     const agentCalls = mockConn.sessionUpdate.mock.calls.filter(
@@ -1113,7 +1121,7 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
     expect(result).toBe("cancelled");
   });
 
-  it("should fall back to allow on permission request error", async () => {
+  it("should reject when the permission request fails", async () => {
     const { serverAny } = createServerWithSession();
     const mockConn = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
@@ -1131,7 +1139,52 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
       sampleToolCall,
     );
 
-    expect(result).toBe("allow");
+    expect(result).toBe("reject");
+  });
+
+  it("should reject when the client does not support permission requests", async () => {
+    const { serverAny } = createServerWithSession();
+    const methodNotFound = Object.assign(
+      new Error("Method not found: session/request_permission"),
+      { code: -32601 },
+    );
+    const mockConn = {
+      sessionUpdate: vi.fn().mockResolvedValue(undefined),
+      requestPermission: vi.fn().mockRejectedValue(methodNotFound),
+    };
+
+    const { sessionId } = await serverAny.handleNewSession({}, mockConn);
+    const session = serverAny.sessions.get(sessionId)!;
+
+    const result = await serverAny.requestToolPermission(
+      session,
+      mockConn,
+      sampleToolCall,
+    );
+
+    expect(result).toBe("reject");
+    expect(session.permissionDecisions?.get("write_file")).toBeUndefined();
+  });
+
+  it("should reject an option that was not offered", async () => {
+    const { serverAny } = createServerWithSession();
+    const mockConn = {
+      sessionUpdate: vi.fn().mockResolvedValue(undefined),
+      requestPermission: vi.fn().mockResolvedValue({
+        outcome: { outcome: "selected", optionId: "something-else" },
+      }),
+    };
+
+    const { sessionId } = await serverAny.handleNewSession({}, mockConn);
+    const session = serverAny.sessions.get(sessionId)!;
+
+    const result = await serverAny.requestToolPermission(
+      session,
+      mockConn,
+      sampleToolCall,
+    );
+
+    expect(result).toBe("reject");
   });
 
   it("should send correct options in permission request", async () => {
@@ -1198,6 +1251,275 @@ describe("Human-in-the-Loop (Permission Requests)", () => {
     await serverAny.requestToolPermission(session, mockConn, differentTool);
 
     expect(mockConn.requestPermission).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("Tool permission gate (runs before the tool)", () => {
+  type Middleware = {
+    wrapToolCall: (
+      request: unknown,
+      handler: (request: unknown) => Promise<unknown>,
+    ) => Promise<unknown>;
+  };
+
+  async function setup(requestPermission: ReturnType<typeof vi.fn>) {
+    const server = new DeepAgentsServer({ agents: { name: "test-agent" } });
+    const serverAny = server as unknown as {
+      handleNewSession: (
+        params: Record<string, unknown>,
+        conn: unknown,
+      ) => Promise<{ sessionId: string }>;
+      sessions: Map<string, SessionState>;
+      activePrompts: Map<string, ReturnType<typeof activePrompt>>;
+      createToolPermissionMiddleware: () => Middleware;
+      handleAIMessage: (
+        session: SessionState,
+        message: unknown,
+        prompt: unknown,
+      ) => Promise<void>;
+    };
+    const conn = {
+      sessionUpdate: vi.fn().mockResolvedValue(undefined),
+      requestPermission,
+    };
+    const { sessionId } = await serverAny.handleNewSession({}, conn);
+    const session = serverAny.sessions.get(sessionId)!;
+    const prompt = activePrompt(session, conn);
+    serverAny.activePrompts.set(session.threadId, prompt);
+    const middleware = serverAny.createToolPermissionMiddleware();
+    const request = (id = "call_1", name = "write_file") => ({
+      toolCall: { id, name, args: { file_path: "/tmp/x", content: "y" } },
+      runtime: { configurable: { thread_id: session.threadId } },
+    });
+    return { serverAny, conn, session, prompt, middleware, request };
+  }
+
+  const toolResult = { content: "ran" };
+
+  it("does not run the tool until the user allows it", async () => {
+    let answer!: (value: unknown) => void;
+    const requestPermission = vi.fn(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const { middleware, request } = await setup(requestPermission);
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    const pending = middleware.wrapToolCall(request(), handler);
+    await vi.waitFor(() => expect(requestPermission).toHaveBeenCalled());
+    expect(handler).not.toHaveBeenCalled();
+
+    answer({ outcome: { outcome: "selected", optionId: "allow-once" } });
+    await expect(pending).resolves.toBe(toolResult);
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports the result of an allowed call from the gate itself", async () => {
+    const { middleware, request, prompt, conn } = await setup(
+      vi.fn().mockResolvedValue({
+        outcome: { outcome: "selected", optionId: "allow-once" },
+      }),
+    );
+    const { ToolMessage } = await import("@langchain/core/messages");
+    const { Command } = await import("@langchain/langgraph");
+    const message = (id: string) =>
+      new ToolMessage({ content: "ok", tool_call_id: id, name: "write_file" });
+
+    await middleware.wrapToolCall(request("call_1"), async () =>
+      message("call_1"),
+    );
+    await middleware.wrapToolCall(
+      request("call_2"),
+      async () => new Command({ update: { messages: [message("call_2")] } }),
+    );
+
+    const completed = conn.sessionUpdate.mock.calls
+      .map((c: any) => c[0].update)
+      .filter((u: any) => u.status === "completed")
+      .map((u: any) => u.toolCallId);
+    expect(completed).toEqual(["call_1", "call_2"]);
+    expect(prompt.activeToolCalls.size).toBe(0);
+  });
+
+  it("does not run a rejected tool and ends the turn", async () => {
+    const { middleware, request, prompt } = await setup(
+      vi.fn().mockResolvedValue({
+        outcome: { outcome: "selected", optionId: "reject-once" },
+      }),
+    );
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    const result = (await middleware.wrapToolCall(request(), handler)) as {
+      status: string;
+      tool_call_id: string;
+      content: string;
+    };
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.status).toBe("error");
+    expect(result.tool_call_id).toBe("call_1");
+    expect(result.content).toContain("rejected");
+    expect(prompt.abort).toHaveBeenCalled();
+  });
+
+  it("does not run the tool when the client cannot ask the user", async () => {
+    const { middleware, request, conn } = await setup(
+      vi
+        .fn()
+        .mockRejectedValue(
+          new Error("Method not found: session/request_permission"),
+        ),
+    );
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    const result = (await middleware.wrapToolCall(request(), handler)) as {
+      status: string;
+    };
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.status).toBe("error");
+    const updates = conn.sessionUpdate.mock.calls.map(
+      (c: any) => c[0].update.status,
+    );
+    expect(updates).toContain("failed");
+  });
+
+  it("does not run the tool when the user cancels", async () => {
+    const { middleware, request } = await setup(
+      vi.fn().mockResolvedValue({ outcome: { outcome: "cancelled" } }),
+    );
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    await middleware.wrapToolCall(request(), handler);
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("refuses a tool call made outside an active prompt", async () => {
+    const requestPermission = vi.fn();
+    const { middleware, request, serverAny, session } =
+      await setup(requestPermission);
+    serverAny.activePrompts.delete(session.threadId);
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    const result = (await middleware.wrapToolCall(request(), handler)) as {
+      status: string;
+    };
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(requestPermission).not.toHaveBeenCalled();
+    expect(result.status).toBe("error");
+  });
+
+  it("asks for parallel tool calls one at a time and stops after a reject", async () => {
+    const answers: Array<(value: unknown) => void> = [];
+    const requestPermission = vi.fn(
+      () => new Promise((resolve) => answers.push(resolve)),
+    );
+    const { middleware, request, prompt } = await setup(requestPermission);
+    prompt.abort = vi.fn(() => controller.abort());
+    const controller = new AbortController();
+    prompt.signal = controller.signal;
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    const first = middleware.wrapToolCall(request("call_1"), handler);
+    const second = middleware.wrapToolCall(request("call_2"), handler);
+    await vi.waitFor(() => expect(requestPermission).toHaveBeenCalledTimes(1));
+
+    answers[0]({ outcome: { outcome: "selected", optionId: "reject-once" } });
+    await first;
+    await second;
+
+    // The second call is never put to the user once the turn was rejected.
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("does not run the tool when the turn is cancelled while the dialog is open", async () => {
+    let answer!: (value: unknown) => void;
+    const requestPermission = vi.fn(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const { middleware, request, prompt } = await setup(requestPermission);
+    const controller = new AbortController();
+    prompt.signal = controller.signal;
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    const pending = middleware.wrapToolCall(request(), handler);
+    await vi.waitFor(() => expect(requestPermission).toHaveBeenCalled());
+    controller.abort();
+    answer({ outcome: { outcome: "selected", optionId: "allow-once" } });
+    await pending;
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("runs the tool without asking after the user chose always allow", async () => {
+    const requestPermission = vi.fn().mockResolvedValue({
+      outcome: { outcome: "selected", optionId: "allow-always" },
+    });
+    const { middleware, request } = await setup(requestPermission);
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    await middleware.wrapToolCall(request("call_1"), handler);
+    await middleware.wrapToolCall(request("call_2"), handler);
+
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses a tool call that carries no thread id", async () => {
+    const requestPermission = vi.fn();
+    const { middleware, request } = await setup(requestPermission);
+    const handler = vi.fn().mockResolvedValue(toolResult);
+
+    await middleware.wrapToolCall(
+      { ...request(), runtime: undefined },
+      handler,
+    );
+    await middleware.wrapToolCall({ ...request(), runtime: {} }, handler);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("only announces tool calls from the stream, without asking", async () => {
+    const requestPermission = vi.fn();
+    const { serverAny, session, prompt, conn } = await setup(requestPermission);
+
+    await serverAny.handleAIMessage(
+      session,
+      {
+        content: "",
+        tool_calls: [{ id: "call_1", name: "write_file", args: {} }],
+      },
+      prompt,
+    );
+    await serverAny.handleAIMessage(
+      session,
+      {
+        content: "",
+        tool_calls: [{ id: "call_1", name: "write_file", args: {} }],
+      },
+      prompt,
+    );
+
+    expect(requestPermission).not.toHaveBeenCalled();
+    const toolCallNotices = conn.sessionUpdate.mock.calls.filter(
+      (c: any) => c[0].update.sessionUpdate === "tool_call",
+    );
+    expect(toolCallNotices).toHaveLength(1);
+  });
+
+  it("is installed in front of every agent's tools", async () => {
+    const { createDeepAgent } = await import("deepagents");
+    const server = new DeepAgentsServer({ agents: { name: "test-agent" } });
+    (server as unknown as { createAgent: (n: string) => void }).createAgent(
+      "test-agent",
+    );
+    const params = vi.mocked(createDeepAgent).mock.calls.at(-1)![0] as {
+      middleware: Array<{ name: string }>;
+    };
+    expect(params.middleware[0].name).toBe("ACPToolPermissionMiddleware");
   });
 });
 
