@@ -3,7 +3,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { AgentSideConnection } from "@agentclientprotocol/sdk";
+import type {
+  AgentSideConnection,
+  RequestPermissionResponse as PermissionAnswer,
+} from "@agentclientprotocol/sdk";
 import { DeepAgentsServer, type ActivePrompt } from "./server.js";
 import type {
   DeepAgentConfig,
@@ -732,7 +735,10 @@ function activePrompt({
   conn,
 }: {
   session: SessionState;
-  conn: unknown;
+  /** A mock with whichever of these the test needs. */
+  conn: Partial<
+    Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+  >;
 }): ActivePrompt {
   return {
     session,
@@ -1254,7 +1260,9 @@ describe("Tool permission gate (runs before the tool)", () => {
     ) => Promise<unknown>;
   };
 
-  async function setup(requestPermission: ReturnType<typeof vi.fn>) {
+  async function setup(
+    requestPermission: AgentSideConnection["requestPermission"],
+  ) {
     const server = new DeepAgentsServer({ agents: { name: "test-agent" } });
     const serverAny = server as unknown as {
       handleNewSession: (
@@ -1285,9 +1293,9 @@ describe("Tool permission gate (runs before the tool)", () => {
   const toolResult = { content: "ran" };
 
   it("does not run the tool until the user allows it", async () => {
-    let answer!: (value: unknown) => void;
+    let answer!: (value: PermissionAnswer) => void;
     const requestPermission = vi.fn(
-      () => new Promise((resolve) => (answer = resolve)),
+      () => new Promise<PermissionAnswer>((resolve) => (answer = resolve)),
     );
     const { middleware, request } = await setup(requestPermission);
     const handler = vi.fn().mockResolvedValue(toolResult);
@@ -1399,9 +1407,9 @@ describe("Tool permission gate (runs before the tool)", () => {
   });
 
   it("asks for parallel tool calls one at a time and stops after a reject", async () => {
-    const answers: Array<(value: unknown) => void> = [];
+    const answers: Array<(value: PermissionAnswer) => void> = [];
     const requestPermission = vi.fn(
-      () => new Promise((resolve) => answers.push(resolve)),
+      () => new Promise<PermissionAnswer>((resolve) => answers.push(resolve)),
     );
     const { middleware, request, prompt } = await setup(requestPermission);
     prompt.abort = vi.fn(() => controller.abort());
@@ -1423,9 +1431,9 @@ describe("Tool permission gate (runs before the tool)", () => {
   });
 
   it("does not run the tool when the turn is cancelled while the dialog is open", async () => {
-    let answer!: (value: unknown) => void;
+    let answer!: (value: PermissionAnswer) => void;
     const requestPermission = vi.fn(
-      () => new Promise((resolve) => (answer = resolve)),
+      () => new Promise<PermissionAnswer>((resolve) => (answer = resolve)),
     );
     const { middleware, request, prompt } = await setup(requestPermission);
     const controller = new AbortController();
