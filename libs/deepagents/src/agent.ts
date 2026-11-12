@@ -58,6 +58,7 @@ import type {
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
 import type { AnyStateSchema, StreamTransformer } from "@langchain/langgraph";
+import { deepAgentStateSchema } from "./values.js";
 import {
   resolveHarnessProfile,
   applyProfilePrompt,
@@ -581,7 +582,7 @@ export function createDeepAgent<
   const agent = createAgent({
     model,
     ...(finalSystemPrompt !== "" && { systemPrompt: finalSystemPrompt }),
-    stateSchema,
+    stateSchema: deepAgentStateSchema(stateSchema),
     tools: effectiveTools,
     middleware,
     ...(responseFormat !== null && { responseFormat }),
