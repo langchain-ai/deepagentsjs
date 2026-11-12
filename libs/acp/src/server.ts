@@ -113,6 +113,24 @@ const DEFAULT_COMMANDS = [
 ];
 
 /**
+ * The `ToolMessage` for `callId` in a tool result, which may be the message
+ * itself or a `Command` whose update carries it.
+ */
+function toolMessageFor(
+  result: unknown,
+  callId: string,
+): ToolMessage | undefined {
+  if (ToolMessage.isInstance(result)) return result;
+  const update = (result as { update?: unknown } | null)?.update;
+  const messages = (update as { messages?: unknown } | null)?.messages;
+  if (!Array.isArray(messages)) return undefined;
+  return messages.find(
+    (m): m is ToolMessage =>
+      ToolMessage.isInstance(m) && m.tool_call_id === callId,
+  );
+}
+
+/**
  * State for a prompt being streamed, shared with the tool permission gate.
  */
 interface ActivePrompt {
@@ -847,6 +865,15 @@ export class DeepAgentsServer {
       }
     }
 
+    // Close out any call whose result the stream did not carry.
+    for (const toolCall of activeToolCalls.values()) {
+      await this.sendToolCallUpdate(session.id, conn, {
+        ...toolCall,
+        status: "completed",
+      });
+    }
+    activeToolCalls.clear();
+
     this.log("Agent stream completed:", {
       sessionId: session.id,
       eventCount,
@@ -991,7 +1018,19 @@ export class DeepAgentsServer {
             prompt.conn,
             toolCall,
           );
-          return handler(request);
+          const result = await handler(request);
+          // Report the outcome here: a forked subagent's result never reaches
+          // the parent stream that `handleToolMessage` reads.
+          const message = toolMessageFor(result, callId);
+          if (message) {
+            await this.handleToolMessage(
+              prompt.session,
+              message,
+              prompt.activeToolCalls,
+              prompt.conn,
+            );
+          }
+          return result;
         }
 
         const rejected = decision === "reject";

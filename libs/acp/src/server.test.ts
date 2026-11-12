@@ -1313,6 +1313,33 @@ describe("Tool permission gate (runs before the tool)", () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
+  it("reports the result of an allowed call from the gate itself", async () => {
+    const { middleware, request, prompt, conn } = await setup(
+      vi.fn().mockResolvedValue({
+        outcome: { outcome: "selected", optionId: "allow-once" },
+      }),
+    );
+    const { ToolMessage } = await import("@langchain/core/messages");
+    const { Command } = await import("@langchain/langgraph");
+    const message = (id: string) =>
+      new ToolMessage({ content: "ok", tool_call_id: id, name: "write_file" });
+
+    await middleware.wrapToolCall(request("call_1"), async () =>
+      message("call_1"),
+    );
+    await middleware.wrapToolCall(
+      request("call_2"),
+      async () => new Command({ update: { messages: [message("call_2")] } }),
+    );
+
+    const completed = conn.sessionUpdate.mock.calls
+      .map((c: any) => c[0].update)
+      .filter((u: any) => u.status === "completed")
+      .map((u: any) => u.toolCallId);
+    expect(completed).toEqual(["call_1", "call_2"]);
+    expect(prompt.activeToolCalls.size).toBe(0);
+  });
+
   it("does not run a rejected tool and ends the turn", async () => {
     const { middleware, request, prompt } = await setup(
       vi.fn().mockResolvedValue({
