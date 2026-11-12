@@ -35,6 +35,7 @@ import type {
   EditResult,
   FileData,
   LsResult,
+  ReadRawResult,
   ReadResult,
   WriteResult,
 } from "../backends/protocol.js";
@@ -57,6 +58,10 @@ import {
   getMimeType,
   isTextMimeType,
   normalizeReadPagination,
+  fileDataToString,
+  isFileDataBinary,
+  performMultiStringReplacement,
+  type StringReplacement,
 } from "../backends/utils.js";
 import { MULTIMODAL_BLOCK_TYPES } from "./unsupportedContent.js";
 
@@ -1254,6 +1259,7 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
   - You must read the file before editing; this tool errors otherwise.
   - Preserve the exact source indentation from the read output, and never include the read status header in old_string or new_string.
   - Prefer editing an existing file over creating a new one.
+  - To make several changes to one file in a single call, put the first replacement in old_string/new_string and the others in edits. Every old_string is matched against the file as it was before the call, so the replacements must not overlap. They are applied together: if any one fails, the file is left unchanged.
   - Only use emojis if the user explicitly requests it.
 `;
 
@@ -1669,7 +1675,13 @@ function createEditFileTool(
         return toolError(runtime, "edit_file", permission.error);
       }
 
-      const { file_path, old_string, new_string, replace_all = false } = input;
+      const {
+        file_path,
+        old_string,
+        new_string,
+        replace_all = false,
+        edits = [],
+      } = input;
       const result: EditResult = await runBoundToTarget(
         resolvedBackend,
         permissions,
@@ -1681,12 +1693,25 @@ function createEditFileTool(
         },
         (real) => decidePathAccess(permissions, "write", real) === "deny",
         async () =>
-          resolvedBackend.edit(
-            permission.target,
-            old_string,
-            new_string,
-            replace_all,
-          ),
+          edits.length === 0
+            ? resolvedBackend.edit(
+                permission.target,
+                old_string,
+                new_string,
+                replace_all,
+              )
+            : applyMultipleEdits(resolvedBackend, permission.target, [
+                {
+                  oldString: old_string,
+                  newString: new_string,
+                  replaceAll: replace_all,
+                },
+                ...edits.map((edit) => ({
+                  oldString: edit.old_string,
+                  newString: edit.new_string,
+                  replaceAll: edit.replace_all,
+                })),
+              ]),
       );
 
       if (result.error) {
@@ -1726,10 +1751,89 @@ function createEditFileTool(
             .optional()
             .default(false)
             .describe("Whether to replace all occurrences"),
+          edits: z
+            .array(
+              z.object({
+                old_string: z
+                  .string()
+                  .describe("String to be replaced (must match exactly)"),
+                new_string: z.string().describe("String to replace with"),
+                replace_all: z
+                  .boolean()
+                  .optional()
+                  .default(false)
+                  .describe("Whether to replace all occurrences"),
+              }),
+            )
+            .optional()
+            .default([])
+            .describe(
+              "Additional replacements to apply in the same call, together with old_string/new_string. All replacements are matched against the original file content, must not overlap, and are applied atomically.",
+            ),
         }),
       ),
     },
   );
+}
+
+/**
+ * Apply several replacements to one file atomically.
+ *
+ * Reads the file once, validates and applies every replacement in memory
+ * against the original content (see {@link performMultiStringReplacement}),
+ * then writes the result with a single `backend.edit()` call that swaps the
+ * whole original content for the new content. Any backend that implements
+ * `edit()` therefore supports multi-edits without changes, and a change made
+ * to the file between the read and the write is never silently overwritten:
+ * the final edit only replaces the exact content that was read.
+ */
+async function applyMultipleEdits(
+  backend: BackendProtocolV2,
+  filePath: string,
+  replacements: StringReplacement[],
+): Promise<EditResult> {
+  let readResult: ReadRawResult;
+  try {
+    readResult = await backend.readRaw(filePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === "ENOENT") {
+      return { error: `Error: File '${filePath}' not found` };
+    }
+    return {
+      error: `Error reading file '${filePath}': ${getErrorMessage(error)}`,
+    };
+  }
+  if (readResult.error || !readResult.data) {
+    const reason = readResult.error ?? `File '${filePath}' not found`;
+    return { error: reason.startsWith("Error") ? reason : `Error: ${reason}` };
+  }
+  if (isFileDataBinary(readResult.data)) {
+    return { error: `Error: Cannot edit binary file '${filePath}'` };
+  }
+
+  const original = fileDataToString(readResult.data);
+  const replaced = performMultiStringReplacement(original, replacements);
+  if (typeof replaced === "string") {
+    return { error: replaced };
+  }
+
+  const [updated, occurrences] = replaced;
+  if (updated === original) {
+    return { path: filePath, filesUpdate: null, occurrences };
+  }
+
+  const result = await backend.edit(filePath, original, updated, false);
+  if (result.error) {
+    // Backends echo `oldString` (here the whole file) in their "not found"
+    // errors; replace that with the actual cause.
+    const reason = result.error.includes(`'${original}'`)
+      ? "the file changed after it was read"
+      : result.error;
+    return {
+      error: `Error: Failed to apply edits to '${filePath}': ${reason}`,
+    };
+  }
+  return { ...result, occurrences };
 }
 
 /**

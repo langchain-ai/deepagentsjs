@@ -544,6 +544,91 @@ export function performStringReplacement(
 }
 
 /**
+ * A single exact-string replacement within a multi-edit.
+ */
+export interface StringReplacement {
+  /** String to replace; must be non-empty */
+  oldString: string;
+  /** String to replace it with */
+  newString: string;
+  /** Replace every occurrence instead of requiring a unique match */
+  replaceAll?: boolean;
+}
+
+/**
+ * Apply several string replacements to the same content in one step.
+ *
+ * Every `oldString` is matched against the original `content`, not against
+ * the output of earlier replacements, so the order of `replacements` does not
+ * matter. The replacements are validated before anything is applied: if any
+ * `oldString` is empty, missing, ambiguous (without `replaceAll`), or matches
+ * text that overlaps another replacement's match, an error is returned and
+ * nothing is replaced.
+ *
+ * @param content - Original content
+ * @param replacements - Replacements to apply
+ * @returns Tuple of [new_content, occurrences] on success, or error message string
+ */
+export function performMultiStringReplacement(
+  content: string,
+  replacements: StringReplacement[],
+): [string, number] | string {
+  const matches: { start: number; end: number; replacement: number }[] = [];
+
+  for (let index = 0; index < replacements.length; index += 1) {
+    const { oldString, replaceAll = false } = replacements[index];
+    if (oldString === "") {
+      return "Error: oldString cannot be empty when making multiple edits";
+    }
+
+    const starts: number[] = [];
+    let position = content.indexOf(oldString);
+    while (position !== -1) {
+      starts.push(position);
+      position = content.indexOf(oldString, position + oldString.length);
+    }
+
+    if (starts.length === 0) {
+      return `Error: String not found in file: '${oldString}'`;
+    }
+    if (starts.length > 1 && !replaceAll) {
+      return `Error: String '${oldString}' has multiple occurrences (appears ${starts.length} times) in file. Use replace_all=True to replace all instances, or provide a more specific string with surrounding context.`;
+    }
+
+    for (const start of starts) {
+      matches.push({
+        start,
+        end: start + oldString.length,
+        replacement: index,
+      });
+    }
+  }
+
+  matches.sort((a, b) => a.start - b.start || a.end - b.end);
+
+  for (let index = 1; index < matches.length; index += 1) {
+    const previous = matches[index - 1];
+    const current = matches[index];
+    if (current.start < previous.end) {
+      const first = replacements[previous.replacement].oldString;
+      const second = replacements[current.replacement].oldString;
+      return `Error: Edits overlap: '${first}' and '${second}' match overlapping text in file. Combine them into a single edit.`;
+    }
+  }
+
+  let newContent = "";
+  let cursor = 0;
+  for (const match of matches) {
+    newContent += content.slice(cursor, match.start);
+    newContent += replacements[match.replacement].newString;
+    cursor = match.end;
+  }
+  newContent += content.slice(cursor);
+
+  return [newContent, matches.length];
+}
+
+/**
  * Truncate list or string result if it exceeds token limit (rough estimate: 4 chars/token).
  */
 export function truncateIfTooLong(
