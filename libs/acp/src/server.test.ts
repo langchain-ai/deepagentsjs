@@ -3,7 +3,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { DeepAgentsServer } from "./server.js";
+import type {
+  AgentSideConnection,
+  RequestPermissionResponse as PermissionAnswer,
+} from "@agentclientprotocol/sdk";
+import { DeepAgentsServer, type ActivePrompt } from "./server.js";
 import type {
   DeepAgentConfig,
   DeepAgentsServerOptions,
@@ -589,12 +593,7 @@ describe("DeepAgentsServer streaming", () => {
     });
 
     const serverAny = server as unknown as {
-      handleToolMessage: (
-        session: unknown,
-        message: unknown,
-        activeToolCalls: Map<string, unknown>,
-        conn: unknown,
-      ) => Promise<void>;
+      handleToolMessage: (message: unknown, prompt: unknown) => Promise<void>;
     };
 
     expect(typeof serverAny.handleToolMessage).toBe("function");
@@ -731,13 +730,22 @@ describe("Slash Commands", () => {
   });
 });
 
-function activePrompt(session: SessionState, conn: unknown) {
+function activePrompt({
+  session,
+  conn,
+}: {
+  session: SessionState;
+  /** A mock with whichever of these the test needs. */
+  conn: Partial<
+    Pick<AgentSideConnection, "sessionUpdate" | "requestPermission">
+  >;
+}): ActivePrompt {
   return {
     session,
-    conn,
+    conn: conn as AgentSideConnection,
     activeToolCalls: new Map<string, ToolCallInfo>(),
     announced: new Set<string>(),
-    signal: undefined as AbortSignal | undefined,
+    signal: undefined,
     abort: vi.fn(),
     permissionQueue: Promise.resolve(),
   };
@@ -754,11 +762,7 @@ describe("Thinking / Reasoning Messages", () => {
         params: Record<string, unknown>,
         conn: unknown,
       ) => Promise<{ sessionId: string }>;
-      handleAIMessage: (
-        session: SessionState,
-        message: unknown,
-        prompt: unknown,
-      ) => Promise<void>;
+      handleAIMessage: (message: unknown, prompt: unknown) => Promise<void>;
       sessions: Map<string, SessionState>;
     };
 
@@ -778,9 +782,8 @@ describe("Thinking / Reasoning Messages", () => {
     };
     // Patch isInstance for mock
     await serverAny.handleAIMessage(
-      session,
       fakeAIMessage as any,
-      activePrompt(session, mockConn),
+      activePrompt({ session, conn: mockConn }),
     );
 
     const calls = mockConn.sessionUpdate.mock.calls;
@@ -810,11 +813,7 @@ describe("Thinking / Reasoning Messages", () => {
         params: Record<string, unknown>,
         conn: unknown,
       ) => Promise<{ sessionId: string }>;
-      handleAIMessage: (
-        session: SessionState,
-        message: unknown,
-        prompt: unknown,
-      ) => Promise<void>;
+      handleAIMessage: (message: unknown, prompt: unknown) => Promise<void>;
       sessions: Map<string, SessionState>;
     };
 
@@ -830,9 +829,8 @@ describe("Thinking / Reasoning Messages", () => {
     };
 
     await serverAny.handleAIMessage(
-      session,
       fakeAIMessage as any,
-      activePrompt(session, mockConn),
+      activePrompt({ session, conn: mockConn }),
     );
 
     const agentCalls = mockConn.sessionUpdate.mock.calls.filter(
@@ -1262,7 +1260,9 @@ describe("Tool permission gate (runs before the tool)", () => {
     ) => Promise<unknown>;
   };
 
-  async function setup(requestPermission: ReturnType<typeof vi.fn>) {
+  async function setup(
+    requestPermission: AgentSideConnection["requestPermission"],
+  ) {
     const server = new DeepAgentsServer({ agents: { name: "test-agent" } });
     const serverAny = server as unknown as {
       handleNewSession: (
@@ -1270,13 +1270,9 @@ describe("Tool permission gate (runs before the tool)", () => {
         conn: unknown,
       ) => Promise<{ sessionId: string }>;
       sessions: Map<string, SessionState>;
-      activePrompts: Map<string, ReturnType<typeof activePrompt>>;
+      activePrompts: Map<string, ActivePrompt>;
       createToolPermissionMiddleware: () => Middleware;
-      handleAIMessage: (
-        session: SessionState,
-        message: unknown,
-        prompt: unknown,
-      ) => Promise<void>;
+      handleAIMessage: (message: unknown, prompt: unknown) => Promise<void>;
     };
     const conn = {
       sessionUpdate: vi.fn().mockResolvedValue(undefined),
@@ -1284,7 +1280,7 @@ describe("Tool permission gate (runs before the tool)", () => {
     };
     const { sessionId } = await serverAny.handleNewSession({}, conn);
     const session = serverAny.sessions.get(sessionId)!;
-    const prompt = activePrompt(session, conn);
+    const prompt = activePrompt({ session, conn });
     serverAny.activePrompts.set(session.threadId, prompt);
     const middleware = serverAny.createToolPermissionMiddleware();
     const request = (id = "call_1", name = "write_file") => ({
@@ -1297,9 +1293,9 @@ describe("Tool permission gate (runs before the tool)", () => {
   const toolResult = { content: "ran" };
 
   it("does not run the tool until the user allows it", async () => {
-    let answer!: (value: unknown) => void;
+    let answer!: (value: PermissionAnswer) => void;
     const requestPermission = vi.fn(
-      () => new Promise((resolve) => (answer = resolve)),
+      () => new Promise<PermissionAnswer>((resolve) => (answer = resolve)),
     );
     const { middleware, request } = await setup(requestPermission);
     const handler = vi.fn().mockResolvedValue(toolResult);
@@ -1411,9 +1407,9 @@ describe("Tool permission gate (runs before the tool)", () => {
   });
 
   it("asks for parallel tool calls one at a time and stops after a reject", async () => {
-    const answers: Array<(value: unknown) => void> = [];
+    const answers: Array<(value: PermissionAnswer) => void> = [];
     const requestPermission = vi.fn(
-      () => new Promise((resolve) => answers.push(resolve)),
+      () => new Promise<PermissionAnswer>((resolve) => answers.push(resolve)),
     );
     const { middleware, request, prompt } = await setup(requestPermission);
     prompt.abort = vi.fn(() => controller.abort());
@@ -1435,9 +1431,9 @@ describe("Tool permission gate (runs before the tool)", () => {
   });
 
   it("does not run the tool when the turn is cancelled while the dialog is open", async () => {
-    let answer!: (value: unknown) => void;
+    let answer!: (value: PermissionAnswer) => void;
     const requestPermission = vi.fn(
-      () => new Promise((resolve) => (answer = resolve)),
+      () => new Promise<PermissionAnswer>((resolve) => (answer = resolve)),
     );
     const { middleware, request, prompt } = await setup(requestPermission);
     const controller = new AbortController();
@@ -1484,10 +1480,9 @@ describe("Tool permission gate (runs before the tool)", () => {
 
   it("only announces tool calls from the stream, without asking", async () => {
     const requestPermission = vi.fn();
-    const { serverAny, session, prompt, conn } = await setup(requestPermission);
+    const { serverAny, prompt, conn } = await setup(requestPermission);
 
     await serverAny.handleAIMessage(
-      session,
       {
         content: "",
         tool_calls: [{ id: "call_1", name: "write_file", args: {} }],
@@ -1495,7 +1490,6 @@ describe("Tool permission gate (runs before the tool)", () => {
       prompt,
     );
     await serverAny.handleAIMessage(
-      session,
       {
         content: "",
         tool_calls: [{ id: "call_1", name: "write_file", args: {} }],

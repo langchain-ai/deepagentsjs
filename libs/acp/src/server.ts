@@ -132,8 +132,9 @@ function toolMessageFor(
 
 /**
  * State for a prompt being streamed, shared with the tool permission gate.
+ * Exported for tests; not part of the package's public API.
  */
-interface ActivePrompt {
+export interface ActivePrompt {
   session: SessionState;
   conn: AgentSideConnection;
   activeToolCalls: Map<string, ToolCallInfo>;
@@ -735,14 +736,12 @@ export class DeepAgentsServer {
     };
     this.activePrompts.set(session.threadId, prompt);
     try {
-      return await this.consumeAgentStream(
-        session,
+      return await this.consumeAgentStream({
         agent,
         humanMessage,
-        conn,
         prompt,
         config,
-      );
+      });
     } finally {
       if (this.activePrompts.get(session.threadId) === prompt) {
         this.activePrompts.delete(session.threadId);
@@ -753,15 +752,18 @@ export class DeepAgentsServer {
   /**
    * Consume the agent stream, forwarding messages and tool calls to the client
    */
-  private async consumeAgentStream(
-    session: SessionState,
-    agent: ReturnType<typeof createDeepAgent>,
-    humanMessage: HumanMessage,
-    conn: AgentSideConnection,
-    prompt: ActivePrompt,
-    config: { configurable: { thread_id: string }; signal?: AbortSignal },
-  ): Promise<StopReason> {
-    const { activeToolCalls } = prompt;
+  private async consumeAgentStream({
+    agent,
+    humanMessage,
+    prompt,
+    config,
+  }: {
+    agent: ReturnType<typeof createDeepAgent>;
+    humanMessage: HumanMessage;
+    prompt: ActivePrompt;
+    config: { configurable: { thread_id: string }; signal?: AbortSignal };
+  }): Promise<StopReason> {
+    const { session, conn, activeToolCalls } = prompt;
     let eventCount = 0;
 
     this.log("Starting agent stream:", {
@@ -842,15 +844,10 @@ export class DeepAgentsServer {
         });
 
         if (AIMessage.isInstance(message)) {
-          await this.handleAIMessage(session, message as AIMessage, prompt);
+          await this.handleAIMessage(message as AIMessage, prompt);
         } else if (ToolMessage.isInstance(message)) {
           // Handle tool completion
-          await this.handleToolMessage(
-            session,
-            message as ToolMessage,
-            activeToolCalls,
-            conn,
-          );
+          await this.handleToolMessage(message as ToolMessage, prompt);
         }
       }
 
@@ -886,11 +883,10 @@ export class DeepAgentsServer {
    * Handle an AI message from the agent
    */
   private async handleAIMessage(
-    session: SessionState,
     message: AIMessage,
     prompt: ActivePrompt,
   ): Promise<void> {
-    const { conn } = prompt;
+    const { session, conn } = prompt;
     if (message.content && typeof message.content === "string") {
       const contentBlocks = langChainMessageToACP(message);
       const preview =
@@ -1023,12 +1019,7 @@ export class DeepAgentsServer {
           // the parent stream that `handleToolMessage` reads.
           const message = toolMessageFor(result, callId);
           if (message) {
-            await this.handleToolMessage(
-              prompt.session,
-              message,
-              prompt.activeToolCalls,
-              prompt.conn,
-            );
+            await this.handleToolMessage(message, prompt);
           }
           return result;
         }
@@ -1072,11 +1063,10 @@ export class DeepAgentsServer {
    * Handle a tool message (tool result) from the agent
    */
   private async handleToolMessage(
-    session: SessionState,
     message: ToolMessage,
-    activeToolCalls: Map<string, ToolCallInfo>,
-    conn: AgentSideConnection,
+    prompt: ActivePrompt,
   ): Promise<void> {
+    const { session, conn, activeToolCalls } = prompt;
     // Get the tool call ID from the message
     const toolCallId = message.tool_call_id;
     const toolCall = activeToolCalls.get(toolCallId);
