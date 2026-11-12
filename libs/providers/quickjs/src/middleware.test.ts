@@ -516,6 +516,62 @@ describe("createCodeInterpreterMiddleware", () => {
       vi.clearAllMocks();
     });
 
+    async function setUpSubagents(
+      threadId: string,
+      invoke: (...args: any[]) => unknown,
+    ) {
+      const mockTaskTool = { name: "task", invoke: vi.fn(invoke) };
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: threadId } },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        vi.fn().mockReturnValue({ response: "ok" }),
+      );
+      return { jsTool, mockTaskTool };
+    }
+
+    it("should reject an eval from a subagent its own session's task() is waiting on", async () => {
+      let nested: unknown;
+      const { jsTool } = await setUpSubagents(
+        "nested-eval",
+        async (_input, config) => {
+          nested = await jsTool.invoke({ code: "40 + 2" }, config);
+          return "subagent done";
+        },
+      );
+      const result = await jsTool.invoke(
+        { code: `await task({ description: "d", subagentType: "general" })` },
+        { configurable: { thread_id: "nested-eval" } },
+      );
+      expect(result).toContain("subagent done");
+      expect(String(nested)).toContain("REPL session busy");
+    });
+
+    it("should queue a sibling eval behind one awaiting task()", async () => {
+      const { jsTool, mockTaskTool } = await setUpSubagents(
+        "sibling-evals",
+        () => new Promise((r) => setTimeout(() => r("subagent done"), 200)),
+      );
+      const config = { configurable: { thread_id: "sibling-evals" } };
+      const first = jsTool.invoke(
+        { code: `await task({ description: "d", subagentType: "general" })` },
+        config,
+      );
+      await vi.waitFor(() => expect(mockTaskTool.invoke).toHaveBeenCalled());
+      const sibling = await jsTool.invoke({ code: "40 + 2" }, config);
+      const awaiting = await first;
+      expect(awaiting).toContain("subagent done");
+      expect(sibling).toContain("42");
+      expect(sibling).not.toContain("busy");
+    });
+
     it("should invoke subagent from within the REPL", async () => {
       const mockTaskTool = {
         name: "task",

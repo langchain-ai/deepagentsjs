@@ -1,5 +1,17 @@
 # deepagents
 
+## 1.16.4
+
+### Patch Changes
+
+- [#1035](https://github.com/langchain-ai/deepagentsjs/pull/1035) [`a0b7eb3`](https://github.com/langchain-ai/deepagentsjs/commit/a0b7eb3a08aba936065211e74c0fa428cd0bfb61) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): raise on model refusals by default and report subagent refusals
+  
+  A model refusal now throws `ModelRefusalError` instead of ending the run as if it succeeded. A subagent's refusal becomes its `task` result, and the main agent keeps going.
+
+- [#1024](https://github.com/langchain-ai/deepagentsjs/pull/1024) [`ea67c7e`](https://github.com/langchain-ai/deepagentsjs/commit/ea67c7ec9d3d4fa1fa074220339325cd9a82b1d1) Thanks [@sera-wi](https://github.com/sera-wi)! - feat(deepagents): pass the `task` call id to subagents as `lc_subagent_tool_call_id`
+  
+  The `task` tool adds `lc_subagent_tool_call_id` to the subagent's config metadata, so traces, stream events and checkpointers that copy config metadata can tie a subagent back to the call that started it.
+
 ## 1.16.3
 
 ### Patch Changes

@@ -55,6 +55,21 @@ import { LangGraphRunnableConfig } from "@langchain/langgraph";
 const DEFAULT_TOOL_NAME = "eval";
 
 /**
+ * `configurable` key listing the REPL sessions whose `task()` dispatch a run
+ * descends from, so an eval inside such a subagent is recognised as nested.
+ */
+const DISPATCHING_SESSIONS_CONFIG_KEY = "__quickjs_dispatching_sessions";
+
+function dispatchingSessions(config: {
+  configurable?: Record<string, unknown>;
+}): string[] {
+  const value = config.configurable?.[DISPATCHING_SESSIONS_CONFIG_KEY];
+  return Array.isArray(value)
+    ? value.filter((key): key is string => typeof key === "string")
+    : [];
+}
+
+/**
  * Render the subagent dispatch prompt section for the system message.
  * Ported from the Python `_SUBAGENT_SYSTEM_PROMPT_TEMPLATE`.
  */
@@ -453,6 +468,7 @@ export function createCodeInterpreterMiddleware(
   function createBridgeDispatch(
     subagentTaskTool: StructuredToolInterface,
     config: LangGraphRunnableConfig,
+    sessionKey: string,
   ): SubagentBridgeOptions["dispatch"] {
     return async (input) => {
       const hasSchema = input.responseSchema != null;
@@ -464,6 +480,12 @@ export function createCodeInterpreterMiddleware(
         ...config,
         configurable: {
           ...config.configurable,
+          // The subagent inherits this, so its own eval can tell it would run
+          // on a session that is waiting for it.
+          [DISPATCHING_SESSIONS_CONFIG_KEY]: [
+            ...dispatchingSessions(config),
+            sessionKey,
+          ],
           ...(hasSchema && {
             [SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY]: input.responseSchema,
           }),
@@ -498,6 +520,20 @@ export function createCodeInterpreterMiddleware(
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
       const sessionKey = `${threadId}:${middlewareId}`;
 
+      // Evals on a session run one at a time, so one from a subagent that this
+      // session's own task() is waiting on would wait for itself.
+      if (dispatchingSessions(config).includes(sessionKey)) {
+        return formatReplResult({
+          ok: false,
+          error: {
+            message:
+              "REPL session busy: this eval runs inside a task() that an eval on the same session is waiting on. Use the REPL after that eval finishes.",
+          },
+          logs: [],
+          logsDroppedChars: 0,
+        });
+      }
+
       const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
         maxStackSizeBytes,
@@ -509,14 +545,16 @@ export function createCodeInterpreterMiddleware(
         subagentBridge:
           taskTool && subagents
             ? {
-                dispatch: createBridgeDispatch(taskTool, config),
+                dispatch: createBridgeDispatch(taskTool, config, sessionKey),
                 maxConcurrency: maxSubagentConcurrency,
               }
             : undefined,
       });
 
       if (taskTool && subagents) {
-        session.updateBridgeDispatch(createBridgeDispatch(taskTool, config));
+        session.updateBridgeDispatch(
+          createBridgeDispatch(taskTool, config, sessionKey),
+        );
       }
 
       const result = await session.eval(input.code, timeoutMs ?? -1);

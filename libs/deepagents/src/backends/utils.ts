@@ -25,6 +25,7 @@ import {
   SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { getRealpath, setRealpath } from "./realpath.js";
+import { getPin, setPin } from "./pin.js";
 
 // Constants
 export const EMPTY_CONTENT_WARNING =
@@ -1110,10 +1111,14 @@ export function adaptBackendProtocol(
     }
   }
 
-  // Carry over the internal realpath hook.
+  // Carry over the internal realpath and pin hooks.
   const realpath = getRealpath(backend);
   if (realpath !== undefined) {
     setRealpath(adapted, realpath);
+  }
+  const pin = getPin(backend);
+  if (pin !== undefined) {
+    setPin(adapted, pin);
   }
 
   // `resolveBackendForPath` (CompositeBackend only) needs a closure rather
