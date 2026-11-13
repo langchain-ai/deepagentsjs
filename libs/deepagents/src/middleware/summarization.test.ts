@@ -6,7 +6,8 @@ import {
   getNotificationMetadata,
 } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
-import { isCommand } from "@langchain/langgraph";
+import { FakeListChatModel } from "@langchain/core/utils/testing";
+import { isCommand, MemorySaver } from "@langchain/langgraph";
 import { ContextOverflowError } from "@langchain/core/errors";
 import {
   createSummarizationMiddleware,
@@ -14,9 +15,12 @@ import {
 } from "./summarization.js";
 import type {
   BackendProtocol,
+  BackendRuntime,
   FileDownloadResponse,
   WriteResult,
 } from "../backends/protocol.js";
+import { StateBackend } from "../backends/state.js";
+import { createDeepAgent } from "../agent.js";
 import { createMockBackend } from "./test.js";
 
 const mockCountTokensApproximately = vi.hoisted(() => vi.fn());
@@ -427,6 +431,80 @@ describe("createSummarizationMiddleware", () => {
       // First message should be the summary
       expect(HumanMessage.isInstance(capturedRequest!.messages[0])).toBe(true);
       expect(capturedRequest!.messages[0].content).toContain("summary");
+    });
+
+    it("should return the history file as a files update for a StateBackend built from the runtime", async () => {
+      // createDeepAgent's default backend. Built from the runtime, a
+      // StateBackend returns filesUpdate instead of writing to graph state.
+      const middleware = createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: (runtime: BackendRuntime) => new StateBackend(runtime),
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result } = await callWrapModelCall(middleware, { messages });
+
+      expect(isCommand(result)).toBe(true);
+      const update = (result as any).update;
+      const filePath = (update._summarizationEvent as SummarizationEvent)
+        .filePath!;
+      expect(filePath).toMatch(/^\/conversation_history\//);
+      expect(update.files[filePath].content).toContain("Message 0");
+    });
+  });
+
+  describe("history offload with createDeepAgent's default StateBackend", () => {
+    it("should keep the offloaded history in the agent's files across summarizations", async () => {
+      const agent = createDeepAgent({
+        model: new FakeListChatModel({
+          responses: ["first answer", "second answer", "third answer"],
+        }),
+        checkpointer: new MemorySaver(),
+        middleware: [
+          // Replaces the built-in summarization middleware with a lower
+          // trigger, keeping the backend createDeepAgent uses by default.
+          createSummarizationMiddleware({
+            model: "gpt-4o-mini",
+            backend: (runtime: BackendRuntime) => new StateBackend(runtime),
+            trigger: { type: "messages", value: 3 },
+            keep: { type: "messages", value: 1 },
+          }),
+        ],
+      });
+      const config = {
+        configurable: { thread_id: `history-offload-${crypto.randomUUID()}` },
+      };
+
+      await agent.invoke(
+        { messages: [new HumanMessage("first question")] },
+        config,
+      );
+      await agent.invoke(
+        { messages: [new HumanMessage("second question")] },
+        config,
+      );
+      await agent.invoke(
+        { messages: [new HumanMessage("third question")] },
+        config,
+      );
+
+      const { values } = await agent.graph.getState(config);
+      const event = values._summarizationEvent as SummarizationEvent;
+      expect(event.filePath).toMatch(/^\/conversation_history\//);
+      expect(event.summaryMessage.content).toContain(event.filePath);
+
+      // The file the summary points the model at exists, and the second
+      // summarization appended to it.
+      const history = values.files[event.filePath!].content as string;
+      expect(history.match(/## Summarized at/g)).toHaveLength(2);
+      expect(history).toContain("first question");
+      expect(history).toContain("second question");
     });
   });
 
@@ -1058,6 +1136,46 @@ describe("createSummarizationMiddleware", () => {
       expect(capturedRequest!.messages).toHaveLength(1);
       expect(capturedRequest!.messages[0].content).toContain("summary");
       expect(callCount).toBe(3);
+    });
+
+    it("should return the re-summarized history as the files update for a StateBackend built from the runtime", async () => {
+      let callCount = 0;
+      const middleware = createSummarizationMiddleware({
+        model: {
+          profile: { maxInputTokens: 200 },
+          async invoke() {
+            return { content: "Summary of conversation." };
+          },
+        } as any,
+        backend: (runtime: BackendRuntime) => new StateBackend(runtime),
+        trigger: { type: "tokens", value: 999999 },
+        keep: { type: "messages", value: 3 },
+      });
+
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+
+      const { result } = await callWrapModelCall(
+        middleware,
+        { messages },
+        () => {
+          callCount++;
+          if (callCount <= 2) {
+            throw new ContextOverflowError("prompt is too long");
+          }
+          return new AIMessage({ content: "OK" });
+        },
+      );
+
+      expect(callCount).toBe(3);
+      const update = (result as any).update;
+      const filePath = (update._summarizationEvent as SummarizationEvent)
+        .filePath!;
+      // The second offload covers every message, the preserved ones too.
+      expect(update.files[filePath].content).toContain("Message 0");
+      expect(update.files[filePath].content).toContain("Message 9");
     });
   });
 
