@@ -1729,6 +1729,56 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it("ls tool should return an error status when the backend ls fails", async () => {
+      const mockBackend = createMockBackend();
+      mockBackend.ls = vi.fn().mockResolvedValue({
+        error: "Hub unavailable: connect ECONNREFUSED",
+      });
+      const middleware = createFilesystemMiddleware({ backend: mockBackend });
+
+      const lsTool = middleware.tools!.find((tool) => tool.name === "ls");
+      const result = await lsTool!.invoke({
+        type: "tool_call",
+        id: "call-ls",
+        name: "ls",
+        args: { path: "/" },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-ls");
+        expect(result.name).toBe("ls");
+        expect(result.status).toBe("error");
+        expect(result.content).toBe(
+          "Error listing files: Hub unavailable: connect ECONNREFUSED",
+        );
+      }
+    });
+
+    it("execute tool should return an error status when the backend does not support execution", async () => {
+      const middleware = createFilesystemMiddleware({
+        backend: () => createMockBackend(),
+      });
+
+      const executeTool = middleware.tools!.find(
+        (tool) => tool.name === "execute",
+      );
+      const result = await executeTool!.invoke({
+        type: "tool_call",
+        id: "call-execute",
+        name: "execute",
+        args: { command: "echo hello" },
+      });
+
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      if (ToolMessage.isInstance(result)) {
+        expect(result.tool_call_id).toBe("call-execute");
+        expect(result.name).toBe("execute");
+        expect(result.status).toBe("error");
+        expect(result.content).toContain("Error: Execution not available.");
+      }
+    });
+
     it("glob tool should return an error status when the backend glob fails", async () => {
       const mockBackend = createMockBackend();
       mockBackend.glob = vi.fn().mockResolvedValue({
