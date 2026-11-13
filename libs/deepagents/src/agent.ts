@@ -42,6 +42,7 @@ import {
   type CompiledSubAgent,
 } from "./middleware/subagents.js";
 import type { AsyncSubAgent } from "./middleware/async_subagents.js";
+import type { FilesystemPermission } from "./permissions/index.js";
 import type {
   AnySubAgent,
   CreateDeepAgentParams,
@@ -340,13 +341,20 @@ export function createDeepAgent<
   const resolveSkillsMiddleware = (
     sources: readonly string[] | undefined,
     custom: readonly AgentMiddleware[],
+    skillPermissions: FilesystemPermission[],
   ): AgentMiddleware[] => {
     const passed = custom.findLast(
       (entry) => entry.name === "SkillsMiddleware",
     );
     if (passed !== undefined) return [passed];
     return sources != null && sources.length > 0
-      ? [createSkillsMiddleware({ backend, sources })]
+      ? [
+          createSkillsMiddleware({
+            backend,
+            sources,
+            permissions: skillPermissions,
+          }),
+        ]
       : [];
   };
 
@@ -368,10 +376,15 @@ export function createDeepAgent<
     // fork may bring its own skills middleware instead, but its own `skills`
     // are rejected by the subagent middleware.
     const subagentSkillsMiddleware = generalPurpose
-      ? resolveSkillsMiddleware(skills, customMiddleware)
+      ? resolveSkillsMiddleware(
+          skills,
+          customMiddleware,
+          input.permissions ?? permissions,
+        )
       : resolveSkillsMiddleware(
           forked ? skills : input.skills,
           inputMiddleware,
+          input.permissions ?? permissions,
         );
 
     let subagentMiddleware = mergeMiddlewareStack(
@@ -484,7 +497,11 @@ export function createDeepAgent<
     inlineSubagents.unshift(generalPurposeSpec);
   }
 
-  const skillsMiddleware = resolveSkillsMiddleware(skills, customMiddleware);
+  const skillsMiddleware = resolveSkillsMiddleware(
+    skills,
+    customMiddleware,
+    permissions,
+  );
 
   // Built-in middleware array - core middleware with known types.
   // This tuple is typed without conditional spreads to preserve tuple inference.

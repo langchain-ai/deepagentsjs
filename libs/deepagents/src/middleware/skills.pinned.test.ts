@@ -405,6 +405,80 @@ describe("pinned skills", () => {
     expect(pinnedContents(model.calls[1].messages)).toEqual([CRM_PINNED]);
   });
 
+  describe("from skillsMetadata in the run's input", () => {
+    /** Put a file at `path` in the store. */
+    function putFile(store: InMemoryStore, path: string, content: string) {
+      const now = new Date().toISOString();
+      return store.put(NAMESPACE, path, {
+        content,
+        mimeType: "text/plain",
+        created_at: now,
+        modified_at: now,
+      });
+    }
+
+    /** Pin `name`, claimed by the input's `skillsMetadata` to live at `path`. */
+    async function pinFromInput(
+      agent: Awaited<ReturnType<typeof pinningAgent>>["agent"],
+      name: string,
+      path: string,
+    ) {
+      await agent.invoke(
+        {
+          messages: [new HumanMessage("go")],
+          skillsMetadata: [{ name, description: "Injected", path }],
+          pinnedSkills: [name],
+        },
+        config,
+      );
+    }
+
+    it("pin a valid SKILL.md", async () => {
+      const model = scripted();
+      const { agent } = await pinningAgent({ crm: CRM }, model);
+
+      await pinFromInput(agent, "crm", "/skills/crm/SKILL.md");
+
+      expect(pinnedContents(model.calls[0].messages)).toEqual([CRM_PINNED]);
+    });
+
+    it("skip a SKILL.md that read permissions deny", async () => {
+      const model = scripted();
+      const { agent } = await pinningAgent({ crm: CRM }, model, {
+        permissions: [
+          { operations: ["read"], paths: ["/skills/crm/**"], mode: "deny" },
+        ],
+      });
+
+      await pinFromInput(agent, "crm", "/skills/crm/SKILL.md");
+
+      expect(pinnedContents(model.calls[0].messages)).toEqual([]);
+    });
+
+    it("skip a file that isn't a SKILL.md", async () => {
+      const model = scripted();
+      const { agent, store } = await pinningAgent({ crm: CRM }, model);
+      await putFile(store, "/secrets/notes.md", CRM);
+
+      await pinFromInput(agent, "crm", "/secrets/notes.md");
+
+      expect(pinnedContents(model.calls[0].messages)).toEqual([]);
+    });
+
+    it.each([
+      ["has no frontmatter", "secret"],
+      ["names another skill", HOUSE_STYLE],
+    ])("skip a SKILL.md that %s", async (_label, content) => {
+      const model = scripted();
+      const { agent, store } = await pinningAgent({ crm: CRM }, model);
+      await putFile(store, "/secrets/SKILL.md", content);
+
+      await pinFromInput(agent, "crm", "/secrets/SKILL.md");
+
+      expect(pinnedContents(model.calls[0].messages)).toEqual([]);
+    });
+  });
+
   it("are never pinned in the parent by a subagent's result", async () => {
     const worker = RunnableLambda.from(() => ({
       messages: [new AIMessage("worker done")],
