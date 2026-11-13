@@ -10,6 +10,7 @@ import { isCommand } from "@langchain/langgraph";
 import { ContextOverflowError } from "@langchain/core/errors";
 import {
   createSummarizationMiddleware,
+  getEffectiveMessages,
   type SummarizationEvent,
 } from "./summarization.js";
 import type {
@@ -838,6 +839,89 @@ describe("createSummarizationMiddleware", () => {
       expect(
         req3!.messages.slice(1).map((m: BaseMessage) => m.content),
       ).toEqual(["S18", "S19"]);
+    });
+  });
+
+  describe("cutoff message id", () => {
+    function makeStateMessages(n: number): BaseMessage[] {
+      return Array.from({ length: n }, (_, i) =>
+        i % 2 === 0
+          ? new HumanMessage({ content: `S${i}`, id: `s${i}` })
+          : new AIMessage({ content: `S${i}`, id: `s${i}` }),
+      );
+    }
+
+    const summaryMessage = new HumanMessage({ content: "summary" });
+
+    function makeMiddleware() {
+      return createSummarizationMiddleware({
+        model: "gpt-4o-mini",
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+    }
+
+    it("stores the id of the first kept message", async () => {
+      const { result } = await callWrapModelCall(makeMiddleware(), {
+        messages: makeStateMessages(8),
+      });
+
+      const event = (result as any).update
+        ._summarizationEvent as SummarizationEvent;
+      expect(event.cutoffIndex).toBe(6);
+      expect(event.cutoffMessageId).toBe("s6");
+    });
+
+    it("keeps the boundary when an earlier message is removed", async () => {
+      const event: SummarizationEvent = {
+        cutoffIndex: 6,
+        cutoffMessageId: "s6",
+        summaryMessage,
+        filePath: null,
+      };
+      const messages = makeStateMessages(14).filter((m) => m.id !== "s1");
+
+      expect(
+        getEffectiveMessages(messages, { _summarizationEvent: event })
+          .slice(1)
+          .map((m) => m.id),
+      ).toEqual(["s6", "s7", "s8", "s9", "s10", "s11", "s12", "s13"]);
+
+      // effective = [summary, S6..S13] (9), effective cutoff = 7
+      // s6 now sits at index 5, so state cutoff = 5 + 7 - 1 = 11 (S12)
+      const { result } = await callWrapModelCall(makeMiddleware(), {
+        messages,
+        _summarizationEvent: event,
+      });
+
+      const next = (result as any).update
+        ._summarizationEvent as SummarizationEvent;
+      expect(next.cutoffIndex).toBe(11);
+      expect(next.cutoffMessageId).toBe("s12");
+    });
+
+    it("falls back to cutoffIndex for events without an id", async () => {
+      const event: SummarizationEvent = {
+        cutoffIndex: 6,
+        summaryMessage,
+        filePath: null,
+      };
+      const messages = makeStateMessages(14);
+
+      expect(
+        getEffectiveMessages(messages, { _summarizationEvent: event })[1].id,
+      ).toBe("s6");
+
+      const { result } = await callWrapModelCall(makeMiddleware(), {
+        messages,
+        _summarizationEvent: event,
+      });
+
+      const next = (result as any).update
+        ._summarizationEvent as SummarizationEvent;
+      expect(next.cutoffIndex).toBe(12);
+      expect(next.cutoffMessageId).toBe("s12");
     });
   });
 
