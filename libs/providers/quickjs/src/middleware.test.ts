@@ -427,6 +427,65 @@ describe("createCodeInterpreterMiddleware", () => {
     });
   });
 
+  describe("parallel runs on one thread", () => {
+    it("gives each run its own session", async () => {
+      // Hold both runs between their two evals so they interleave.
+      let arrived = 0;
+      let release!: () => void;
+      const bothArrived = new Promise<void>((resolve) => (release = resolve));
+      const barrier = tool(
+        async () => {
+          arrived += 1;
+          if (arrived === 2) release();
+          await bothArrived;
+          return "ok";
+        },
+        { name: "barrier", description: "wait", schema: z.object({}) },
+      );
+      const ping = tool(async () => "pong", {
+        name: "ping",
+        description: "ping",
+        schema: z.object({}),
+      });
+
+      const step = (messages: any[]) => {
+        const label = String(messages.find(HumanMessage.isInstance)!.content);
+        const calls = [
+          { name: "eval", args: { code: `var mine = "${label}"` } },
+          { name: "barrier", args: {} },
+          { name: "eval", args: { code: `await tools.ping({}); mine` } },
+        ];
+        const toolCount = messages.filter(ToolMessage.isInstance).length;
+        if (toolCount === calls.length) return new AIMessage("done");
+        return new AIMessage({
+          content: "",
+          tool_calls: [{ ...calls[toolCount], id: `${label}-${toolCount}` }],
+        });
+      };
+      const model = fakeModel();
+      for (let i = 0; i < 8; i++) model.respond(step);
+
+      const agent = createAgent({
+        model,
+        tools: [barrier, ping],
+        middleware: [createCodeInterpreterMiddleware({ ptc: ["ping"] })],
+      });
+
+      // Subagents of one type share the agent and the parent's thread_id.
+      const config = { configurable: { thread_id: "parent-thread" } };
+      const results = await Promise.all(
+        ["a", "b"].map((label) =>
+          agent.invoke({ messages: [new HumanMessage(label)] }, config),
+        ),
+      );
+
+      for (const [i, label] of ["a", "b"].entries()) {
+        const toolMessages = results[i].messages.filter(ToolMessage.isInstance);
+        expect(toolMessages.at(-1)?.content).toBe(`→ ${label}`);
+      }
+    });
+  });
+
   describe("subagent primitive", () => {
     it.each([0, -1, 1.5, Infinity, NaN, null, true, "40"])(
       "rejects invalid concurrency %s",
