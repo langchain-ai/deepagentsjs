@@ -1062,6 +1062,87 @@ describe("createFilesystemMiddleware", () => {
       }
     });
 
+    it.each([null, "write failed"])(
+      "should replace Command messages without filesUpdate (write error: %s)",
+      async (error) => {
+        const backend = createMockBackend();
+        backend.write = vi.fn().mockResolvedValue({ error, filesUpdate: null });
+        const middleware = createFilesystemMiddleware({
+          backend,
+          toolTokenLimitBeforeEvict: 100,
+        });
+        const content = "x".repeat(20_000);
+        const large = new ToolMessage({
+          content,
+          tool_call_id: "large-command",
+          name: "large_tool",
+          id: "message-id",
+          artifact: { source: "test" },
+        });
+        const small = new ToolMessage({
+          content: "small",
+          tool_call_id: "small-command",
+        });
+        const human = new HumanMessage("keep this message");
+        const files = { "/existing.txt": null };
+        const command = new Command({
+          graph: Command.PARENT,
+          goto: "next",
+          resume: "answer",
+          update: { messages: [large, small, human], files, marker: "keep" },
+        });
+
+        const result = await middleware.wrapToolCall!(
+          {
+            toolCall: { id: "large-command", name: "large_tool" },
+            state: {},
+            config: {},
+          } as any,
+          vi.fn().mockResolvedValue(command),
+        );
+
+        expect(backend.write).toHaveBeenCalledWith(
+          "/large_tool_results/large-command.txt",
+          content,
+        );
+        expect(isCommand(result)).toBe(true);
+        if (!isCommand(result)) throw new Error("Expected Command");
+        const update = result.update as any;
+        expect(update.messages[0].content).not.toContain(content);
+        expect(update.messages[0].content).toContain(
+          error ? "could not be saved" : "Tool result too large",
+        );
+        expect(update.messages[0].tool_call_id).toBe(large.tool_call_id);
+        expect(update.messages[0].id).toBe(large.id);
+        expect(update.messages[0].artifact).toEqual(large.artifact);
+        expect(update.messages.slice(1)).toEqual([small, human]);
+        expect(update.files).toBe(files);
+        expect(update.marker).toBe("keep");
+        expect(result.graph).toBe(command.graph);
+        expect(result.goto).toEqual(command.goto);
+        expect(result.resume).toBe(command.resume);
+      },
+    );
+
+    it("should preserve a Command when none of its messages need eviction", async () => {
+      const backend = createMockBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        toolTokenLimitBeforeEvict: 100,
+      });
+      const command = new Command({
+        update: {
+          messages: [new ToolMessage({ content: "small", tool_call_id: "id" })],
+        },
+      });
+      const result = await middleware.wrapToolCall!(
+        { toolCall: { id: "id", name: "tool" }, state: {}, config: {} } as any,
+        vi.fn().mockResolvedValue(command),
+      );
+      expect(result).toBe(command);
+      expect(backend.write).not.toHaveBeenCalled();
+    });
+
     it("should handle write errors gracefully during eviction", async () => {
       const mockBackend = createMockBackend();
       const mockWrite = vi.fn().mockResolvedValue({
