@@ -499,6 +499,44 @@ describe("createSummarizationMiddleware", () => {
       expect(summaryMessage.content).not.toContain('"type":"reasoning"');
     });
 
+    it("should use options.model for the summary even when request.model is set", async () => {
+      const summaryInvoke = vi.fn(
+        async () => new AIMessage({ content: "configured summary" }),
+      );
+      const agentInvoke = vi.fn(
+        async () => new AIMessage({ content: "agent summary" }),
+      );
+      const middleware = createSummarizationMiddleware({
+        model: { invoke: summaryInvoke, profile: {} } as any,
+        backend: createMockBackend(),
+        trigger: { type: "messages", value: 5 },
+        keep: { type: "messages", value: 2 },
+      });
+      const messages = Array.from(
+        { length: 10 },
+        (_, i) => new HumanMessage({ content: `Message ${i}` }),
+      );
+      let captured: any = null;
+      await middleware.wrapModelCall!(
+        {
+          messages,
+          state: { messages },
+          model: { invoke: agentInvoke, profile: {} },
+          systemPrompt: "",
+          systemMessage: {},
+          tools: [],
+          runtime: {},
+        } as any,
+        (req: any) => {
+          captured = req;
+          return new AIMessage({ content: "ok" });
+        },
+      );
+      expect(summaryInvoke).toHaveBeenCalled();
+      expect(agentInvoke).not.toHaveBeenCalled();
+      expect(captured.messages[0].content).toContain("configured summary");
+    });
+
     it("should mark summary message with lc_source", async () => {
       const mockBackend = createMockBackend();
       const middleware = createSummarizationMiddleware({
@@ -1368,7 +1406,6 @@ describe("createSummarizationMiddleware", () => {
       };
 
       const middleware = createSummarizationMiddleware({
-        model: "gpt-4o-mini",
         backend: mockBackend,
         trigger: { type: "messages", value: 3 },
         keep: { type: "messages", value: 1 },
