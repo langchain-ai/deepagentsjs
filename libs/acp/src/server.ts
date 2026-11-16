@@ -1298,8 +1298,8 @@ export class DeepAgentsServer {
       if (Array.isArray(state?.values.messages)) {
         messages = state.values.messages as BaseMessage[];
       }
-    } catch {
-      // Checkpointer may not have data yet
+    } catch (err) {
+      this.log("Failed to load session history:", err);
     }
 
     if (messages.length === 0) {

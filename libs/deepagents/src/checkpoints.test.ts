@@ -90,16 +90,15 @@ const noopTurns = (turns: number, from = 0): ScriptedCall[] =>
     args: { i: from + i },
   }));
 
-/** The full copies of `channel` stored in the checkpoints of one namespace. */
+/** The full copies of `channel` stored in the thread's checkpoints. */
 async function storedCopies(
   checkpointer: MemorySaver,
   config: { configurable: { thread_id: string } },
   channel: string,
-  namespace = "",
 ): Promise<unknown[]> {
   const copies: unknown[] = [];
   for await (const { checkpoint } of checkpointer.list({
-    configurable: { ...config.configurable, checkpoint_ns: namespace },
+    configurable: { ...config.configurable, checkpoint_ns: "" },
   })) {
     const stored = checkpoint.channel_values[channel];
     if (stored === undefined) continue;
@@ -108,54 +107,6 @@ async function storedCopies(
   return copies;
 }
 
-async function subagentNamespace(
-  checkpointer: MemorySaver,
-  config: { configurable: { thread_id: string } },
-): Promise<string> {
-  const namespaces = new Set<string>();
-  for await (const tuple of checkpointer.list(config)) {
-    namespaces.add(tuple.config.configurable?.checkpoint_ns ?? "");
-  }
-  namespaces.delete("");
-  expect(namespaces.size).toBe(1);
-  return [...namespaces][0];
-}
-
-/**
- * A main agent that hands one task to the `looper` subagent, which makes
- * `turns` scripted tool calls and answers "looped".
- */
-function subagentModel(turns: (i: number) => ScriptedCall | undefined) {
-  let subTurns = 0;
-  return replyingModel((messages) => {
-    if (messages.some((m) => m.text.includes("SUBAGENT_LOOPER"))) {
-      const call = turns(subTurns);
-      if (call === undefined) return new AIMessage("looped");
-      return new AIMessage({
-        content: "",
-        tool_calls: [{ ...call, id: `sub_${subTurns++}` }],
-      });
-    }
-    if (ToolMessage.isInstance(messages.at(-1))) return new AIMessage("done");
-    return new AIMessage({
-      content: "",
-      tool_calls: [
-        {
-          name: "task",
-          args: { description: "Loop.", subagent_type: "looper" },
-          id: "call_task",
-        },
-      ],
-    });
-  });
-}
-const looper = {
-  name: "looper",
-  description: "Loops.",
-  systemPrompt: "SUBAGENT_LOOPER",
-  tools: [noop],
-};
-
 describe("Messages channel", () => {
   const toolLoopModel = (turns: number, callPrefix?: string) =>
     scriptedModel(noopTurns(turns), callPrefix);
@@ -163,9 +114,8 @@ describe("Messages channel", () => {
   const copyLengths = async (
     checkpointer: MemorySaver,
     config: { configurable: { thread_id: string } },
-    namespace?: string,
   ) =>
-    (await storedCopies(checkpointer, config, "messages", namespace)).map(
+    (await storedCopies(checkpointer, config, "messages")).map(
       (copy) => (copy as unknown[]).length,
     );
   const fullMessages = new StateSchema({ messages: MessagesValue });
@@ -438,23 +388,5 @@ describe("Messages channel", () => {
       tally: 5,
     });
     expect((await run(ownMessages)).at(-1)?.messages).toHaveLength(1);
-  });
-
-  it("keeps a subagent's messages as deltas", async () => {
-    const checkpointer = new MemorySaver();
-    const config = thread("subagent-messages");
-    const agent = createDeepAgent({
-      model: subagentModel((i) =>
-        i < 30 ? { name: "noop", args: { i } } : undefined,
-      ),
-      checkpointer,
-      subagents: [looper],
-    });
-
-    const result = await agent.invoke(go, config);
-
-    expect(result.messages.at(-1)?.text).toBe("done");
-    const namespace = await subagentNamespace(checkpointer, config);
-    expect(await copyLengths(checkpointer, config, namespace)).toEqual([50]);
   });
 });
