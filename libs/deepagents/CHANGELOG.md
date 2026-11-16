@@ -1,5 +1,22 @@
 # deepagents
 
+## 1.17.0
+
+### Minor Changes
+
+- [#1058](https://github.com/langchain-ai/deepagentsjs/pull/1058) [`06fa9a9`](https://github.com/langchain-ai/deepagentsjs/commit/06fa9a9a91dedb7ac67c2838a5d349cdbc448c59) Thanks [@byhow](https://github.com/byhow)! - `createDeepAgent` stores `messages` as per-step deltas with a full copy every 50 updates, as Python deepagents does, instead of copying the whole conversation into every checkpoint. A 100-step run on `MemorySaver` stores 4.0 MB instead of 112.4 MB, and runs 5.5x faster per step. `getState` returns the same messages, and existing threads continue in place. A custom `stateSchema` keeps the delta channel unless it declares `messages` itself. Subagents defined by a spec still store full copies, while a deep agent passed as a subagent's `runnable` stores deltas.
+  
+  - Postgres users should upgrade `@langchain/langgraph-checkpoint-postgres` to 1.1.3 or later, which reads the deltas in a few paged queries.
+  - Removing a message whose id is not in the state is now ignored instead of throwing.
+  - The `@langchain/langgraph-checkpoint` floor rises to `^1.2.0`. With SQLite, use `@langchain/langgraph-checkpoint-sqlite` 1.1.0 or later so parallel tool results reload in call order.
+  - Downgrading deepagents after it has saved threads is safe only while `@langchain/langgraph` stays at 1.5.1 or later. Earlier versions read those threads as having no messages.
+
+### Patch Changes
+
+- [#1075](https://github.com/langchain-ai/deepagentsjs/pull/1075) [`eed9717`](https://github.com/langchain-ai/deepagentsjs/commit/eed97173355dfb7a03ed7dc6cd062381c53a8584) Thanks [@eliornl](https://github.com/eliornl)! - fix(deepagents): stream async subagent runs to apps that join them
+  
+  The runs that the async subagent tools start on the same deployment, and the run that wakes the parent when a task finishes, now stream like an app's own runs. An app that joins one of these runs sees the reply token by token, including from subgraphs, and can replay events it missed. Subagents with a `url` keep their server's defaults.
+
 ## 1.16.5
 
 ### Patch Changes
