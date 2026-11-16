@@ -1757,11 +1757,13 @@ describe("Subagent checkpoint namespace", () => {
       ],
     });
     const threadId = "nested-subagent-checkpoint-namespace";
+    // Read through the graph: `inner` is a deep agent, which saves messages
+    // as deltas that the raw checkpoint's channel values leave out.
     const readMessages = async (checkpointNs: string) => {
-      const saved = await checkpointer.getTuple({
+      const state = await agent.graph.getState({
         configurable: { thread_id: threadId, checkpoint_ns: checkpointNs },
       });
-      return saved?.checkpoint.channel_values.messages as BaseMessage[];
+      return state.values.messages as BaseMessage[];
     };
 
     const result = await agent.invoke(
