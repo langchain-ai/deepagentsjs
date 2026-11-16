@@ -8,6 +8,7 @@ import {
   Client,
   type Interrupt,
   type Run,
+  type StreamMode,
   type Thread,
 } from "@langchain/langgraph-sdk";
 import {
@@ -806,27 +807,49 @@ function describeAsyncSubAgent(spec: AsyncSubAgent): string {
 }
 
 /**
+ * Streaming for the runs this middleware starts on this deployment.
+ *
+ * An app that shows a subagent's thread, or the parent's thread after a
+ * notification, joins runs it didn't start, and a join gets only what the run
+ * streams. Like an app's own runs, these stream tokens and subgraphs, and keep
+ * their events for a late join.
+ */
+const STREAM_OPTIONS = {
+  streamMode: [
+    "values",
+    "updates",
+    "messages-tuple",
+    "custom",
+  ] satisfies StreamMode[],
+  streamSubgraphs: true,
+  streamResumable: true,
+};
+
+/**
  * The `runs.create` options that link a run to this agent and set the subagent's webhook.
  *
- * A subagent on this deployment runs with this agent's context. The Agent Server
- * takes `context` or `configurable`, not both, so the parent reference then goes
- * through the thread's metadata.
+ * A subagent on this deployment runs with this agent's context, and streams with
+ * `STREAM_OPTIONS`. The Agent Server takes `context` or `configurable`, not both,
+ * so the parent reference then goes through the thread's metadata.
  */
 function runOptions(
   spec: AsyncSubAgent,
   runtime: { config?: LangGraphRunnableConfig; context?: unknown },
-): {
+): Partial<typeof STREAM_OPTIONS> & {
   config?: { configurable: Record<string, unknown> };
   context?: Record<string, unknown>;
   webhook?: string;
 } {
-  const webhook = spec.webhook ? { webhook: spec.webhook } : {};
+  const options = {
+    ...(spec.url ? {} : STREAM_OPTIONS),
+    ...(spec.webhook ? { webhook: spec.webhook } : {}),
+  };
   const context = spec.url ? undefined : forwardedContext(runtime.context);
-  if (context) return { ...webhook, context };
+  if (context) return { ...options, context };
   const reference = referenceFor(spec, runtime.config);
   return Object.keys(reference).length > 0
-    ? { ...webhook, config: { configurable: { [PARENT_KEY]: reference } } }
-    : webhook;
+    ? { ...options, config: { configurable: { [PARENT_KEY]: reference } } }
+    : options;
 }
 
 /** A run context as JSON data for another run, without deepagents' parent reference. */
@@ -1178,6 +1201,7 @@ async function awakeParent(
     await client.runs.create(parentThreadId, assistantId, {
       input: { messages: [notificationMessage(update)] },
       multitaskStrategy: "reject",
+      ...STREAM_OPTIONS,
       ...(context ? { context } : {}),
     });
   } catch {

@@ -81,6 +81,15 @@ describe("createParentNotifierMiddleware", () => {
     expect(JSON.stringify(message.content)).toContain("All done.");
   });
 
+  it("streams the wake-up run's tokens to an app showing the parent", async () => {
+    await subagent().invoke(ask, taskRunConfig());
+
+    const [, , payload] = runsCreate.mock.calls[0];
+    expect(payload.streamMode).toContain("messages-tuple");
+    expect(payload.streamSubgraphs).toBe(true);
+    expect(payload.streamResumable).toBe(true);
+  });
+
   it("does nothing for a run no async subagent tool started", async () => {
     await subagent().invoke(
       ask,
