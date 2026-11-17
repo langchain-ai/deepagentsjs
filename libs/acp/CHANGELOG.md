@@ -1,5 +1,13 @@
 # deepagents-acp
 
+## 0.1.44
+
+### Patch Changes
+
+- [#1058](https://github.com/langchain-ai/deepagentsjs/pull/1058) [`06fa9a9`](https://github.com/langchain-ai/deepagentsjs/commit/06fa9a9a91dedb7ac67c2838a5d349cdbc448c59) Thanks [@byhow](https://github.com/byhow)! - `session/load` reads the thread's messages through the agent's state instead of the raw checkpoint, so it replays the agent's replies and tool calls now that deep agents store messages as deltas. The `@langchain/langgraph` peer floor rises to `^1.6.1`, as in `deepagents`.
+- Updated dependencies [[`eed9717`](https://github.com/langchain-ai/deepagentsjs/commit/eed97173355dfb7a03ed7dc6cd062381c53a8584), [`06fa9a9`](https://github.com/langchain-ai/deepagentsjs/commit/06fa9a9a91dedb7ac67c2838a5d349cdbc448c59)]:
+  - deepagents@1.17.0
+
 ## 0.1.43
 
 ### Patch Changes
