@@ -1804,6 +1804,49 @@ describe("parent reference", () => {
   });
 });
 
+describe("run streaming", () => {
+  async function runOptionsOf(agent: AsyncSubAgent, tool: "start" | "update") {
+    const agentMap = { researcher: agent };
+    const { cache, threadsCreate, runsCreate } =
+      createMockClientCache(agentMap);
+    threadsCreate.mockResolvedValue({ thread_id: "t" });
+    runsCreate.mockResolvedValue({ run_id: "r" });
+
+    if (tool === "start") {
+      await buildStartTool(agentMap, cache, "Launch").invoke(
+        { description: "go", agentName: "researcher" },
+        parentRuntime({}),
+      );
+    } else {
+      const task = makeTask();
+      await buildUpdateTool(agentMap, cache).invoke(
+        { taskId: task.taskId, message: "more" },
+        parentRuntime({ asyncTasks: { [task.taskId]: task } }),
+      );
+    }
+    return runsCreate.mock.calls[0][2];
+  }
+
+  it.each(["start", "update"] as const)(
+    "streams tokens and subgraphs to an app that joins a same-deployment run it %ss",
+    async (tool) => {
+      const options = await runOptionsOf(makeAgent({ url: undefined }), tool);
+
+      expect(options.streamMode).toContain("messages-tuple");
+      expect(options.streamSubgraphs).toBe(true);
+      expect(options.streamResumable).toBe(true);
+    },
+  );
+
+  it("leaves a run on another server to that server's stream defaults", async () => {
+    const options = await runOptionsOf(makeAgent(), "start");
+
+    expect(options).not.toHaveProperty("streamMode");
+    expect(options).not.toHaveProperty("streamSubgraphs");
+    expect(options).not.toHaveProperty("streamResumable");
+  });
+});
+
 describe("fork mode", () => {
   async function launch(
     agent: AsyncSubAgent,

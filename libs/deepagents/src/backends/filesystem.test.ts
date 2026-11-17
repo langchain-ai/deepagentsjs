@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as fsSync from "fs";
 import * as path from "path";
 import * as os from "os";
+import { execFileSync } from "child_process";
 import { FilesystemBackend, toSlashRootedPath } from "./filesystem.js";
 import { getRealpath } from "./realpath.js";
 
@@ -832,6 +833,53 @@ describe("FilesystemBackend", () => {
       expect(result.data!.content).toBeInstanceOf(Uint8Array);
       expect(result.data!.content).toEqual(new Uint8Array(pngHeader));
     });
+  });
+
+  describe("downloadFiles", () => {
+    it("should return the bytes of a regular file", async () => {
+      const filePath = path.join(tmpDir, "data.bin");
+      await fs.writeFile(filePath, Buffer.from([0x00, 0x01, 0xff]));
+
+      const backend = new FilesystemBackend({ rootDir: tmpDir });
+
+      const [result] = await backend.downloadFiles([filePath]);
+      expect(result.error).toBeNull();
+      expect(Buffer.from(result.content!)).toEqual(
+        Buffer.from([0x00, 0x01, 0xff]),
+      );
+    });
+
+    it("should report is_directory for a directory", async () => {
+      const dirPath = path.join(tmpDir, "subdir");
+      await fs.mkdir(dirPath);
+
+      const backend = new FilesystemBackend({ rootDir: tmpDir });
+
+      const [result] = await backend.downloadFiles([dirPath]);
+      expect(result).toEqual({
+        path: dirPath,
+        content: null,
+        error: "is_directory",
+      });
+    });
+
+    it.skipIf(process.platform === "win32")(
+      "should report file_not_found for a FIFO without blocking",
+      async () => {
+        const fifoPath = path.join(tmpDir, "pipe");
+        execFileSync("mkfifo", [fifoPath]);
+
+        const backend = new FilesystemBackend({ rootDir: tmpDir });
+
+        const [result] = await backend.downloadFiles([fifoPath]);
+        expect(result).toEqual({
+          path: fifoPath,
+          content: null,
+          error: "file_not_found",
+        });
+      },
+      2000,
+    );
   });
 });
 

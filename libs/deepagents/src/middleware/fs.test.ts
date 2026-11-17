@@ -2104,6 +2104,35 @@ describe("createFilesystemMiddleware", () => {
       expect(result).toContain("const pattern = 'test'");
     });
 
+    it("grep tool should clip a long line to a window around the match", async () => {
+      const line =
+        '{"items": [' +
+        '{"k": "v"}, '.repeat(8000) +
+        '{"order_id": "abc-123"}, ' +
+        '{"k": "v"}, '.repeat(8000) +
+        "]}";
+      const mockBackend = createMockBackend();
+      mockBackend.grep = vi.fn().mockResolvedValue({
+        matches: [{ path: "/large_tool_results/call_1", line: 1, text: line }],
+      });
+
+      const state = { messages: [], files: {} };
+      vi.mocked(getCurrentTaskInput).mockReturnValue(state);
+
+      const middleware = createFilesystemMiddleware({
+        backend: () => mockBackend,
+      });
+
+      const grepTool = middleware.tools!.find(
+        (t: any) => t.name === "grep",
+      ) as any;
+      const result = await grepTool.invoke({ pattern: "order_id", path: "/" });
+
+      expect(result).toContain('"order_id": "abc-123"');
+      expect(result).toContain("chars clipped]");
+      expect(result.length).toBeLessThan(3000);
+    });
+
     it("grep tool should return error message when backend returns an error", async () => {
       const mockBackend = createMockBackend();
       mockBackend.grep = vi

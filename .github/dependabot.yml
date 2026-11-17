@@ -6,6 +6,10 @@ updates:
       interval: monthly
     open-pull-requests-limit: 10
     versioning-strategy: increase-if-necessary
+    ignore:
+      # 2.x drops AgentSideConnection; libs/acp needs a migration first
+      - dependency-name: "@agentclientprotocol/sdk"
+        update-types: ["version-update:semver-major"]
     groups:
       patch-deps-updates-main:
         patterns:

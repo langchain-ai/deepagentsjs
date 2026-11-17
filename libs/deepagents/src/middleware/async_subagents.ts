@@ -8,6 +8,7 @@ import {
   Client,
   type Interrupt,
   type Run,
+  type StreamMode,
   type Thread,
 } from "@langchain/langgraph-sdk";
 import {
@@ -18,6 +19,7 @@ import {
   type BuiltInState,
   type ToolRuntime,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import {
   addNotificationMetadata,
   AIMessage,
@@ -28,6 +30,7 @@ import {
   ToolMessage as CoreToolMessage,
   type ContentBlock,
 } from "@langchain/core/messages";
+import { refusalIn, refusalNotice } from "./refusal.js";
 import { getCurrentRunTree } from "langsmith/traceable";
 import { z } from "zod/v4";
 import type { AnySubAgent } from "../types.js";
@@ -804,27 +807,49 @@ function describeAsyncSubAgent(spec: AsyncSubAgent): string {
 }
 
 /**
+ * Streaming for the runs this middleware starts on this deployment.
+ *
+ * An app that shows a subagent's thread, or the parent's thread after a
+ * notification, joins runs it didn't start, and a join gets only what the run
+ * streams. Like an app's own runs, these stream tokens and subgraphs, and keep
+ * their events for a late join.
+ */
+const STREAM_OPTIONS = {
+  streamMode: [
+    "values",
+    "updates",
+    "messages-tuple",
+    "custom",
+  ] satisfies StreamMode[],
+  streamSubgraphs: true,
+  streamResumable: true,
+};
+
+/**
  * The `runs.create` options that link a run to this agent and set the subagent's webhook.
  *
- * A subagent on this deployment runs with this agent's context. The Agent Server
- * takes `context` or `configurable`, not both, so the parent reference then goes
- * through the thread's metadata.
+ * A subagent on this deployment runs with this agent's context, and streams with
+ * `STREAM_OPTIONS`. The Agent Server takes `context` or `configurable`, not both,
+ * so the parent reference then goes through the thread's metadata.
  */
 function runOptions(
   spec: AsyncSubAgent,
   runtime: { config?: LangGraphRunnableConfig; context?: unknown },
-): {
+): Partial<typeof STREAM_OPTIONS> & {
   config?: { configurable: Record<string, unknown> };
   context?: Record<string, unknown>;
   webhook?: string;
 } {
-  const webhook = spec.webhook ? { webhook: spec.webhook } : {};
+  const options = {
+    ...(spec.url ? {} : STREAM_OPTIONS),
+    ...(spec.webhook ? { webhook: spec.webhook } : {}),
+  };
   const context = spec.url ? undefined : forwardedContext(runtime.context);
-  if (context) return { ...webhook, context };
+  if (context) return { ...options, context };
   const reference = referenceFor(spec, runtime.config);
   return Object.keys(reference).length > 0
-    ? { ...webhook, config: { configurable: { [PARENT_KEY]: reference } } }
-    : webhook;
+    ? { ...options, config: { configurable: { [PARENT_KEY]: reference } } }
+    : options;
 }
 
 /** A run context as JSON data for another run, without deepagents' parent reference. */
@@ -1101,9 +1126,12 @@ export function finalContent(values: unknown): ContentBlock.Standard[] {
   }
   const last = messages[messages.length - 1];
   try {
-    return coerceMessageLikeToMessage(
+    const message = coerceMessageLikeToMessage(
       last as Parameters<typeof coerceMessageLikeToMessage>[0],
-    ).contentBlocks;
+    );
+    const refusal = refusalIn(message);
+    if (refusal) return [{ type: "text", text: refusalNotice(refusal) }];
+    return message.contentBlocks;
   } catch {
     // Another Agent Protocol server may send a shape LangChain can't read; keep its text.
     return [{ type: "text", text: messageText(last) }];
@@ -1173,6 +1201,7 @@ async function awakeParent(
     await client.runs.create(parentThreadId, assistantId, {
       input: { messages: [notificationMessage(update)] },
       multitaskStrategy: "reject",
+      ...STREAM_OPTIONS,
       ...(context ? { context } : {}),
     });
   } catch {
@@ -1946,6 +1975,7 @@ export function createAsyncSubAgentMiddleware(
 
   return createMiddleware({
     name: "asyncSubAgentMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: AsyncTaskStateSchema,
     tools,
     beforeAgent: async (state) => {
