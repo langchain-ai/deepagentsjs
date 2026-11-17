@@ -40,6 +40,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 import type { Settings } from "../config.js";
 
@@ -236,6 +237,7 @@ export function createAgentMemoryMiddleware(
 
   return createMiddleware({
     name: "AgentMemoryMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: AgentMemoryStateSchema as any,
 
     beforeAgent(state: any) {

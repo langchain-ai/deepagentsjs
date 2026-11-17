@@ -1,4 +1,5 @@
 import { createMiddleware, SystemMessage } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 /**
  * Import langchain for type inference
@@ -36,6 +37,7 @@ import { isAnthropicModel } from "../utils.js";
 export function createCacheBreakpointMiddleware() {
   return createMiddleware({
     name: "CacheBreakpointMiddleware",
+    tracePolicy: { processInputs: omitPayload },
 
     wrapModelCall(request, handler) {
       // Per-call provider gate: the boot-time install gate in createDeepAgent

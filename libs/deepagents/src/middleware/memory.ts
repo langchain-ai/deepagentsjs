@@ -58,6 +58,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 
 import type {
   AnyBackendProtocol,
@@ -287,6 +288,7 @@ export function createMemoryMiddleware(options: MemoryMiddlewareOptions) {
 
   return createMiddleware({
     name: "MemoryMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: MemoryStateSchema,
 
     async beforeAgent(state) {

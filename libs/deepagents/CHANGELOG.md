@@ -1,5 +1,66 @@
 # deepagents
 
+## 1.17.0
+
+### Minor Changes
+
+- [#1058](https://github.com/langchain-ai/deepagentsjs/pull/1058) [`06fa9a9`](https://github.com/langchain-ai/deepagentsjs/commit/06fa9a9a91dedb7ac67c2838a5d349cdbc448c59) Thanks [@byhow](https://github.com/byhow)! - `createDeepAgent` stores `messages` as per-step deltas with a full copy every 50 updates, as Python deepagents does, instead of copying the whole conversation into every checkpoint. A 100-step run on `MemorySaver` stores 4.0 MB instead of 112.4 MB, and runs 5.5x faster per step. `getState` returns the same messages, and existing threads continue in place. A custom `stateSchema` keeps the delta channel unless it declares `messages` itself. Subagents defined by a spec still store full copies, while a deep agent passed as a subagent's `runnable` stores deltas.
+  
+  - Postgres users should upgrade `@langchain/langgraph-checkpoint-postgres` to 1.1.3 or later, which reads the deltas in a few paged queries.
+  - Removing a message whose id is not in the state is now ignored instead of throwing.
+  - The `@langchain/langgraph-checkpoint` floor rises to `^1.2.0`. With SQLite, use `@langchain/langgraph-checkpoint-sqlite` 1.1.0 or later so parallel tool results reload in call order.
+  - Downgrading deepagents after it has saved threads is safe only while `@langchain/langgraph` stays at 1.5.1 or later. Earlier versions read those threads as having no messages.
+
+### Patch Changes
+
+- [#1075](https://github.com/langchain-ai/deepagentsjs/pull/1075) [`eed9717`](https://github.com/langchain-ai/deepagentsjs/commit/eed97173355dfb7a03ed7dc6cd062381c53a8584) Thanks [@eliornl](https://github.com/eliornl)! - fix(deepagents): stream async subagent runs to apps that join them
+  
+  The runs that the async subagent tools start on the same deployment, and the run that wakes the parent when a task finishes, now stream like an app's own runs. An app that joins one of these runs sees the reply token by token, including from subgraphs, and can replay events it missed. Subagents with a `url` keep their server's defaults.
+
+## 1.16.5
+
+### Patch Changes
+
+- [#1046](https://github.com/langchain-ai/deepagentsjs/pull/1046) [`a7cb900`](https://github.com/langchain-ai/deepagentsjs/commit/a7cb90020ca886a533279774b1b7d9ee110060bf) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): bind filesystem permission decisions to the target the operation uses
+  
+  `read_file`, `write_file`, `edit_file` and `delete` now run on the resolved path that was checked, and refuse a path whose symlinks resolve into a different `CompositeBackend` route. On Linux, `FilesystemBackend` also holds the parent directory open and makes the final decision on its real location, so swapping a symlink or directory after the check cannot reach a denied target.
+
+- [#1051](https://github.com/langchain-ai/deepagentsjs/pull/1051) [`b9501d4`](https://github.com/langchain-ai/deepagentsjs/commit/b9501d4824e424d31e9786273e674a8f51243019) Thanks [@byhow](https://github.com/byhow)! - fix(deepagents): stop `FilesystemBackend.downloadFiles` hanging on a FIFO
+  
+  `downloadFiles` opens files without blocking and reports `file_not_found` for anything that is not a regular file or directory, so a FIFO no longer hangs the call and a device such as `/dev/zero` is no longer read without limit.
+
+- [#1000](https://github.com/langchain-ai/deepagentsjs/pull/1000) [`cca721d`](https://github.com/langchain-ai/deepagentsjs/commit/cca721d0289ca0f9eb1c483e2cbff1bc7dc07b81) Thanks [@byhow](https://github.com/byhow)! - Widen the `langsmith` peer range to `>=0.11.0 <1.0.0`, the range `langchain` 1.6 requires. The old range, `>=0.7.1 <0.10.0`, failed strict peer installs next to `langchain` 1.6 and let an install hold two `langsmith` copies.
+
+- [#1037](https://github.com/langchain-ai/deepagentsjs/pull/1037) [`2a9144b`](https://github.com/langchain-ai/deepagentsjs/commit/2a9144b4ceb801936e217037483020542bc1a937) Thanks [@richardscarrott](https://github.com/richardscarrott)! - feat(deepagents): record the subagent's checkpoint namespace on the `task` tool message
+  
+  The `task` tool's `ToolMessage` carries `artifact: { checkpoint_ns }`, the checkpoint namespace the subagent saved under. A client can load a finished subagent's history from that namespace instead of scanning the thread's history.
+
+## 1.16.4
+
+### Patch Changes
+
+- [#1035](https://github.com/langchain-ai/deepagentsjs/pull/1035) [`a0b7eb3`](https://github.com/langchain-ai/deepagentsjs/commit/a0b7eb3a08aba936065211e74c0fa428cd0bfb61) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - feat(deepagents): raise on model refusals by default and report subagent refusals
+  
+  A model refusal now throws `ModelRefusalError` instead of ending the run as if it succeeded. A subagent's refusal becomes its `task` result, and the main agent keeps going.
+
+- [#1024](https://github.com/langchain-ai/deepagentsjs/pull/1024) [`ea67c7e`](https://github.com/langchain-ai/deepagentsjs/commit/ea67c7ec9d3d4fa1fa074220339325cd9a82b1d1) Thanks [@sera-wi](https://github.com/sera-wi)! - feat(deepagents): pass the `task` call id to subagents as `lc_subagent_tool_call_id`
+  
+  The `task` tool adds `lc_subagent_tool_call_id` to the subagent's config metadata, so traces, stream events and checkpointers that copy config metadata can tie a subagent back to the call that started it.
+
+## 1.16.3
+
+### Patch Changes
+
+- [#1027](https://github.com/langchain-ai/deepagentsjs/pull/1027) [`e520516`](https://github.com/langchain-ai/deepagentsjs/commit/e520516c1ddef008b6929dc635c9459736b3dabb) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): clip long `grep` lines to a window around the match
+  
+  `grep` shows at most 2,000 characters of each matching line, centered on the match, so a hit on a huge single line (such as an offloaded minified JSON tool result) no longer returns the whole line.
+
+- [#971](https://github.com/langchain-ai/deepagentsjs/pull/971) [`2160d18`](https://github.com/langchain-ai/deepagentsjs/commit/2160d187f5d5c330ed83e575ad0f406e98bdada3) Thanks [@hntrl](https://github.com/hntrl)! - Built-in middleware now omit their lifecycle hook inputs (the full agent state) from LangSmith traces via `tracePolicy: { processInputs: omitPayload }`. Hook outputs, model and tool runs, and streaming are unchanged. Requires `langchain` >= 1.6.2. QuickJS declares `@langchain/core` ^1.3.4 as a peer dependency for its runtime `omitPayload` import.
+
+- [#950](https://github.com/langchain-ai/deepagentsjs/pull/950) [`ef35a77`](https://github.com/langchain-ai/deepagentsjs/commit/ef35a77099ec1a69b2592504c03f10a1b18e7474) Thanks [@richardscarrott](https://github.com/richardscarrott)! - feat(deepagents): read inline skill tool support from model profiles
+  
+  The skills middleware discloses a skill's tools inline for any model whose profile sets `midConversationTools`, instead of matching model names.
+
 ## 1.16.2
 
 ### Patch Changes
