@@ -15,7 +15,8 @@ import {
   HumanMessage,
   AIMessage,
 } from "@langchain/core/messages";
-import { ToolMessage } from "langchain";
+import { createAgent, FakeToolCallingModel, ToolMessage } from "langchain";
+import type { StructuredToolInterface } from "@langchain/core/tools";
 import {
   Command,
   GraphInterrupt,
@@ -1830,6 +1831,148 @@ describe("createFilesystemMiddleware", () => {
         await expect(invokeExecuteRejectingWith(abortError)).rejects.toBe(
           abortError,
         );
+      });
+    });
+
+    describe("file tools when the backend rejects the call", () => {
+      const grepCall = {
+        toolName: "grep",
+        method: "grep",
+        args: {
+          pattern: "Robin",
+          path: "/",
+          output_mode: "files_with_matches",
+        },
+      } as const;
+      const fileToolCalls = [
+        { toolName: "ls", method: "ls", args: { path: "/" } },
+        {
+          toolName: "read_file",
+          method: "read",
+          args: { file_path: "/notes.txt" },
+        },
+        {
+          toolName: "write_file",
+          method: "write",
+          args: { file_path: "/notes.txt", content: "hello" },
+        },
+        {
+          toolName: "edit_file",
+          method: "edit",
+          args: { file_path: "/notes.txt", old_string: "a", new_string: "b" },
+        },
+        {
+          toolName: "delete",
+          method: "delete",
+          args: { file_path: "/notes.txt" },
+        },
+        { toolName: "glob", method: "glob", args: { pattern: "**/*.ts" } },
+        grepCall,
+      ] as const;
+
+      function requestTimeout() {
+        return new DOMException(
+          "The operation was aborted due to timeout",
+          "TimeoutError",
+        );
+      }
+
+      async function invokeWithBackendRejecting(
+        call: (typeof fileToolCalls)[number],
+        error: unknown,
+        signal?: AbortSignal,
+      ) {
+        const backend = createMockBackend();
+        backend[call.method] = vi.fn().mockRejectedValue(error);
+        const middleware = createFilesystemMiddleware({ backend });
+        const fileTool: StructuredToolInterface | undefined =
+          middleware.tools!.find((tool) => tool.name === call.toolName);
+        return fileTool!.invoke(
+          {
+            type: "tool_call",
+            id: `call-${call.toolName}`,
+            name: call.toolName,
+            args: call.args,
+          },
+          { signal },
+        );
+      }
+
+      it.each(fileToolCalls)(
+        "$toolName returns the error to the model with an error status",
+        async (call) => {
+          const result = await invokeWithBackendRejecting(
+            call,
+            new Error("sandbox is unreachable"),
+          );
+
+          expect(ToolMessage.isInstance(result)).toBe(true);
+          if (ToolMessage.isInstance(result)) {
+            expect(result.tool_call_id).toBe(`call-${call.toolName}`);
+            expect(result.name).toBe(call.toolName);
+            expect(result.status).toBe("error");
+            expect(result.content).toBe("Error: sandbox is unreachable");
+          }
+        },
+      );
+
+      it("reports a backend request timeout instead of treating it as an aborted run", async () => {
+        const result = await invokeWithBackendRejecting(
+          grepCall,
+          requestTimeout(),
+        );
+
+        expect(ToolMessage.isInstance(result)).toBe(true);
+        if (ToolMessage.isInstance(result)) {
+          expect(result.status).toBe("error");
+          expect(result.content).toBe(
+            "Error: The operation was aborted due to timeout",
+          );
+        }
+      });
+
+      it("rethrows an interrupt", async () => {
+        const interrupt = new GraphInterrupt();
+
+        await expect(
+          invokeWithBackendRejecting(grepCall, interrupt),
+        ).rejects.toBe(interrupt);
+      });
+
+      it("rethrows an abort error", async () => {
+        const abortError = Object.assign(new Error("aborted"), {
+          name: "AbortError",
+        });
+
+        await expect(
+          invokeWithBackendRejecting(grepCall, abortError),
+        ).rejects.toBe(abortError);
+      });
+
+      it("lets the agent run continue after a rejected call", async () => {
+        const backend = createMockBackend();
+        backend.grep = vi.fn().mockRejectedValue(requestTimeout());
+        const agent = createAgent({
+          model: new FakeToolCallingModel({
+            toolCalls: [
+              [{ name: "grep", args: grepCall.args, id: "call-grep" }],
+              [],
+            ],
+          }),
+          middleware: [createFilesystemMiddleware({ backend })],
+        });
+
+        const { messages } = await agent.invoke({
+          messages: [new HumanMessage("Find Robin")],
+        });
+
+        const grepResult = messages.find(ToolMessage.isInstance);
+        expect(grepResult?.status).toBe("error");
+        expect(grepResult?.content).toBe(
+          "Error: The operation was aborted due to timeout",
+        );
+        expect(AIMessage.isInstance(messages[messages.length - 1])).toBe(true);
+        expect(messages.indexOf(grepResult!)).toBe(messages.length - 2);
       });
     });
 

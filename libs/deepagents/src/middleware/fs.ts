@@ -34,9 +34,9 @@ import type {
   BackendRuntime,
   DeleteResult,
   EditResult,
-  ExecuteResponse,
   FileData,
   LsResult,
+  MaybePromise,
   ReadResult,
   WriteResult,
 } from "../backends/protocol.js";
@@ -891,6 +891,28 @@ function toolError(
   });
 }
 
+/**
+ * Run a backend call on behalf of the `toolName` tool. An error the call
+ * throws, such as a sandbox that rejects or times out, is returned as an error
+ * {@link ToolMessage} so the model can read it and try something else.
+ * Interrupts, other graph control flow and an aborted run are not backend
+ * failures and keep propagating.
+ */
+async function callBackend<T>(
+  runtime: ToolRuntime,
+  toolName: FsToolName,
+  call: () => MaybePromise<T>,
+): Promise<T | ToolMessage> {
+  try {
+    return await call();
+  } catch (error) {
+    if (isGraphBubbleUp(error) || wasAborted(error, runtime.signal)) {
+      throw error;
+    }
+    return toolError(runtime, toolName, `Error: ${getErrorMessage(error)}`);
+  }
+}
+
 const GLOB_WILDCARD_CHARACTERS = ["*", "?", "{", "["];
 
 function hasGlobMetaCharacter(pattern: string): boolean {
@@ -1352,7 +1374,12 @@ function createLsTool(
         return toolError(runtime, "ls", permission.error);
       }
 
-      const lsResult = await resolvedBackend.ls(permission.path);
+      const lsResult = await callBackend(runtime, "ls", () =>
+        resolvedBackend.ls(permission.path),
+      );
+      if (ToolMessage.isInstance(lsResult)) {
+        return lsResult;
+      }
 
       if (lsResult.error) {
         return `Error listing files: ${lsResult.error}`;
@@ -1437,18 +1464,26 @@ function createReadFileTool(
         requestedLimit,
       );
 
-      const readResult: ReadResult = await runBoundToTarget(
-        resolvedBackend,
-        permissions,
-        permission.target,
-        {
-          create: false,
-          describe: `read on ${permission.path}`,
-          errorPrefix: "",
-        },
-        (real) => decidePathAccess(permissions, "read", real) === "deny",
-        async () => resolvedBackend.read(permission.target, offset, limit),
+      const readResult = await callBackend<ReadResult>(
+        runtime,
+        "read_file",
+        () =>
+          runBoundToTarget(
+            resolvedBackend,
+            permissions,
+            permission.target,
+            {
+              create: false,
+              describe: `read on ${permission.path}`,
+              errorPrefix: "",
+            },
+            (real) => decidePathAccess(permissions, "read", real) === "deny",
+            async () => resolvedBackend.read(permission.target, offset, limit),
+          ),
       );
+      if (ToolMessage.isInstance(readResult)) {
+        return readResult;
+      }
       if (readResult.error) {
         return toolError(runtime, "read_file", `Error: ${readResult.error}`);
       }
@@ -1593,18 +1628,23 @@ function createWriteFileTool(
       }
 
       const { file_path, content } = input;
-      const result: WriteResult = await runBoundToTarget(
-        resolvedBackend,
-        permissions,
-        permission.target,
-        {
-          create: true,
-          describe: `write on ${permission.path}`,
-          errorPrefix: "Error: ",
-        },
-        (real) => decidePathAccess(permissions, "write", real) === "deny",
-        async () => resolvedBackend.write(permission.target, content),
+      const result = await callBackend<WriteResult>(runtime, "write_file", () =>
+        runBoundToTarget(
+          resolvedBackend,
+          permissions,
+          permission.target,
+          {
+            create: true,
+            describe: `write on ${permission.path}`,
+            errorPrefix: "Error: ",
+          },
+          (real) => decidePathAccess(permissions, "write", real) === "deny",
+          async () => resolvedBackend.write(permission.target, content),
+        ),
       );
+      if (ToolMessage.isInstance(result)) {
+        return result;
+      }
 
       if (result.error) {
         return toolError(runtime, "write_file", result.error);
@@ -1673,24 +1713,29 @@ function createEditFileTool(
       }
 
       const { file_path, old_string, new_string, replace_all = false } = input;
-      const result: EditResult = await runBoundToTarget(
-        resolvedBackend,
-        permissions,
-        permission.target,
-        {
-          create: false,
-          describe: `write on ${permission.path}`,
-          errorPrefix: "Error: ",
-        },
-        (real) => decidePathAccess(permissions, "write", real) === "deny",
-        async () =>
-          resolvedBackend.edit(
-            permission.target,
-            old_string,
-            new_string,
-            replace_all,
-          ),
+      const result = await callBackend<EditResult>(runtime, "edit_file", () =>
+        runBoundToTarget(
+          resolvedBackend,
+          permissions,
+          permission.target,
+          {
+            create: false,
+            describe: `write on ${permission.path}`,
+            errorPrefix: "Error: ",
+          },
+          (real) => decidePathAccess(permissions, "write", real) === "deny",
+          async () =>
+            resolvedBackend.edit(
+              permission.target,
+              old_string,
+              new_string,
+              replace_all,
+            ),
+        ),
       );
+      if (ToolMessage.isInstance(result)) {
+        return result;
+      }
 
       if (result.error) {
         return toolError(runtime, "edit_file", result.error);
@@ -1830,19 +1875,25 @@ function createDeleteTool(
         );
       }
 
-      const result: DeleteResult = await runBoundToTarget(
-        resolvedBackend,
-        permissions,
-        deleteTarget,
-        {
-          create: false,
-          describe: `write on ${validatedPath}`,
-          errorPrefix: "Error: ",
-        },
-        (real) =>
-          findDeleteDenyPatterns(permissions, real, hasDescendants).length > 0,
-        async () => resolvedBackend.delete(deleteTarget),
+      const result = await callBackend<DeleteResult>(runtime, "delete", () =>
+        runBoundToTarget(
+          resolvedBackend,
+          permissions,
+          deleteTarget,
+          {
+            create: false,
+            describe: `write on ${validatedPath}`,
+            errorPrefix: "Error: ",
+          },
+          (real) =>
+            findDeleteDenyPatterns(permissions, real, hasDescendants).length >
+            0,
+          async () => resolvedBackend.delete(deleteTarget),
+        ),
       );
+      if (ToolMessage.isInstance(result)) {
+        return result;
+      }
       if (result.error) {
         return toolError(runtime, "delete", result.error);
       }
@@ -1905,10 +1956,15 @@ function createGlobTool(
       }
 
       // An omitted path keeps the backend's own default root.
-      const globResult = await resolvedBackend.glob(
-        pattern,
-        input.path === undefined ? undefined : permission.path,
+      const globResult = await callBackend(runtime, "glob", () =>
+        resolvedBackend.glob(
+          pattern,
+          input.path === undefined ? undefined : permission.path,
+        ),
       );
+      if (ToolMessage.isInstance(globResult)) {
+        return globResult;
+      }
 
       if (globResult.error) {
         return toolError(
@@ -1993,12 +2049,12 @@ function createGrepTool(
 
       // A per-call max_count overrides the configured middleware default.
       const maxCount = input.max_count ?? grepMaxCount;
-      const result = await resolvedBackend.grep(
-        pattern,
-        permission.path,
-        glob,
-        maxCount,
+      const result = await callBackend(runtime, "grep", () =>
+        resolvedBackend.grep(pattern, permission.path, glob, maxCount),
       );
+      if (ToolMessage.isInstance(result)) {
+        return result;
+      }
 
       if (result.error) {
         return toolError(runtime, "grep", result.error);
@@ -2112,21 +2168,11 @@ function createExecuteTool(
         );
       }
 
-      let result: ExecuteResponse;
-      try {
-        result = await resolvedBackend.execute(input.command);
-      } catch (error) {
-        // A command the backend could not run is reported to the model so it
-        // can try another one. Interrupts, other graph control flow and an
-        // aborted run are not command failures and keep propagating.
-        if (isGraphBubbleUp(error) || wasAborted(error, runtime.signal)) {
-          throw error;
-        }
-        return toolError(
-          runtime,
-          "execute",
-          `Error: ${getErrorMessage(error)}`,
-        );
+      const result = await callBackend(runtime, "execute", () =>
+        resolvedBackend.execute(input.command),
+      );
+      if (ToolMessage.isInstance(result)) {
+        return result;
       }
 
       // Format output for LLM consumption
