@@ -11,22 +11,12 @@ import {
   notifyParent,
   taskEvent,
 } from "./async_subagents.js";
+import { wasAborted } from "./utils.js";
 
 /** Whether this is the outermost graph of a task run, not a graph nested in it. */
 function isTopLevelGraph(config: LangGraphRunnableConfig): boolean {
   const configurable = (config.configurable ?? {}) as Record<string, unknown>;
   return !String(configurable.checkpoint_ns ?? "").includes("|");
-}
-
-/** Whether `error` comes from the run being aborted rather than from the subagent failing. */
-function wasAborted(error: unknown, signal: AbortSignal | undefined): boolean {
-  return (
-    signal?.aborted === true ||
-    getConfig()?.signal?.aborted === true ||
-    (typeof error === "object" &&
-      error !== null &&
-      (error as { name?: unknown }).name === "AbortError")
-  );
 }
 
 /**

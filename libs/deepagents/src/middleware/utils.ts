@@ -5,7 +5,22 @@
  */
 
 import { SystemMessage } from "@langchain/core/messages";
+import { getConfig } from "@langchain/langgraph";
 import type { AgentMiddleware } from "langchain";
+
+/** Whether `error` comes from the run being aborted rather than from the work itself failing. */
+export function wasAborted(
+  error: unknown,
+  signal: AbortSignal | undefined,
+): boolean {
+  return (
+    signal?.aborted === true ||
+    getConfig()?.signal?.aborted === true ||
+    (typeof error === "object" &&
+      error !== null &&
+      (error as { name?: unknown }).name === "AbortError")
+  );
+}
 
 /**
  * Merge custom middleware into an assembled stack by `.name`.

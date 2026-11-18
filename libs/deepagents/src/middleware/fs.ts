@@ -22,6 +22,7 @@ import { ContextOverflowError } from "@langchain/core/errors";
 import {
   Command,
   isCommand,
+  isGraphBubbleUp,
   StateSchema,
   ReducedValue,
 } from "@langchain/langgraph";
@@ -33,6 +34,7 @@ import type {
   BackendRuntime,
   DeleteResult,
   EditResult,
+  ExecuteResponse,
   FileData,
   LsResult,
   ReadResult,
@@ -59,6 +61,7 @@ import {
   normalizeReadPagination,
 } from "../backends/utils.js";
 import { MULTIMODAL_BLOCK_TYPES } from "./unsupportedContent.js";
+import { wasAborted } from "./utils.js";
 
 /**
  * Normalizes tool input so that models sending `path` instead of `file_path`
@@ -2109,7 +2112,22 @@ function createExecuteTool(
         );
       }
 
-      const result = await resolvedBackend.execute(input.command);
+      let result: ExecuteResponse;
+      try {
+        result = await resolvedBackend.execute(input.command);
+      } catch (error) {
+        // A command the backend could not run is reported to the model so it
+        // can try another one. Interrupts, other graph control flow and an
+        // aborted run are not command failures and keep propagating.
+        if (isGraphBubbleUp(error) || wasAborted(error, runtime.signal)) {
+          throw error;
+        }
+        return toolError(
+          runtime,
+          "execute",
+          `Error: ${getErrorMessage(error)}`,
+        );
+      }
 
       // Format output for LLM consumption
       const parts = [result.output];

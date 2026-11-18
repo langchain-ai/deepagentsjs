@@ -16,7 +16,12 @@ import {
   AIMessage,
 } from "@langchain/core/messages";
 import { ToolMessage } from "langchain";
-import { Command, isCommand, getCurrentTaskInput } from "@langchain/langgraph";
+import {
+  Command,
+  GraphInterrupt,
+  isCommand,
+  getCurrentTaskInput,
+} from "@langchain/langgraph";
 
 vi.mock("@langchain/langgraph", async (importOriginal) => {
   const actual = await importOriginal();
@@ -1775,6 +1780,57 @@ describe("createFilesystemMiddleware", () => {
         expect(result.status).toBe("error");
         expect(result.content).toBe("Invalid regex pattern: (");
       }
+    });
+
+    describe("execute tool when the backend rejects the command", () => {
+      async function invokeExecuteRejectingWith(error: unknown) {
+        const backend = {
+          ...createMockSandboxBackend(),
+          execute: vi.fn().mockRejectedValue(error),
+        } as unknown as BackendProtocolV2;
+        const middleware = createFilesystemMiddleware({ backend });
+        const executeTool = middleware.tools!.find(
+          (tool) => tool.name === "execute",
+        );
+        return executeTool!.invoke({
+          type: "tool_call",
+          id: "call-execute",
+          name: "execute",
+          args: { command: "echo hello" },
+        });
+      }
+
+      it("returns the error to the model with an error status", async () => {
+        const result = await invokeExecuteRejectingWith(
+          new Error("sandbox rejected the command"),
+        );
+
+        expect(ToolMessage.isInstance(result)).toBe(true);
+        if (ToolMessage.isInstance(result)) {
+          expect(result.tool_call_id).toBe("call-execute");
+          expect(result.name).toBe("execute");
+          expect(result.status).toBe("error");
+          expect(result.content).toBe("Error: sandbox rejected the command");
+        }
+      });
+
+      it("rethrows an interrupt", async () => {
+        const interrupt = new GraphInterrupt();
+
+        await expect(invokeExecuteRejectingWith(interrupt)).rejects.toBe(
+          interrupt,
+        );
+      });
+
+      it("rethrows an abort error", async () => {
+        const abortError = Object.assign(new Error("aborted"), {
+          name: "AbortError",
+        });
+
+        await expect(invokeExecuteRejectingWith(abortError)).rejects.toBe(
+          abortError,
+        );
+      });
     });
 
     it("delete tool should delete through backend", async () => {
