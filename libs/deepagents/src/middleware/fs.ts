@@ -1251,7 +1251,7 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
   Performs exact string replacements in files.
 
   Usage:
-  - You must read the file before editing; this tool errors otherwise.
+  - You must read the file before editing.
   - Preserve the exact source indentation from the read output, and never include the read status header in old_string or new_string.
   - Prefer editing an existing file over creating a new one.
   - Only use emojis if the user explicitly requests it.
