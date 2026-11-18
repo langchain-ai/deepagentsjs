@@ -571,7 +571,7 @@ describe("SubAgent mode: fork", () => {
     ).toThrow(/SubAgent 'worker' cannot set skills under mode: "fork"/);
   });
 
-  it("appends a fork's own systemPrompt to the parent's inherited prompt, rather than replacing it", async () => {
+  it("keeps the parent's system prompt and delivers a fork's own systemPrompt with the task", async () => {
     const model = new FakeListChatModel({
       responses: [
         new AIMessage({
@@ -610,7 +610,10 @@ describe("SubAgent mode: fork", () => {
     const workerCall = findCallContaining(invokeSpy, "continue");
     expect(workerCall).toBeDefined();
     const systemMessage = workerCall!.find(SystemMessage.isInstance);
-    expect(systemMessage?.text).toBe("PARENT_PROMPT\n\nFORK_EXTRA");
+    expect(systemMessage?.text).toBe("PARENT_PROMPT");
+    const taskMessage = workerCall!.at(-1);
+    expect(HumanMessage.isInstance(taskMessage)).toBe(true);
+    expect(taskMessage!.text).toMatch(/FORK_EXTRA\n\ncontinue$/);
   });
 
   it("throws at construction when two subagents share a name", () => {

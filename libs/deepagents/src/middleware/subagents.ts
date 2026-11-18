@@ -24,7 +24,6 @@ import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { refusalIn, refusalNotice, refusalNoticeFor } from "./refusal.js";
 import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
-import { appendToSystemMessage } from "./utils.js";
 import { createUnsupportedContentMiddleware } from "./unsupportedContent.js";
 
 export type { AgentMiddleware };
@@ -230,8 +229,10 @@ export interface SubAgent {
 
   /**
    * The system prompt for the agent. Falls back to an empty prompt if
-   * omitted. Under `mode: "fork"`, this is appended to the parent's
-   * inherited prompt rather than replacing it.
+   * omitted. Under `mode: "fork"`, the fork keeps the parent's system prompt
+   * unchanged so it can reuse the parent's cached prompt prefix; these
+   * instructions are delivered with the task message after the inherited
+   * conversation instead.
    */
   systemPrompt?: string | SystemMessage;
 
@@ -662,24 +663,13 @@ export function createSubAgent(
   });
 }
 
-/**
- * Resolve a fork's system prompt: the parent's inherited prompt, with the
- * fork's own systemPrompt (if any) appended as an addendum rather than
- * replacing it.
- */
-function resolveForkSystemPrompt(
-  parentSystemPrompt: string | SystemMessage | null,
-  forkAddendum: string | SystemMessage | undefined,
-): string | SystemMessage {
-  if (!forkAddendum) return parentSystemPrompt ?? "";
-  const addendumText =
-    typeof forkAddendum === "string" ? forkAddendum : forkAddendum.text;
-  if (SystemMessage.isInstance(parentSystemPrompt)) {
-    return appendToSystemMessage(parentSystemPrompt, addendumText);
-  }
-  return parentSystemPrompt
-    ? `${parentSystemPrompt}\n\n${addendumText}`
-    : addendumText;
+/** Text of a fork's own `systemPrompt`, or `undefined` when it has none. */
+function forkInstructionsText(
+  systemPrompt: string | SystemMessage | undefined,
+): string | undefined {
+  const text =
+    typeof systemPrompt === "string" ? systemPrompt : systemPrompt?.text;
+  return text || undefined;
 }
 
 /**
@@ -705,6 +695,7 @@ function getSubagents(options: {
   specsByName: Record<string, SubAgent | CompiledSubAgent>;
   descriptions: string[];
   forkModeNames: Set<string>;
+  forkInstructions: Map<string, string>;
 } {
   const {
     defaultModel,
@@ -725,6 +716,7 @@ function getSubagents(options: {
   const specsByName: Record<string, SubAgent | CompiledSubAgent> = {};
   const subagentDescriptions: string[] = [];
   const forkModeNames = new Set<string>();
+  const forkInstructions = new Map<string, string>();
 
   // Prevent a duplicate name from silently resolving to the last spec.
   const seenNames = new Set<string>(
@@ -814,13 +806,10 @@ function getSubagents(options: {
           `SubAgent '${agentParams.name}' cannot set skills under mode: "fork"; the parent's skills are inherited instead.`,
         );
       }
-      // The fork's own systemPrompt (if any) is an addendum appended to the
-      // parent's inherited prompt, not a replacement — mirrors createDeepAgent's
-      // main-loop merge logic for a declarative fork's own spec.
-      const resolvedSystemPrompt = resolveForkSystemPrompt(
-        parentSystemPrompt,
-        agentParams.systemPrompt,
-      );
+      // Keep the parent's system prompt byte-identical so the fork reuses the
+      // parent's cached prefix; its own prompt rides with the task message.
+      const instructions = forkInstructionsText(agentParams.systemPrompt);
+      if (instructions) forkInstructions.set(agentParams.name, instructions);
       // Splice after Filesystem (always present) to match the parent's tool
       // order for prompt-cache parity.
       const fsIndex = subagentMiddleware.findIndex(
@@ -833,7 +822,7 @@ function getSubagents(options: {
       );
       const resolvedSpec: SubAgent = {
         ...agentParams,
-        systemPrompt: resolvedSystemPrompt,
+        systemPrompt: parentSystemPrompt ?? "",
         mode: undefined,
         model: agentParams.model ?? defaultModel,
         tools: agentParams.tools ?? defaultTools,
@@ -863,6 +852,7 @@ function getSubagents(options: {
     specsByName,
     descriptions: subagentDescriptions,
     forkModeNames,
+    forkInstructions,
   };
 }
 
@@ -924,6 +914,7 @@ function createTaskTool(options: {
   let subagentGraphs: Record<string, ReactAgent | Runnable> = {};
   let specsByName: Record<string, SubAgent | CompiledSubAgent> = {};
   let forkModeNames: Set<string> = new Set();
+  let forkInstructions: Map<string, string> = new Map();
 
   function selectSubagent(
     subagentType: string,
@@ -983,9 +974,15 @@ function createTaskTool(options: {
         (currentState.messages as BaseMessage[]) ?? [],
       );
       const effective = getEffectiveMessages(trimmed, currentState);
+      // The fork's own instructions go in the task message so everything
+      // before it stays identical to the parent's request.
+      const instructions = forkInstructions.get(subagent_type);
+      const task = instructions
+        ? `${FORK_TASK_PREAMBLE}${instructions}\n\n${description}`
+        : FORK_TASK_PREAMBLE + description;
       subagentState.messages = [
         ...effective,
-        new HumanMessage({ content: FORK_TASK_PREAMBLE + description }),
+        new HumanMessage({ content: task }),
       ];
     } else {
       subagentState.messages = [new HumanMessage({ content: description })];
@@ -1084,6 +1081,7 @@ function createTaskTool(options: {
     agents,
     specsByName: resolvedSpecsByName,
     forkModeNames: resolvedForkModeNames,
+    forkInstructions: resolvedForkInstructions,
   } = getSubagents({
     defaultModel,
     defaultTools,
@@ -1099,6 +1097,7 @@ function createTaskTool(options: {
   subagentGraphs = agents;
   specsByName = resolvedSpecsByName;
   forkModeNames = resolvedForkModeNames;
+  forkInstructions = resolvedForkInstructions;
 
   return taskTool;
 }
