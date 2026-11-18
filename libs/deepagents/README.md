@@ -1,10 +1,6 @@
 <div align="center">
   <a href="https://docs.langchain.com/oss/javascript/deepagents/overview#deep-agents-overview">
-    <picture>
-      <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-light.svg">
-      <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-dark.svg">
-      <img alt="Deep Agents Logo" src="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/refs/heads/main/.github/images/logo-light.svg" width="50%">
-    </picture>
+    <img alt="Deep Agents" src="https://raw.githubusercontent.com/langchain-ai/deepagentsjs/main/.github/images/banner.png" width="100%">
   </a>
 </div>
 
