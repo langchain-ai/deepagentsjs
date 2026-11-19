@@ -195,7 +195,7 @@ export class FilesystemBackend implements BackendProtocolV2 {
       try {
         await fs.lstat(next);
       } catch (e) {
-        if (!includeLeaf) {
+        if (!includeLeaf && (e as NodeJS.ErrnoException).code !== "ENOENT") {
           throw e;
         }
         break;
@@ -210,7 +210,9 @@ export class FilesystemBackend implements BackendProtocolV2 {
     }
 
     if (!includeLeaf) {
-      return path.join(realAnchor, path.basename(resolvedPath));
+      // Keep any missing parents: the bare leaf name could match a file in a
+      // higher directory.
+      return path.join(realAnchor, path.relative(current, resolvedPath));
     }
     return current === resolvedPath ? realAnchor : resolvedPath;
   }
