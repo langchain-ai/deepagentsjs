@@ -1294,6 +1294,8 @@ const EXECUTE_SEARCH_GUIDANCE = {
   none: "",
 } as const;
 
+// Only shown to the model when the backend implements SandboxBackendProtocol
+// (see `isSandboxBackend`); otherwise `execute` is removed from the tool list.
 function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
   const searchGuidance = hasGrep
     ? hasGlob
@@ -1319,8 +1321,6 @@ function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
     - Chain commands with ';' or '&&' (use '&&' when a command depends on the previous); do not use newlines except inside quoted strings.
     - Use absolute paths and avoid \`cd\` so the working directory stays stable.
     - ${searchGuidance}Use read_file rather than cat/head/tail.${examples.length ? `\n${examples.join("\n")}` : ""}
-
-    Only available on backends implementing SandboxBackendProtocol; otherwise it returns an error.
   `;
 }
 
