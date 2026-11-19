@@ -21,11 +21,17 @@ const INTERVAL = 50;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-const fakeModel = (name: string) => ({ getName: () => name });
+const fakeModel = (name: string, thinking?: unknown) => ({
+  getName: () => name,
+  thinking,
+});
 
-function modelRequest(anthropic = true): any {
+function modelRequest(anthropic = true, thinking?: unknown): any {
   return {
-    model: fakeModel(anthropic ? "ChatAnthropic" : "FakeListChatModel"),
+    model: fakeModel(
+      anthropic ? "ChatAnthropic" : "FakeListChatModel",
+      thinking,
+    ),
     messages: [new HumanMessage("hi")],
     modelSettings: { cache_control: { type: "ephemeral" } },
     state: { messages: [] },
@@ -94,12 +100,13 @@ async function run(
   recorder: Recorder,
   toolMs: number,
   anthropic = true,
+  thinking?: unknown,
 ) {
   const mw = anthropicCacheKeepaliveMiddleware({
     interval: INTERVAL,
     ...options,
   });
-  await mw.wrapModelCall!(modelRequest(anthropic), recorder.handler);
+  await mw.wrapModelCall!(modelRequest(anthropic, thinking), recorder.handler);
   return mw.wrapToolCall!(
     toolRequest("t1"),
     slowTool(() => toolMs),
@@ -122,7 +129,7 @@ describe("anthropicCacheKeepaliveMiddleware", () => {
     expect(recorder.pings).toHaveLength(pings);
   });
 
-  it("resends the same request with no output, tagged nostream", async () => {
+  it("resends the same request with one output token, tagged nostream", async () => {
     const recorder = new Recorder();
     await run({}, recorder, INTERVAL * 1.5);
     const [original, ping] = recorder.calls;
@@ -131,7 +138,7 @@ describe("anthropicCacheKeepaliveMiddleware", () => {
       ...original.modelSettings,
       tags: ["nostream", "cache_keepalive"],
     });
-    expect(ping.model.maxTokens).toBe(0);
+    expect(ping.model.maxTokens).toBe(1);
     expect(ping.model.streaming).toBe(false);
     expect(ping.model.disableStreaming).toBe(true);
     expect(ping.model.getName()).toBe("ChatAnthropic");
@@ -157,6 +164,29 @@ describe("anthropicCacheKeepaliveMiddleware", () => {
     expect((result as ToolMessage).content).toBe("done");
     expect(recorder.pings).toHaveLength(1);
     expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("does not ping budgeted thinking and warns once", async () => {
+    warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const mw = anthropicCacheKeepaliveMiddleware({ interval: INTERVAL });
+    const recorder = new Recorder();
+    const thinking = { type: "enabled", budget_tokens: 2048 };
+    for (let i = 0; i < 2; i += 1) {
+      await mw.wrapModelCall!(modelRequest(true, thinking), recorder.handler);
+      await mw.wrapToolCall!(
+        toolRequest("t1"),
+        slowTool(() => INTERVAL * 3),
+      );
+      recorder.calls.splice(0);
+    }
+    expect(recorder.pings).toHaveLength(0);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("pings adaptive thinking", async () => {
+    const recorder = new Recorder();
+    await run({}, recorder, INTERVAL * 1.5, true, { type: "adaptive" });
+    expect(recorder.pings).toHaveLength(1);
   });
 
   it("does not ping a non-Anthropic model", async () => {
@@ -317,7 +347,7 @@ describe("anthropicCacheKeepaliveMiddleware", () => {
       }
     }
 
-    it("sends max_tokens 0 without streaming and keeps pings out of the messages stream", async () => {
+    it("sends max_tokens 1 without streaming and keeps pings out of the messages stream", async () => {
       const api = fakeAnthropicApi();
       const model = new ChatAnthropic({
         model: "claude-opus-5-5",
@@ -360,7 +390,7 @@ describe("anthropicCacheKeepaliveMiddleware", () => {
 
       const [first, ping, last] = api.bodies;
       expect(api.bodies).toHaveLength(3);
-      expect(ping.max_tokens).toBe(0);
+      expect(ping.max_tokens).toBe(1);
       expect(ping.stream).toBe(false);
       expect(first.max_tokens).toBeGreaterThan(0);
       expect(first.stream).toBe(true);

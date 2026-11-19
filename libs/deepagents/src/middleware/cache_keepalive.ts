@@ -5,9 +5,9 @@
  * the last request that wrote or read it. When a tool runs longer than that (a
  * build, a test suite, a subagent), the next model call misses the cache and
  * re-writes the whole conversation at the cache-write price. This middleware
- * re-sends the previous model request with `max_tokens: 0` before the entry
- * expires: the API reads the cached prefix, refreshes its timer, and returns no
- * output, so the ping costs one cache read.
+ * re-sends the previous model request with `max_tokens: 1` before the entry
+ * expires: the API reads the cached prefix, refreshes its timer, and returns one
+ * token, so the ping costs one cache read and one output token.
  */
 import { createMiddleware, AIMessage } from "langchain";
 import type { ModelRequest } from "langchain";
@@ -116,33 +116,54 @@ interface PendingCall {
   stop: AbortController;
 }
 
-/** Model fields a ping overrides: no output tokens and no streaming. */
+/** Model fields a ping overrides: one output token and no streaming. */
 const PING_MODEL_FIELDS = {
-  maxTokens: 0,
+  maxTokens: 1,
   streaming: false,
   disableStreaming: true,
 };
 
+/** The chat model instance behind `model`, resolving a configurable model. */
+async function baseModel(model: ModelRequest["model"]) {
+  return model.getName() === "ConfigurableModel"
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (model as any)._getModelInstance()
+    : model;
+}
+
 /**
- * Return a copy of `model` that asks for no output and never streams.
+ * Whether `model` uses extended thinking with a token budget.
  *
- * The Anthropic API rejects `max_tokens: 0` on a streaming request, and JS
+ * The budget is tied to `max_tokens`, so a one-token ping would change it, and
+ * Anthropic keys the message cache on it. Adaptive thinking has no budget and
+ * pings normally.
+ */
+async function usesBudgetThinking(
+  model: ModelRequest["model"],
+): Promise<boolean> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((await baseModel(model)) as any).thinking?.type === "enabled";
+}
+
+/**
+ * Return a copy of `model` that asks for one output token and never streams.
+ *
+ * The Anthropic API rejects `max_tokens: 0` with streaming, extended thinking,
+ * structured output or a forced tool choice; one token avoids those limits. JS
  * chat models read `max_tokens` from the instance rather than call options, so
  * the ping shadows those fields on an object whose prototype is the original
  * instance. Everything else, tools and cache markers included, stays the same,
  * so the prefix the ping reads matches the original request byte for byte.
  */
 async function pingModel(model: ModelRequest["model"]) {
-  const base =
-    model.getName() === "ConfigurableModel"
-      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (model as any)._getModelInstance()
-      : model;
-  return Object.assign(Object.create(base), PING_MODEL_FIELDS);
+  return Object.assign(
+    Object.create(await baseModel(model)),
+    PING_MODEL_FIELDS,
+  );
 }
 
 /**
- * Return `request` as a ping: same prompt, no output, tagged so LangGraph's
+ * Return `request` as a ping: same prompt, one output token, tagged so LangGraph's
  * `messages` stream skips the empty reply. Tags change only the callbacks, not
  * the request sent to the API.
  */
@@ -190,7 +211,9 @@ function waitOrStop(ms: number, signal: AbortSignal): Promise<boolean> {
  * `maxPings` pings or the first ping error, so a hung tool costs at most
  * `maxPings` cache reads. With `pricing`, pings are skipped when the prompt is
  * too small for a cache miss to cost `minExpectedSavings` more than a ping.
- * Pings appear in traces as model calls with no output tokens, tagged
+ * Requests that use extended thinking with a token budget are never pinged,
+ * since a ping would change the budget and miss the cache. Pings appear in
+ * traces as model calls with one output token, tagged
  * `cache_keepalive` and `nostream` so they never reach a `messages` stream.
  * Requests to other providers pass through untouched.
  *
@@ -216,6 +239,20 @@ export function anthropicCacheKeepaliveMiddleware(
     minExpectedSavings = DEFAULT_MIN_EXPECTED_SAVINGS,
   } = options;
   const pending = new Map<string, PendingCall>();
+  let warnedThinking = false;
+
+  const pingable = async (request: ModelRequest): Promise<boolean> => {
+    if (!isAnthropicModel(request.model)) return false;
+    if (!(await usesBudgetThinking(request.model))) return true;
+    if (!warnedThinking) {
+      warnedThinking = true;
+      // oxlint-disable-next-line no-console
+      console.warn(
+        "Prompt-cache keep-alive is off for requests with budgeted extended thinking: a ping would change the thinking budget and miss the cache.",
+      );
+    }
+    return false;
+  };
 
   const pays = (call: PendingCall): boolean => {
     if (pricing === undefined || call.promptTokens === undefined) return true;
@@ -259,7 +296,10 @@ export function anthropicCacheKeepaliveMiddleware(
     async wrapModelCall(request, handler) {
       const startedAt = Date.now();
       const response = await handler(request);
-      if (isAnthropicModel(request.model) && AIMessage.isInstance(response)) {
+      if (
+        AIMessage.isInstance(response) &&
+        (await pingable(request as ModelRequest))
+      ) {
         register(response, {
           request: request as ModelRequest,
           handler: handler as ModelHandler,
