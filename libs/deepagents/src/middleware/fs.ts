@@ -1294,6 +1294,8 @@ const EXECUTE_SEARCH_GUIDANCE = {
   none: "",
 } as const;
 
+// Only shown to the model when the backend implements SandboxBackendProtocol
+// (see `isSandboxBackend`); otherwise `execute` is removed from the tool list.
 function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
   const searchGuidance = hasGrep
     ? hasGlob
