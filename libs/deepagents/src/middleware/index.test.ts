@@ -179,8 +179,7 @@ describe("Execute Tool", () => {
     const tools = middleware.tools || [];
     const executeTool = tools.find((t: StructuredTool) => t.name === "execute");
     expect(executeTool).toBeDefined();
-    expect(executeTool?.description).toContain("sandbox");
-    expect(executeTool?.description).toContain("command");
+    expect(executeTool?.description).toContain("shell command");
   });
 });
 
