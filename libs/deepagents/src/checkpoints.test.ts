@@ -7,23 +7,20 @@ import {
   ToolMessage,
   type BaseMessage,
 } from "@langchain/core/messages";
-import { createAgent, summarizationMiddleware, tool } from "langchain";
+import { summarizationMiddleware, tool } from "langchain";
 import {
-  Annotation,
   Command,
+  DeltaValue,
   MemorySaver,
+  MessagesDeltaValue,
   MessagesValue,
-  ReducedValue,
   StateSchema,
   type AnyStateSchema,
 } from "@langchain/langgraph";
-import { registry } from "@langchain/langgraph/zod";
 import { isDeltaSnapshot } from "@langchain/langgraph-checkpoint";
 import { z } from "zod/v4";
-import { z as z3 } from "zod/v3";
 import { createDeepAgent } from "./agent.js";
 import type { FileData } from "./backends/protocol.js";
-import { deepAgentStateSchema } from "./values.js";
 
 type ScriptedCall = { name: string; args: Record<string, unknown> };
 type Reply = (messages: BaseMessage[]) => AIMessage;
@@ -107,7 +104,7 @@ async function storedCopies(
   return copies;
 }
 
-describe("Messages channel", () => {
+describe("Messages stored as deltas, by declaring them in stateSchema", () => {
   const toolLoopModel = (turns: number, callPrefix?: string) =>
     scriptedModel(noopTurns(turns), callPrefix);
   const go = { messages: [new HumanMessage("go")] };
@@ -119,6 +116,15 @@ describe("Messages channel", () => {
       (copy) => (copy as unknown[]).length,
     );
   const fullMessages = new StateSchema({ messages: MessagesValue });
+  // LangGraph's delta messages with a full copy every 50 updates, so a short
+  // run crosses one.
+  const deltaEvery50 = new DeltaValue(MessagesDeltaValue.valueSchema, {
+    inputSchema: MessagesDeltaValue.inputSchema,
+    reducer: MessagesDeltaValue.reducer,
+    snapshotFrequency: 50,
+    jsonSchemaExtra: MessagesDeltaValue.jsonSchemaExtra,
+  });
+  const deltaMessages = new StateSchema({ messages: deltaEvery50 });
 
   it("stores a full copy of the messages once every 50 updates", async () => {
     const checkpointer = new MemorySaver();
@@ -127,6 +133,7 @@ describe("Messages channel", () => {
       model: toolLoopModel(30),
       tools: [noop],
       checkpointer,
+      stateSchema: deltaMessages,
     });
 
     const result = await agent.invoke(go, config);
@@ -138,12 +145,12 @@ describe("Messages channel", () => {
   it("reloads the same messages as MessagesValue, with stable ids and parallel tool results in call order", async () => {
     const config = thread("parity");
     const turns = [noopTurns(3), ...noopTurns(2, 3)];
-    const run = async (stateSchema?: AnyStateSchema) => {
+    const run = async (stateSchema: AnyStateSchema) => {
       const agent = createDeepAgent({
         model: scriptedModel(turns),
         tools: [noop],
         checkpointer: new MemorySaver(),
-        ...(stateSchema && { stateSchema }),
+        stateSchema,
       });
       const result = await agent.invoke(
         { messages: [{ role: "user", content: "go" }] },
@@ -154,7 +161,7 @@ describe("Messages channel", () => {
       return { result, first: await read(), second: await read() };
     };
 
-    const delta = await run();
+    const delta = await run(new StateSchema({ messages: MessagesDeltaValue }));
     const full = await run(fullMessages);
 
     expect(
@@ -183,6 +190,7 @@ describe("Messages channel", () => {
       model: toolLoopModel(30, "delta"),
       tools: [noop],
       checkpointer,
+      stateSchema: deltaMessages,
     });
     const readIds = async (
       state: Promise<{ values: { messages: BaseMessage[] } }>,
@@ -232,6 +240,7 @@ describe("Messages channel", () => {
       tools: [noop],
       checkpointer,
       interruptOn: { write_file: true },
+      stateSchema: deltaMessages,
     });
 
     const stopped = await agent.invoke(go, config);
@@ -247,7 +256,7 @@ describe("Messages channel", () => {
 
   it("replays summarization that removes messages across full copies as MessagesValue does", async () => {
     const config = thread("summarized-past-snapshots");
-    const run = async (stateSchema?: AnyStateSchema) => {
+    const run = async (stateSchema: AnyStateSchema) => {
       const checkpointer = new MemorySaver();
       const agent = createDeepAgent({
         model: toolLoopModel(60),
@@ -260,7 +269,7 @@ describe("Messages channel", () => {
           }),
         ],
         checkpointer,
-        ...(stateSchema && { stateSchema }),
+        stateSchema,
       });
       const result = await agent.invoke(go, config);
       const copies = await copyLengths(checkpointer, config);
@@ -269,7 +278,7 @@ describe("Messages channel", () => {
       return { result, copies, state };
     };
 
-    const delta = await run();
+    const delta = await run(deltaMessages);
     const full = await run(fullMessages);
 
     expect(delta.copies.length).toBeGreaterThan(1);
@@ -278,115 +287,22 @@ describe("Messages channel", () => {
     expect(ids(delta.state)).toEqual(ids(delta.result.messages));
   });
 
-  it("keeps messages as deltas when a StateSchema or zod stateSchema leaves them out", async () => {
-    const schemas: AnyStateSchema[] = [
-      new StateSchema({ author: z.string().default("me") }),
-      z.object({ author: z.string().default("me") }) as never,
-    ];
-    for (const stateSchema of schemas) {
-      const checkpointer = new MemorySaver();
-      const config = thread("custom-schema");
-      const agent = createDeepAgent({
-        model: toolLoopModel(30),
-        tools: [noop],
-        checkpointer,
-        stateSchema,
-      });
-
-      const result = (await agent.invoke(go, config)) as { author?: string };
-
-      expect(result.author).toBe("me");
-      expect(await copyLengths(checkpointer, config)).toEqual([50]);
-    }
-  });
-
-  it("reads a stateSchema as createAgent does, apart from messages", async () => {
-    const zodSchema = z.object({
-      author: z.string().default("me"),
-      _note: z.string().default("private"),
-      tally: z.number().register(registry, {
-        reducer: { fn: (total: number, add: number) => total + add },
-        default: () => 0,
-      }),
-      letters: z.number().register(registry, {
-        reducer: {
-          schema: z.string(),
-          fn: (total: number, word: string) => total + word.length,
-        },
-        default: () => 0,
+  it("stores deltas beside the caller's other state fields", async () => {
+    const checkpointer = new MemorySaver();
+    const config = thread("custom-schema");
+    const agent = createDeepAgent({
+      model: toolLoopModel(30),
+      tools: [noop],
+      checkpointer,
+      stateSchema: new StateSchema({
+        author: z.string().default("me"),
+        messages: deltaEvery50,
       }),
     });
-    const stateSchema = new StateSchema({
-      author: z.string().default("me"),
-      tally: new ReducedValue(z.number().default(0), {
-        reducer: (total: number, add: number) => total + add,
-      }),
-      letters: new ReducedValue(z.number().default(0), {
-        inputSchema: z.string(),
-        reducer: (total: number, word: string) => total + word.length,
-      }),
-    });
-    const zod3Schema = z3.object({
-      author: z3.string().default("me"),
-      tally: z3.number().optional(),
-    });
-    // The caller's messages channel replaces the built-in one in createAgent.
-    const ownMessages = z.object({
-      messages: z.array(z.any()).default(() => []),
-      tally: z.number().optional(),
-    });
-    const ignored = [
-      null,
-      z.string(),
-      Annotation.Root({ author: Annotation<string> }),
-    ];
-    const run = async (stateSchema: unknown) => {
-      const agent = createAgent({
-        model: replyingModel(
-          (messages) =>
-            new AIMessage({ content: "done", id: `done-${messages.length}` }),
-        ),
-        checkpointer: new MemorySaver(),
-        stateSchema: stateSchema as AnyStateSchema,
-      });
-      const states = [];
-      for (const [tally, letters] of [
-        [2, "abc"],
-        [3, "de"],
-      ]) {
-        await agent.invoke(
-          {
-            messages: [new HumanMessage({ content: "go", id: `go-${tally}` })],
-            tally,
-            letters,
-          } as never,
-          thread("parity"),
-        );
-        // getState, unlike invoke's output, includes private channels.
-        const { messages, ...rest } = (
-          await agent.graph.getState(thread("parity"))
-        ).values as Record<string, unknown> & { messages: BaseMessage[] };
-        states.push({ messages: ids(messages), ...rest });
-      }
-      return states;
-    };
 
-    for (const input of [
-      zodSchema,
-      stateSchema,
-      zod3Schema,
-      ownMessages,
-      ...ignored,
-    ]) {
-      expect(await run(deepAgentStateSchema(input as never))).toEqual(
-        await run(input),
-      );
-    }
-    expect((await run(zodSchema)).at(-1)).toMatchObject({
-      author: "me",
-      _note: "private",
-      tally: 5,
-    });
-    expect((await run(ownMessages)).at(-1)?.messages).toHaveLength(1);
+    const result = (await agent.invoke(go, config)) as { author?: string };
+
+    expect(result.author).toBe("me");
+    expect(await copyLengths(checkpointer, config)).toEqual([50]);
   });
 });

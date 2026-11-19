@@ -13,7 +13,6 @@ import { describe, it, expectTypeOf } from "vitest";
 import {
   createAgent,
   createMiddleware,
-  type ReactAgent,
   InferAgentMiddleware,
   SystemMessage,
   toolStrategy,
@@ -23,7 +22,6 @@ import {
 import { StateSchema } from "@langchain/langgraph";
 import { z } from "zod/v4";
 import { createDeepAgent } from "./agent.js";
-import { createSubAgent } from "./middleware/subagents.js";
 import type { SystemPromptConfig } from "./index.js";
 import type {
   MergedDeepAgentState,
@@ -449,12 +447,6 @@ describe("createDeepAgent types", () => {
       const result = await agent.invoke({ messages: [] });
 
       expectTypeOf(result).not.toHaveProperty("_skillToolsDisclosed");
-    });
-  });
-
-  describe("createSubAgent", () => {
-    it("returns the default ReactAgent type", () => {
-      expectTypeOf(createSubAgent).returns.toEqualTypeOf<ReactAgent>();
     });
   });
 });

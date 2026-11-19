@@ -545,3 +545,42 @@ describe("State schema propagation", () => {
     assertAllDeepAgentQualities(agent);
   });
 });
+
+describe("Message storage", () => {
+  it("saves the whole conversation so far in every checkpoint", async () => {
+    const checkpointer = new MemorySaver();
+    const config = { configurable: { thread_id: "full-message-copies" } };
+    const agent = createDeepAgent({
+      model: new FakeListChatModel({ responses: ["Reply"] }),
+      checkpointer,
+    });
+    const conversation = [
+      "First question",
+      "Reply",
+      "Second question",
+      "Reply",
+    ];
+
+    await agent.invoke(
+      { messages: [new HumanMessage(conversation[0])] },
+      config,
+    );
+    await agent.invoke(
+      { messages: [new HumanMessage(conversation[2])] },
+      config,
+    );
+
+    // Newest first.
+    const saved: (unknown[] | undefined)[] = [];
+    for await (const { checkpoint } of checkpointer.list(config)) {
+      const messages = checkpoint.channel_values.messages as
+        | BaseMessage[]
+        | undefined;
+      saved.push(messages?.map((message) => message.content));
+    }
+    expect(saved[0]).toEqual(conversation);
+    for (const messages of saved) {
+      expect(messages).toEqual(conversation.slice(0, messages?.length));
+    }
+  });
+});
