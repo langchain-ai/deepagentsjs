@@ -565,6 +565,14 @@ export interface CreateDeepAgentParams<
    * checkpointer, making it suitable for maintaining conversation history, user preferences,
    * or any other data that should persist across multiple interactions.
    *
+   * By default, the agent stores `messages` as deltas. A checkpoint stores only the messages
+   * written in its step, with a full copy every 50 updates, and a load rebuilds the list from
+   * the thread's earlier checkpoints. The default needs a checkpointer that keeps a thread's
+   * checkpoint history. Some checkpointers delete, expire, or overwrite old checkpoints, such
+   * as a shallow saver or a saver with a TTL. On those, the default loads a thread with
+   * messages missing and raises no error. To store the full list in every checkpoint, declare
+   * `messages` with `MessagesValue`.
+   *
    * @example
    * ```ts
    * import { StateSchema } from "@langchain/langgraph";
@@ -582,6 +590,16 @@ export interface CreateDeepAgentParams<
    * });
    * // result.author is typed `string`
    * ```
+   *
+   * @example
+   * ```ts
+   * import { MessagesValue, StateSchema } from "@langchain/langgraph";
+   *
+   * // Every checkpoint stores the full `messages` list.
+   * const agent = createDeepAgent({
+   *   stateSchema: new StateSchema({ messages: MessagesValue }),
+   * });
+   * ```
    */
   stateSchema?: TStateSchema;
   /** Custom middleware to apply after standard middleware */
@@ -598,7 +616,10 @@ export interface CreateDeepAgentParams<
   responseFormat?: TResponse;
   /** Optional schema for context (not persisted between invocations) */
   contextSchema?: ContextSchema;
-  /** Optional checkpointer for persisting agent state between runs */
+  /**
+   * Optional checkpointer for persisting agent state between runs. The default storage of
+   * `messages` needs a checkpointer that keeps a thread's checkpoint history. See `stateSchema`.
+   */
   checkpointer?: BaseCheckpointSaver | boolean;
   /** Optional store for persisting longterm memories */
   store?: BaseStore;

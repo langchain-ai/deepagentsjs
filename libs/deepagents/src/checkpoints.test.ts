@@ -300,6 +300,30 @@ describe("Messages channel", () => {
     }
   });
 
+  it("stores the whole conversation so far in every checkpoint when stateSchema declares messages with MessagesValue", async () => {
+    const checkpointer = new MemorySaver();
+    const config = thread("full-copies");
+    const agent = createDeepAgent({
+      model: toolLoopModel(3),
+      tools: [noop],
+      checkpointer,
+      stateSchema: fullMessages,
+    });
+
+    const result = await agent.invoke(go, config);
+
+    const stored = [];
+    const conversation = [];
+    for await (const state of agent.graph.getStateHistory(config)) {
+      const saved = await checkpointer.getTuple(state.config);
+      const copy = saved?.checkpoint.channel_values.messages;
+      stored.push(ids((copy as BaseMessage[] | undefined) ?? []));
+      conversation.push(ids(state.values.messages));
+    }
+    expect(stored).toEqual(conversation);
+    expect(stored[0]).toEqual(ids(result.messages));
+  });
+
   it("reads a stateSchema as createAgent does, apart from messages", async () => {
     const zodSchema = z.object({
       author: z.string().default("me"),
