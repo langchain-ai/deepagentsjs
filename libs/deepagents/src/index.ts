@@ -104,6 +104,12 @@ export {
   scrubUnsupportedMultimodalContent,
   multimodalBlockSupported,
   MULTIMODAL_BLOCK_TYPES,
+  // Anthropic prompt-cache keep-alive middleware
+  anthropicCacheKeepaliveMiddleware,
+  expectedCacheSavings,
+  CACHE_KEEPALIVE_PING_TAG,
+  type AnthropicCacheKeepaliveMiddlewareOptions,
+  type CachePricing,
   // Other middleware types
   type FilesystemMiddlewareOptions,
   type FsToolName,
