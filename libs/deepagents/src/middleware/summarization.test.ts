@@ -1402,7 +1402,7 @@ describe("createSummarizationMiddleware", () => {
       expect(isCommand(result)).toBe(true);
       expect(capturedRequest).not.toBeNull();
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(invoke).toHaveBeenCalledWith(expect.any(Array));
+      expect(invoke).toHaveBeenCalledWith(expect.any(Array), { callbacks: [] });
     });
   });
 });
