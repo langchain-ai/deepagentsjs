@@ -7,7 +7,7 @@ import {
   type BaseMessage,
 } from "@langchain/core/messages";
 import { MemorySaver, InMemoryStore, StateSchema } from "@langchain/langgraph";
-import { createMiddleware } from "langchain";
+import { createAgent, createMiddleware } from "langchain";
 
 import {
   createSkillsMiddleware,
@@ -1112,6 +1112,54 @@ description: Overridden version of web research
   });
 
   describe("wrapModelCall", () => {
+    it.each([
+      [false, false],
+      [true, false],
+      [false, true],
+      [true, true],
+    ])(
+      "matches script guidance to execution=%s, factory=%s",
+      async (executable, factory) => {
+        const backend = {
+          ...createMockBackend(),
+          ...(executable && {
+            id: "skills-test",
+            execute: vi.fn().mockResolvedValue({ output: "", exitCode: 0 }),
+          }),
+        };
+        const middleware = createSkillsMiddleware({
+          backend: factory ? () => backend : backend,
+          sources: ["/skills/"],
+        });
+        const model = new FakeListChatModel({ responses: ["Done"] });
+        const spy = vi.spyOn(FakeListChatModel.prototype, "invoke");
+        const agent = createAgent({ model, middleware: [middleware] });
+
+        await agent.invoke({
+          messages: [new HumanMessage("Hi")],
+          skillsMetadata: [],
+        });
+
+        const prompt = getSystemPromptFromSpy(spy);
+        spy.mockRestore();
+        expect(prompt.includes("You can read or execute scripts")).toBe(
+          executable,
+        );
+        expect(prompt.includes("this backend does not support execution")).toBe(
+          !executable,
+        );
+        expect(prompt).toContain(
+          "against the directory containing its SKILL.md",
+        );
+        expect(prompt).not.toContain("{skill_script_usage}");
+        if (executable) {
+          expect(prompt).toContain(
+            "Read backend-only virtual files with `read_file` instead",
+          );
+        }
+      },
+    );
+
     it("should inject skills into system prompt", () => {
       const middleware = createSkillsMiddleware({
         backend: createMockBackend({ files: {}, directories: {} }),
