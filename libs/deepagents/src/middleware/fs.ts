@@ -1352,7 +1352,11 @@ function createLsTool(
       const lsResult = await resolvedBackend.ls(permission.path);
 
       if (lsResult.error) {
-        return `Error listing files: ${lsResult.error}`;
+        return toolError(
+          runtime,
+          "ls",
+          `Error listing files: ${lsResult.error}`,
+        );
       }
 
       const infos = await filterByPermissions(
@@ -2088,10 +2092,12 @@ function createExecuteTool(
 
       // Runtime check - fail gracefully if not supported
       if (!isSandboxBackend(resolvedBackend)) {
-        return (
+        return toolError(
+          runtime,
+          "execute",
           "Error: Execution not available. This agent's backend " +
-          "does not support command execution (SandboxBackendProtocol). " +
-          "To use the execute tool, provide a backend that implements SandboxBackendProtocol."
+            "does not support command execution (SandboxBackendProtocol). " +
+            "To use the execute tool, provide a backend that implements SandboxBackendProtocol.",
         );
       }
 
@@ -2102,10 +2108,12 @@ function createExecuteTool(
         permissions.length > 0 &&
         !allPathsScopedToRoutes(permissions, resolvedBackend)
       ) {
-        return (
+        return toolError(
+          runtime,
+          "execute",
           "Error: Execution not available. Filesystem permissions cannot be " +
-          "used with a backend that supports command execution because shell " +
-          "commands can access any path, making path-based rules ineffective."
+            "used with a backend that supports command execution because shell " +
+            "commands can access any path, making path-based rules ineffective.",
         );
       }
 

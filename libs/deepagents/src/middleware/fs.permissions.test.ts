@@ -948,7 +948,8 @@ describe("fs tool permissions", () => {
         command: "echo hello",
       });
 
-      expect(result).toMatch(
+      expect(resultStatus(result)).toBe("error");
+      expect(resultText(result)).toMatch(
         /permissions cannot be used with a backend that supports command execution/i,
       );
     });
