@@ -83,7 +83,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
         if (!correspondingToolMsg) {
           // We have a dangling tool call which needs a ToolMessage
           needsPatch = true;
-          const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} was cancelled - another message came in before it could be completed.`;
+          const toolMsg = `Tool call ${toolCall.name} with id ${toolCall.id} did not complete - no result was recorded. It may have been cancelled or interrupted.`;
           patchedMessages.push(
             new ToolMessage({
               content: toolMsg,

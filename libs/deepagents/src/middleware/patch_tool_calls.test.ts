@@ -129,7 +129,7 @@ describe("createPatchToolCallsMiddleware", () => {
         (m: any) => ToolMessage.isInstance(m) && m.tool_call_id === "call_123",
       );
       expect(toolMessage).toBeDefined();
-      expect(toolMessage?.content).toContain("cancelled");
+      expect(toolMessage?.content).toContain("did not complete");
       expect(toolMessage?.name).toBe("read_file");
     });
 
@@ -263,7 +263,7 @@ describe("createPatchToolCallsMiddleware", () => {
           ToolMessage.isInstance(m) &&
           m.tool_call_id === "call_1" &&
           typeof m.content === "string" &&
-          m.content.includes("cancelled"),
+          m.content.includes("did not complete"),
       );
       expect(syntheticToolMessage).toBeDefined();
 
@@ -457,7 +457,7 @@ describe("createPatchToolCallsMiddleware", () => {
           ToolMessage.isInstance(m) &&
           m.tool_call_id === "call_ls_2" &&
           typeof m.content === "string" &&
-          m.content.includes("cancelled"),
+          m.content.includes("did not complete"),
       );
       expect(syntheticLs2).toBeDefined();
 
@@ -467,7 +467,7 @@ describe("createPatchToolCallsMiddleware", () => {
           ToolMessage.isInstance(m) &&
           m.tool_call_id === "call_todos" &&
           typeof m.content === "string" &&
-          m.content.includes("cancelled"),
+          m.content.includes("did not complete"),
       );
       expect(syntheticTodos).toBeDefined();
 
@@ -594,7 +594,7 @@ describe("createPatchToolCallsMiddleware", () => {
           ToolMessage.isInstance(m) &&
           m.tool_call_id === "call_1" &&
           typeof m.content === "string" &&
-          m.content.includes("cancelled"),
+          m.content.includes("did not complete"),
       );
       expect(syntheticToolMessage).toBeDefined();
     });
@@ -666,7 +666,7 @@ describe("createPatchToolCallsMiddleware", () => {
           ToolMessage.isInstance(m) &&
           m.tool_call_id === "call_1" &&
           typeof m.content === "string" &&
-          m.content.includes("cancelled"),
+          m.content.includes("did not complete"),
       );
       expect(synthetic).toBeDefined();
     });
