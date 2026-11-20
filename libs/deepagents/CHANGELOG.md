@@ -1,5 +1,17 @@
 # deepagents
 
+## 1.17.1
+
+### Patch Changes
+
+- [#557](https://github.com/langchain-ai/deepagentsjs/pull/557) [`e21fb23`](https://github.com/langchain-ai/deepagentsjs/commit/e21fb23ec369c87f79e2bb01ef116f791431d662) Thanks [@johannes117](https://github.com/johannes117)! - fix(acp): run the filesystem backend in virtual mode so tool searches stay within the workspace instead of scanning (and crashing on) the host filesystem
+
+- [#1084](https://github.com/langchain-ai/deepagentsjs/pull/1084) [`e261b7c`](https://github.com/langchain-ai/deepagentsjs/commit/e261b7c94625993947b591e37ed501c2d8f206ec) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): align the edit_file prompt with Python by removing the incorrect claim that editing an unread file raises an error
+
+- [#1090](https://github.com/langchain-ai/deepagentsjs/pull/1090) [`2dd1d79`](https://github.com/langchain-ai/deepagentsjs/commit/2dd1d79860c5d1dcd83cd22c8e5171dbc6d188af) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): drop the redundant backend line from the `execute` tool description; the tool is already hidden when the backend can't run commands
+
+- [#1096](https://github.com/langchain-ai/deepagentsjs/pull/1096) [`cc136b0`](https://github.com/langchain-ai/deepagentsjs/commit/cc136b0ef58f326066b018e18a2ed95e12b3f4a9) Thanks [@gethin-langchain](https://github.com/gethin-langchain)! - fix(deepagents): make the placeholder `ToolMessage` for a tool call with no recorded result cause-neutral, so it no longer claims another message cancelled the call when a run was stopped or restarted mid-tool
+
 ## 1.17.0
 
 ### Minor Changes
