@@ -253,6 +253,11 @@ const SummarizationEventSchema = z.object({
    * The index in the state messages list where summarization occurred.
    * Messages before this index have been summarized. */
   cutoffIndex: z.number(),
+  /**
+   * ID of the message at `cutoffIndex`. Stays correct when earlier messages are
+   * removed. Null if that message has no ID; absent on older events.
+   */
+  cutoffMessageId: z.string().nullish(),
   /** The HumanMessage containing the summary. */
   summaryMessage: z.instanceof(HumanMessage),
   /** Path where the conversation history was offloaded, or null if offload failed. */
@@ -304,9 +309,24 @@ export function getEffectiveMessages(
 
   // Build effective messages: summary message, then messages from cutoff onward
   const result: BaseMessage[] = [event.summaryMessage];
-  result.push(...messages.slice(event.cutoffIndex));
+  result.push(...messages.slice(resolveCutoffIndex(messages, event)));
 
   return result;
+}
+
+/**
+ * Return the event's cutoff index in `messages`, found by `cutoffMessageId`
+ * when that message is still present, otherwise the stored `cutoffIndex`.
+ */
+function resolveCutoffIndex(
+  messages: BaseMessage[],
+  event: SummarizationEvent,
+): number {
+  if (event.cutoffMessageId) {
+    const index = messages.findIndex((m) => m.id === event.cutoffMessageId);
+    if (index !== -1) return index;
+  }
+  return event.cutoffIndex;
 }
 
 /**
@@ -1113,10 +1133,13 @@ export function createSummarizationMiddleware(
       }
     }
 
-    const previousEvent = request.state._summarizationEvent;
+    const stateMessages = (request.state.messages ?? []) as BaseMessage[];
+    const previousEvent = request.state._summarizationEvent as
+      | SummarizationEvent
+      | undefined;
     const previousCutoffIndex =
       previousEvent != null
-        ? (previousEvent as SummarizationEvent).cutoffIndex
+        ? resolveCutoffIndex(stateMessages, previousEvent)
         : undefined;
 
     const { summaryMessage, filePath, stateCutoffIndex } =
@@ -1175,6 +1198,7 @@ export function createSummarizationMiddleware(
       update: {
         _summarizationEvent: {
           cutoffIndex: finalStateCutoffIndex,
+          cutoffMessageId: stateMessages[finalStateCutoffIndex]?.id ?? null,
           summaryMessage: finalSummaryMessage,
           filePath: finalFilePath,
         } satisfies SummarizationEvent,
