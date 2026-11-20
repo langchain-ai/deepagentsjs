@@ -41,7 +41,7 @@ const server = new DeepAgentsServer({
         "code search, task management, and subagent delegation capabilities.",
 
       // Use Claude Sonnet as the default model
-      model: "claude-sonnet-4-5-20250929",
+      model: "claude-sonnet-4-6",
 
       // Use filesystem backend rooted at the workspace
       backend: new FilesystemBackend({
