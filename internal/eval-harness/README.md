@@ -10,7 +10,7 @@ LangSmith feedback integration.
 | --- | --- |
 | `@deepagents/evals` | Core harness — `EvalRunner`, registry functions, `parseTrajectory`, `getFinalText`, custom matchers |
 | `@deepagents/evals/deepagent` | `registerDeepAgentRunner()` — wires `createDeepAgent` into the generic runner interface |
-| `@deepagents/evals/setup` | Side-effect import that registers all concrete runners (sonnet-4-5, gpt-4.1, etc.) |
+| `@deepagents/evals/setup` | Side-effect import that registers all concrete runners (sonnet-5-5, gpt-4.1, etc.) |
 
 ## Core concepts
 
@@ -89,10 +89,10 @@ flowchart LR
 Bridges `createDeepAgent` to the generic `EvalRunner` interface:
 
 ```ts
-registerDeepAgentRunner("sonnet-4-5", (config) =>
+registerDeepAgentRunner("sonnet-5-5", (config) =>
   createDeepAgent({
     ...config,
-    model: new ChatAnthropic({ model: "claude-sonnet-4-5-20250929" }),
+    model: new ChatAnthropic({ model: "claude-sonnet-5-5" }),
   }),
 );
 ```

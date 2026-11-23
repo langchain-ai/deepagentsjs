@@ -378,7 +378,7 @@ export function isForkedSubAgent(value: unknown): boolean {
  * import { GENERAL_PURPOSE_SUBAGENT, createDeepAgent } from "@anthropic/deepagents";
  *
  * // Use as-is (automatically included with generalPurposeAgent: true)
- * const agent = createDeepAgent({ model: "claude-sonnet-4-5-20250929" });
+ * const agent = createDeepAgent({ model: "claude-sonnet-5-5" });
  *
  * // Or create a custom variant with different tools
  * const customGP: SubAgent = {
@@ -388,7 +388,7 @@ export function isForkedSubAgent(value: unknown): boolean {
  * };
  *
  * const agent = createDeepAgent({
- *   model: "claude-sonnet-4-5-20250929",
+ *   model: "claude-sonnet-5-5",
  *   subagents: [customGP],
  *   // Disable the default general-purpose agent since we're providing our own
  *   // (handled automatically when using createSubAgentMiddleware directly)

@@ -77,8 +77,8 @@ export class DeepAgentEvalRunner implements EvalRunner {
  * and should return a compiled agent. Typically:
  *
  * ```ts
- * registerDeepAgentRunner("sonnet-4-5", (config) =>
- *   createDeepAgent({ ...config, model: new ChatAnthropic({ model: "claude-sonnet-4-5-20250929" }) }),
+ * registerDeepAgentRunner("sonnet-5-5", (config) =>
+ *   createDeepAgent({ ...config, model: new ChatAnthropic({ model: "claude-sonnet-5-5" }) }),
  * );
  * ```
  *

@@ -19,8 +19,7 @@ import { createDeepAgent } from "deepagents";
 import { createREPLMiddleware } from "@langchain/quickjs";
 
 const model = new ChatAnthropic({
-  model: "claude-sonnet-4-5",
-  temperature: 0,
+  model: "claude-sonnet-5-5",
 });
 
 const agent = createDeepAgent({

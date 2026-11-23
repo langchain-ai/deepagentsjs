@@ -18,7 +18,7 @@ import { createDeepAgent } from "deepagents";
 import { createQuickJSMiddleware } from "@langchain/quickjs";
 
 const agent = createDeepAgent({
-  model: "claude-sonnet-4-5",
+  model: "claude-sonnet-5-5",
   middleware: [createQuickJSMiddleware()],
 });
 
@@ -68,7 +68,7 @@ Any agent tool can be exposed inside the REPL as a typed async function. Instead
 
 ```typescript
 const agent = createDeepAgent({
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-5-5",
   middleware: [
     createQuickJSMiddleware({
       ptc: true, // expose all agent tools inside the REPL
@@ -106,7 +106,7 @@ within the REPL:
 
 ```typescript
 const agent = createDeepAgent({
-  model: "claude-sonnet-4-5-20250929",
+  model: "claude-sonnet-5-5",
   subagents: [
     {
       name: "general-purpose",

@@ -9,7 +9,7 @@ import type * as _zodTypes from "@langchain/core/utils/types";
 import type * as _zodMeta from "@langchain/langgraph/zod";
 import type * as _messages from "@langchain/core/messages";
 
-const MODEL = "claude-sonnet-4-5-20250929";
+const MODEL = "claude-sonnet-5-5";
 
 describe("REPL middleware integration", () => {
   beforeEach(() => {

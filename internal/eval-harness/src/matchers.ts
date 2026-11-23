@@ -47,7 +47,7 @@ export interface RunAgentParams {
  * with {@link getRunner}.
  */
 export interface EvalRunner {
-  /** Unique identifier for this runner (e.g. `"sonnet-4-5"`). */
+  /** Unique identifier for this runner (e.g. `"sonnet-5-5"`). */
   name: string;
   /** Run the agent with the given params and return the resulting trajectory. */
   run(params: RunAgentParams): Promise<AgentTrajectory>;
@@ -194,8 +194,7 @@ function prettyTrajectory(trajectory: AgentTrajectory): string {
         lines.push(`  - ${tc.name} ${JSON.stringify(tc.args)}`);
       }
     } else {
-      const text =
-        typeof step.action.content === "string" ? step.action.content : "";
+      const text = step.action.text;
       const textPreview = text.trim().replace(/\n/g, "\\n");
       lines.push(`  text: ${textPreview}`);
     }
@@ -207,12 +206,12 @@ function prettyTrajectory(trajectory: AgentTrajectory): string {
  * Extract the text content of the last agent step.
  *
  * Returns an empty string if the trajectory has no steps or the last
- * step's content is not a plain string.
+ * step has no text blocks. Thinking blocks are skipped.
  */
 export function getFinalText(trajectory: AgentTrajectory): string {
   if (trajectory.steps.length === 0) return "";
   const last = trajectory.steps[trajectory.steps.length - 1];
-  return typeof last.action.content === "string" ? last.action.content : "";
+  return last.action.text;
 }
 
 /** Count total tool-call requests across all steps in a trajectory. */
