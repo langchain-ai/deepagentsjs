@@ -810,18 +810,27 @@ export class StoreBackend implements BackendProtocolV2 {
         const mimeType = getMimeType(path);
         const isBinary = this.fileFormat === "v2" && !isTextMimeType(mimeType);
 
-        let fileData: FileData;
-        if (isBinary) {
-          fileData = createFileData(content, undefined, "v2", mimeType);
-        } else {
-          const contentStr = new TextDecoder().decode(content);
-          fileData = createFileData(
-            contentStr,
-            undefined,
-            this.fileFormat,
-            mimeType,
-          );
+        let text: string | undefined;
+        if (!isBinary) {
+          try {
+            // v1 cannot hold bytes, so only v2 rejects invalid UTF-8.
+            text = new TextDecoder("utf-8", {
+              fatal: this.fileFormat === "v2",
+            }).decode(content);
+          } catch {
+            // Not valid UTF-8: keep the bytes as-is, like StateBackend.
+          }
         }
+
+        const fileData =
+          text === undefined
+            ? createFileData(
+                content,
+                undefined,
+                "v2",
+                isBinary ? mimeType : "application/octet-stream",
+              )
+            : createFileData(text, undefined, this.fileFormat, mimeType);
 
         const storeValue = this.convertFileDataToStoreValue(fileData);
         await store.put(namespace, path, storeValue);
