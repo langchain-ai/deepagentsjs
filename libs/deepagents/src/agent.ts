@@ -186,6 +186,7 @@ export function createDeepAgent<
     stateSchema,
     middleware: customMiddleware = [],
     subagents = [],
+    subagentMiddleware: createSubagentMiddleware,
     responseFormat,
     contextSchema,
     checkpointer,
@@ -400,6 +401,21 @@ export function createDeepAgent<
       ],
     );
 
+    if (generalPurpose) {
+      subagentMiddleware = mergeMiddlewareStack(
+        subagentMiddleware,
+        customMiddleware,
+        [],
+        { appendNew: false },
+      );
+    }
+    if (createSubagentMiddleware) {
+      subagentMiddleware = mergeMiddleware(
+        subagentMiddleware,
+        createSubagentMiddleware({ ...input }),
+      );
+    }
+
     if (subagentProfile.excludedMiddleware.size > 0) {
       subagentMiddleware = subagentMiddleware.filter(
         (middleware) =>
@@ -419,7 +435,14 @@ export function createDeepAgent<
         (middleware) => middleware.name === "UnsupportedContentMiddleware",
       )
     ) {
-      subagentMiddleware.push(createUnsupportedContentMiddleware());
+      subagentMiddleware.push(
+        (generalPurpose
+          ? customMiddleware.findLast(
+              (entry: AgentMiddleware) =>
+                entry.name === "UnsupportedContentMiddleware",
+            )
+          : undefined) ?? createUnsupportedContentMiddleware(),
+      );
     }
 
     return subagentMiddleware;
@@ -475,12 +498,6 @@ export function createDeepAgent<
         tools: effectiveTools,
       },
       true,
-    );
-    generalPurposeSpec.middleware = mergeMiddlewareStack(
-      generalPurposeSpec.middleware ?? [],
-      customMiddleware,
-      [],
-      { appendNew: false },
     );
     inlineSubagents.unshift(generalPurposeSpec);
   }

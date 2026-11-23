@@ -594,6 +594,8 @@ export interface CreateDeepAgentParams<
    * at runtime and wired to the async SubAgent middleware.
    */
   subagents?: TSubagents;
+  /** Adds middleware per declarative sync child, including the native general-purpose agent, before profile exclusions. */
+  subagentMiddleware?: (subagent: SubAgent) => readonly AgentMiddleware[];
   /** Structured output response format for the agent (Zod schema or other format) */
   responseFormat?: TResponse;
   /** Optional schema for context (not persisted between invocations) */
