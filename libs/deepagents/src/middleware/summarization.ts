@@ -62,15 +62,17 @@ import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type { ClientTool, ServerTool } from "@langchain/core/tools";
 import { ContextOverflowError } from "@langchain/core/errors";
 import { initChatModel } from "langchain/chat_models/universal";
-import { Command } from "@langchain/langgraph";
+import { Command, StateSchema } from "@langchain/langgraph";
 
 import type {
   AnyBackendProtocol,
   BackendFactory,
   BackendProtocolV2,
+  FileData,
 } from "../backends/protocol.js";
 import { resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
+import { filesValue } from "../values.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 
 // Re-export the base summarization middleware from langchain for users who don't need backend offloading
@@ -267,11 +269,16 @@ export type SummarizationEvent = z.infer<typeof SummarizationEventSchema>;
 /**
  * State schema for summarization middleware.
  */
-const SummarizationStateSchema = z.object({
+const SummarizationStateSchema = new StateSchema({
   /** Session ID for history file naming */
   _summarizationSessionId: z.string().optional(),
   /** Most recent summarization event (private state, not visible to agent) */
   _summarizationEvent: SummarizationEventSchema.optional(),
+  /**
+   * Agent files, so a StateBackend built from the runtime can read the
+   * history file it appends to.
+   */
+  files: filesValue,
 });
 
 /**
@@ -863,12 +870,19 @@ export function createSummarizationMiddleware(
    * string search-and-replace. This keeps peak memory at ~2x file size
    * (existing bytes + combined bytes) instead of ~6x with the old
    * download → edit(oldContent, newContent) approach.
+   *
+   * Returns the history file path, plus the `filesUpdate` the caller must
+   * apply to graph state when the backend is a legacy-mode `StateBackend`
+   * (which returns the update instead of writing it), or null on failure.
    */
   async function offloadToBackend(
     resolvedBackend: BackendProtocolV2,
     messages: BaseMessage[],
     state: Record<string, unknown>,
-  ): Promise<string | null> {
+  ): Promise<{
+    filePath: string;
+    filesUpdate: Record<string, FileData> | null;
+  } | null> {
     const filePath = getHistoryPath(state);
     const filteredMessages = filterSummaryMessages(messages);
 
@@ -894,7 +908,11 @@ export function createSummarizationMiddleware(
         }
       }
 
-      let result: { error?: string; path?: string };
+      let result: {
+        error?: string;
+        path?: string;
+        filesUpdate?: Record<string, FileData> | null;
+      };
       if (existingBytes && resolvedBackend.uploadFiles) {
         // Append: concatenate raw bytes and upload directly
         const combined = new Uint8Array(
@@ -908,7 +926,13 @@ export function createSummarizationMiddleware(
         ]);
         result = uploadResults[0].error
           ? { error: uploadResults[0].error }
-          : { path: filePath };
+          : {
+              path: filePath,
+              // A legacy-mode StateBackend attaches its update to the array
+              filesUpdate: (
+                uploadResults as { filesUpdate?: Record<string, FileData> }
+              ).filesUpdate,
+            };
       } else if (!existingBytes) {
         result = await resolvedBackend.write(filePath, newSection);
       } else {
@@ -929,7 +953,7 @@ export function createSummarizationMiddleware(
         return null;
       }
 
-      return filePath;
+      return { filePath, filesUpdate: result.filesUpdate ?? null };
     } catch (e) {
       // oxlint-disable-next-line no-console
       console.warn(
@@ -1007,7 +1031,7 @@ export function createSummarizationMiddleware(
   /**
    * Summarize a set of messages using the given model and build the
    * summary message + backend offload. Returns the summary message,
-   * the file path, and the state cutoff index.
+   * the file path, the offload's state update, and the state cutoff index.
    */
   async function summarizeMessages(
     messagesToSummarize: BaseMessage[],
@@ -1018,14 +1042,16 @@ export function createSummarizationMiddleware(
   ): Promise<{
     summaryMessage: HumanMessage;
     filePath: string | null;
+    filesUpdate: Record<string, FileData> | null;
     stateCutoffIndex: number;
   }> {
     const resolvedBackend = await resolveBackend(backend, { state });
-    const filePath = await offloadToBackend(
+    const offload = await offloadToBackend(
       resolvedBackend,
       messagesToSummarize,
       state,
     );
+    const filePath = offload?.filePath ?? null;
 
     if (filePath === null) {
       // oxlint-disable-next-line no-console
@@ -1042,7 +1068,12 @@ export function createSummarizationMiddleware(
         ? previousCutoffIndex + cutoffIndex - 1
         : cutoffIndex;
 
-    return { summaryMessage, filePath, stateCutoffIndex };
+    return {
+      summaryMessage,
+      filePath,
+      filesUpdate: offload?.filesUpdate ?? null,
+      stateCutoffIndex,
+    };
   }
 
   /**
@@ -1119,7 +1150,7 @@ export function createSummarizationMiddleware(
         ? (previousEvent as SummarizationEvent).cutoffIndex
         : undefined;
 
-    const { summaryMessage, filePath, stateCutoffIndex } =
+    const { summaryMessage, filePath, filesUpdate, stateCutoffIndex } =
       await summarizeMessages(
         messagesToSummarize,
         resolvedModel,
@@ -1138,6 +1169,7 @@ export function createSummarizationMiddleware(
     let finalStateCutoffIndex = stateCutoffIndex;
     let finalSummaryMessage = summaryMessage;
     let finalFilePath = filePath;
+    let finalFilesUpdate = filesUpdate;
 
     try {
       await handler({ ...request, messages: modifiedMessages });
@@ -1164,6 +1196,9 @@ export function createSummarizationMiddleware(
 
       finalSummaryMessage = reSumResult.summaryMessage;
       finalFilePath = reSumResult.filePath;
+      // Both offloads write the same path from the same state, and the
+      // second one holds every message, so it replaces the first.
+      finalFilesUpdate = reSumResult.filesUpdate ?? finalFilesUpdate;
       finalStateCutoffIndex = reSumResult.stateCutoffIndex;
 
       modifiedMessages = [reSumResult.summaryMessage];
@@ -1179,6 +1214,9 @@ export function createSummarizationMiddleware(
           filePath: finalFilePath,
         } satisfies SummarizationEvent,
         _summarizationSessionId: getSessionId(request.state),
+        // A legacy-mode StateBackend returns the history file as a state
+        // update instead of persisting it, so apply it here.
+        ...(finalFilesUpdate ? { files: finalFilesUpdate } : {}),
       },
     });
   }
