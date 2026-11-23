@@ -28,6 +28,7 @@ import type {
 } from "./protocol.js";
 import { applyGrepMaxCount } from "./protocol.js";
 import {
+  checkEmptyContent,
   createFileData,
   createWriteFileData,
   fileDataToString,
@@ -559,6 +560,13 @@ export class StoreBackend implements BackendProtocolV2 {
         return {
           error: `File '${filePath}' has binary content but text MIME type`,
         };
+      }
+      // Mirror FilesystemBackend: an existing but empty file is reported with
+      // the shared warning rather than an indistinguishable empty string, so
+      // callers can tell "the file is empty" from "the read produced nothing".
+      const emptyMsg = checkEmptyContent(fileDataV2.content);
+      if (emptyMsg) {
+        return { content: emptyMsg, mimeType: fileDataV2.mimeType };
       }
       const { offset: normalizedOffset, limit: normalizedLimit } =
         normalizeReadPagination(offset, limit);
