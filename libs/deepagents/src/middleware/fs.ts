@@ -15,6 +15,7 @@ import {
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
   type ToolRuntime,
+  type ToolCallRequest,
 } from "langchain";
 import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -77,6 +78,45 @@ function normalizeFilePathInput(input: unknown): unknown {
     return { ...rest, file_path: path };
   }
   return input;
+}
+
+function fileMutationPath(
+  call: ToolCallRequest["toolCall"],
+): string | undefined {
+  if (!["write_file", "edit_file", "delete"].includes(call.name)) return;
+  const input = normalizeFilePathInput(call.args) as
+    | { file_path?: unknown }
+    | undefined;
+  if (typeof input?.file_path !== "string") return;
+  try {
+    return validatePath(input.file_path);
+  } catch {
+    return;
+  }
+}
+
+function parallelFileMutationError(
+  request: ToolCallRequest,
+): ToolMessage | undefined {
+  const { toolCall, state } = request;
+  const path = fileMutationPath(toolCall);
+  if (!path || !toolCall.id) return;
+  const turn = state.messages?.findLast((message) =>
+    AIMessage.isInstance(message),
+  );
+  for (const sibling of turn?.tool_calls ?? []) {
+    if (sibling.id === toolCall.id) return;
+    if (fileMutationPath(sibling) === path) {
+      return new ToolMessage({
+        content:
+          "Error: parallel file mutations to the same path are not allowed.",
+        tool_call_id: toolCall.id,
+        name: toolCall.name,
+        status: "error",
+      });
+    }
+  }
+  return;
 }
 
 /**
@@ -2773,6 +2813,8 @@ export function createFilesystemMiddleware(
       }
     },
     wrapToolCall: async (request, handler) => {
+      const parallelMutationError = parallelFileMutationError(request);
+      if (parallelMutationError) return parallelMutationError;
       const toolName = request.toolCall?.name;
       let result = await handler(request);
 
