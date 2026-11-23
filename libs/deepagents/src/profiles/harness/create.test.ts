@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { createHarnessProfile, EMPTY_HARNESS_PROFILE } from "./create.js";
 import { resolveMiddleware, REQUIRED_MIDDLEWARE_NAMES } from "./types.js";
+import {
+  createFilesystemMiddleware,
+  createSubAgentMiddleware,
+} from "../../middleware/index.js";
 
 describe("createHarnessProfile", () => {
   it("produces a no-op profile from empty options", () => {
@@ -105,6 +109,18 @@ describe("createHarnessProfile", () => {
         createHarnessProfile({ excludedMiddleware: [name] }),
       ).toThrow("required middleware");
     }
+  });
+
+  it("required middleware names match the real middleware names", () => {
+    const names = [
+      createFilesystemMiddleware().name,
+      createSubAgentMiddleware({
+        defaultModel: "claude-sonnet-4-5-20250929",
+        defaultTools: [],
+        subagents: [],
+      }).name,
+    ];
+    expect(new Set(names)).toEqual(REQUIRED_MIDDLEWARE_NAMES);
   });
 });
 
