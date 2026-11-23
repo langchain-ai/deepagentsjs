@@ -9,6 +9,7 @@ import {
   fileDataToString,
   checkEmptyContent,
   performStringReplacement,
+  performMultiStringReplacement,
   truncateIfTooLong,
   isFileDataV1,
   migrateToFileDataV2,
@@ -361,6 +362,103 @@ describe("performStringReplacement", () => {
   it("should allow setting empty content on empty file", () => {
     const result = performStringReplacement("", "", "", false);
     expect(result).toEqual(["", 0]);
+  });
+});
+
+describe("performMultiStringReplacement", () => {
+  it("should apply every replacement against the original content", () => {
+    const result = performMultiStringReplacement("alpha beta gamma", [
+      { oldString: "gamma", newString: "GAMMA" },
+      { oldString: "alpha", newString: "ALPHA" },
+    ]);
+    expect(result).toEqual(["ALPHA beta GAMMA", 2]);
+  });
+
+  it("should not match text produced by another replacement", () => {
+    const result = performMultiStringReplacement("a b", [
+      { oldString: "a", newString: "b" },
+      { oldString: "b", newString: "c" },
+    ]);
+    expect(result).toEqual(["b c", 2]);
+  });
+
+  it("should allow adjacent replacements", () => {
+    const result = performMultiStringReplacement("foobar", [
+      { oldString: "foo", newString: "1" },
+      { oldString: "bar", newString: "2" },
+    ]);
+    expect(result).toEqual(["12", 2]);
+  });
+
+  it("should support replaceAll per replacement", () => {
+    const result = performMultiStringReplacement("x y x y end", [
+      { oldString: "x", newString: "z", replaceAll: true },
+      { oldString: "y", newString: "w", replaceAll: true },
+      { oldString: "end", newString: "END" },
+    ]);
+    expect(result).toEqual(["z w z w END", 5]);
+  });
+
+  it("should check every replaceAll match for overlaps", () => {
+    const result = performMultiStringReplacement("x y x y", [
+      { oldString: "x", newString: "z", replaceAll: true },
+      { oldString: "y x y", newString: "w" },
+    ]);
+    expect(result).toBe(
+      "Error: Edits overlap: 'y x y' and 'x' match overlapping text in file. Combine them into a single edit.",
+    );
+  });
+
+  it("should reject overlapping replacements", () => {
+    const result = performMultiStringReplacement("hello world", [
+      { oldString: "hello wo", newString: "a" },
+      { oldString: "world", newString: "b" },
+    ]);
+    expect(result).toBe(
+      "Error: Edits overlap: 'hello wo' and 'world' match overlapping text in file. Combine them into a single edit.",
+    );
+  });
+
+  it("should reject nested and duplicate replacements", () => {
+    expect(
+      performMultiStringReplacement("one two three", [
+        { oldString: "one two three", newString: "a" },
+        { oldString: "two", newString: "b" },
+      ]),
+    ).toContain("Edits overlap");
+    expect(
+      performMultiStringReplacement("one two", [
+        { oldString: "two", newString: "a" },
+        { oldString: "two", newString: "b" },
+      ]),
+    ).toContain("Edits overlap");
+  });
+
+  it("should reject a replacement that is not found", () => {
+    const result = performMultiStringReplacement("hello world", [
+      { oldString: "hello", newString: "hi" },
+      { oldString: "missing", newString: "x" },
+    ]);
+    expect(result).toBe("Error: String not found in file: 'missing'");
+  });
+
+  it("should reject an ambiguous replacement without replaceAll", () => {
+    const result = performMultiStringReplacement("foo foo bar", [
+      { oldString: "bar", newString: "baz" },
+      { oldString: "foo", newString: "qux" },
+    ]);
+    expect(typeof result).toBe("string");
+    expect(result).toContain("appears 2 times");
+  });
+
+  it("should reject an empty oldString", () => {
+    const result = performMultiStringReplacement("", [
+      { oldString: "", newString: "content" },
+      { oldString: "x", newString: "y" },
+    ]);
+    expect(result).toBe(
+      "Error: oldString cannot be empty when making multiple edits",
+    );
   });
 });
 
