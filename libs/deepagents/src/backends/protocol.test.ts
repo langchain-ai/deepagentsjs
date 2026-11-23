@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyGrepMaxCount,
   isSandboxBackend,
   type BackendProtocol,
   type BackendProtocolV2,
@@ -264,5 +265,61 @@ describe("isSandboxBackend", () => {
     };
 
     expect(isSandboxBackend(backendWithEmptyId as any)).toBe(false);
+  });
+});
+
+describe("applyGrepMaxCount", () => {
+  const matches = [1, 2, 3, 4, 5].map((line) => ({
+    path: "/a.txt",
+    line,
+    text: "x",
+  }));
+
+  it("returns the result untouched when maxCount is null or undefined", () => {
+    const result = { matches };
+    expect(applyGrepMaxCount({ result, maxCount: null })).toBe(result);
+    expect(applyGrepMaxCount({ result, maxCount: undefined })).toBe(result);
+  });
+
+  it("truncates at a positive maxCount and flags truncation", () => {
+    const patched = applyGrepMaxCount({ result: { matches }, maxCount: 2 });
+    expect(patched.matches).toHaveLength(2);
+    expect(patched.matches?.map((m) => m.line)).toEqual([1, 2]);
+    expect(patched.truncated).toBe(true);
+  });
+
+  it("clamps a negative maxCount instead of dropping trailing matches", () => {
+    // Regression: `slice(0, -1)` returned 4 of 5 matches with truncated=true.
+    const patched = applyGrepMaxCount({ result: { matches }, maxCount: -1 });
+    expect(patched.matches).toEqual([]);
+    expect(patched.truncated).toBe(true);
+  });
+
+  it("floors a fractional maxCount", () => {
+    const patched = applyGrepMaxCount({ result: { matches }, maxCount: 2.7 });
+    expect(patched.matches).toHaveLength(2);
+  });
+
+  it("treats a non-finite maxCount as no limit", () => {
+    const result = { matches };
+    expect(
+      applyGrepMaxCount({ result, maxCount: Number.POSITIVE_INFINITY }),
+    ).toBe(result);
+    expect(applyGrepMaxCount({ result, maxCount: Number.NaN })).toBe(result);
+  });
+
+  it("preserves an existing error while truncating", () => {
+    const patched = applyGrepMaxCount({
+      result: { matches, error: "partial" },
+      maxCount: 1,
+    });
+    expect(patched.error).toBe("partial");
+    expect(patched.matches).toHaveLength(1);
+  });
+
+  it("does not flag truncation when nothing is dropped", () => {
+    const patched = applyGrepMaxCount({ result: { matches }, maxCount: 10 });
+    expect(patched.matches).toHaveLength(5);
+    expect(patched.truncated).toBeUndefined();
   });
 });
