@@ -1,5 +1,5 @@
 ---
-"deepagents": minor
+"deepagents": patch
 ---
 
 Remove the experimental v3 streaming types and the `streamTransformers` option.
