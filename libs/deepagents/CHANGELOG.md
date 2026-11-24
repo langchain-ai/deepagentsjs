@@ -1,5 +1,46 @@
 # deepagents
 
+## 1.17.1
+
+### Patch Changes
+
+- [#557](https://github.com/langchain-ai/deepagentsjs/pull/557) [`e21fb23`](https://github.com/langchain-ai/deepagentsjs/commit/e21fb23ec369c87f79e2bb01ef116f791431d662) Thanks [@johannes117](https://github.com/johannes117)! - fix(acp): run the filesystem backend in virtual mode so tool searches stay within the workspace instead of scanning (and crashing on) the host filesystem
+
+- [#1084](https://github.com/langchain-ai/deepagentsjs/pull/1084) [`e261b7c`](https://github.com/langchain-ai/deepagentsjs/commit/e261b7c94625993947b591e37ed501c2d8f206ec) Thanks [@hntrl](https://github.com/hntrl)! - fix(deepagents): align the edit_file prompt with Python by removing the incorrect claim that editing an unread file raises an error
+
+- [#1090](https://github.com/langchain-ai/deepagentsjs/pull/1090) [`2dd1d79`](https://github.com/langchain-ai/deepagentsjs/commit/2dd1d79860c5d1dcd83cd22c8e5171dbc6d188af) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(deepagents): drop the redundant backend line from the `execute` tool description; the tool is already hidden when the backend can't run commands
+
+- [#1097](https://github.com/langchain-ai/deepagentsjs/pull/1097) [`a979eb9`](https://github.com/langchain-ai/deepagentsjs/commit/a979eb96c0066ccd18d43006f60e80e1c0911430) Thanks [@ccurme](https://github.com/ccurme)! - Reject later `write_file`, `edit_file`, and `delete` calls targeting the same normalized path within one model response, matching Python's filesystem middleware guard. This prevents same-response lost updates without changing backend atomicity.
+
+- [#1096](https://github.com/langchain-ai/deepagentsjs/pull/1096) [`cc136b0`](https://github.com/langchain-ai/deepagentsjs/commit/cc136b0ef58f326066b018e18a2ed95e12b3f4a9) Thanks [@gethin-langchain](https://github.com/gethin-langchain)! - fix(deepagents): make the placeholder `ToolMessage` for a tool call with no recorded result cause-neutral, so it no longer claims another message cancelled the call when a run was stopped or restarted mid-tool
+
+- [#1104](https://github.com/langchain-ai/deepagentsjs/pull/1104) [`ea4e981`](https://github.com/langchain-ai/deepagentsjs/commit/ea4e981cedc5e79cbcad3fb45448e63b5c83afd6) Thanks [@eliornl](https://github.com/eliornl)! - Remove the experimental v3 streaming types and the `streamTransformers` option.
+  
+  The v3 event stream (`streamEvents(..., { version: "v3" })`) was documented as experimental, and `langchain` 1.6.8 deprecated it. deepagents no longer layers its own types and options on top of it:
+  
+  - `DeepAgentRunStream` and `SubagentRunStream` are no longer exported from `deepagents`. If you still need them, import `AgentRunStream` and `SubagentRunStream` from `langchain` while it ships them.
+  - `createDeepAgent` no longer accepts `streamTransformers`. TypeScript rejects the option, and plain JavaScript callers get it ignored.
+  - `agent.streamEvents(..., { version: "v3" })` still runs. It now has the return type of langchain's `ReactAgent`, so `run.subagents` is no longer narrowed to the declared subagents, and `run.toolCalls` is typed from the `tools` option alone. Built-in tools such as `task` still arrive at run time but are no longer part of that type, and with no custom tools the element type is `never`. Annotate the run as langchain's `AgentRunStream` (`const run: AgentRunStream = await agent.streamEvents(...)`) to read every call with `name: string`.
+  - The `TStreamTransformers` type parameter is removed from `createDeepAgent`, `CreateDeepAgentParams` and `DeepAgentTypeConfig`. On `createDeepAgent` and `CreateDeepAgentParams` it was the 6th of 8, so `TStateSchema` and `TSkills` each move up one position, and code that passes six or more explicit type arguments has to drop the sixth. On `DeepAgentTypeConfig` it was the 7th and last.
+  
+  To follow subagents, use `agent.stream()` with `streamMode` and `subgraphs: true`. Each subagent's chunks arrive under its own `tools:<id>` namespace, with the subagent's name as `lc_agent_name` in the message metadata:
+  
+  ```ts
+  for await (const [namespace, mode, data] of await agent.stream(input, {
+    streamMode: ["messages", "updates"],
+    subgraphs: true,
+  })) {
+    if (mode === "messages" && namespace.length > 0) {
+      const [message, metadata] = data;
+      console.log(namespace[0], metadata.lc_agent_name, message.text);
+    }
+  }
+  ```
+  
+  The `@langchain/langgraph-sdk` peer range now also accepts 2.x from 2.0.1. The 2.0.0 on npm is a deprecated build and stays excluded.
+
+- [#1103](https://github.com/langchain-ai/deepagentsjs/pull/1103) [`d2f82ca`](https://github.com/langchain-ai/deepagentsjs/commit/d2f82ca52696198bf86819b6c3210fd9fd46e857) Thanks [@eliornl](https://github.com/eliornl)! - fix(deepagents): keep the summarization middleware's summary model call off the `messages` stream, so the summary text no longer arrives as an AI message before the real answer
+
 ## 1.17.0
 
 ### Minor Changes
