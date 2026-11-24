@@ -127,7 +127,8 @@ export interface SummarizationMiddlewareOptions {
   /**
    * The language model to use for generating summaries.
    * Can be a model string (e.g., "gpt-4o-mini") or a language model instance.
-   * If omitted, middleware will use the active request model.
+   * If omitted, middleware will use the active request model. Context-window
+   * limits are always read from the active request model when present.
    */
   model?: string | BaseChatModel | BaseLanguageModel;
 
@@ -1278,7 +1279,7 @@ export function createSummarizationMiddleware(
         request as any,
         handler,
         truncatedMessages,
-        resolvedModel,
+        model ? await getChatModel() : resolvedModel,
         maxInputTokens,
       );
     },
