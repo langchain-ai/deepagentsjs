@@ -1262,7 +1262,6 @@ export const LS_TOOL_DESCRIPTION = context`
   Lists all files in a directory.
 
   This is useful for exploring the filesystem and finding the right file to read or edit.
-  You should almost ALWAYS use this tool before using the read_file or edit_file tools.
 `;
 
 export const READ_FILE_TOOL_DESCRIPTION = context`
@@ -1276,7 +1275,6 @@ export const READ_FILE_TOOL_DESCRIPTION = context`
   - Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with \`offset\`/\`limit\`.
   - Images (\`.png\`, \`.jpg\`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/javascript/langchain/messages#multimodal).
   - For images and PDFs, pagination via \`offset\`/\`limit\` is text-only - supply \`file_path\` only.
-  - Always read a file before editing it.
 `;
 
 export const WRITE_FILE_TOOL_DESCRIPTION = context`
@@ -1293,7 +1291,6 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
   Usage:
   - You must read the file before editing.
   - Preserve the exact source indentation from the read output, and never include the read status header in old_string or new_string.
-  - Prefer editing an existing file over creating a new one.
   - Only use emojis if the user explicitly requests it.
 `;
 
@@ -1354,10 +1351,10 @@ function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
   ].filter(Boolean);
 
   return context`
-    Executes a shell command in an isolated sandbox and returns combined stdout/stderr with the exit code (truncated if very large).
+    Executes a shell command and returns combined stdout/stderr with the exit code (truncated if very large).
 
     Usage:
-    - Quote paths containing spaces (e.g. cd "/path/with spaces").
+    - Quote paths containing spaces (e.g. ls "/path/with spaces").
     - Chain commands with ';' or '&&' (use '&&' when a command depends on the previous); do not use newlines except inside quoted strings.
     - Use absolute paths and avoid \`cd\` so the working directory stays stable.
     - ${searchGuidance}Use read_file rather than cat/head/tail.${examples.length ? `\n${examples.join("\n")}` : ""}
