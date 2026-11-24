@@ -1049,20 +1049,28 @@ export class FilesystemBackend implements BackendProtocolV2 {
   ): Promise<Record<string, Array<[number, string]>>> {
     const results: Record<string, Array<[number, string]>> = {};
     const stat = await fs.stat(baseFull);
-    const root = stat.isDirectory() ? baseFull : path.dirname(baseFull);
 
+    // A file target searches that file only. Enumerating `dirname(baseFull)`
+    // instead would return sibling and descendant matches, which the ripgrep
+    // path never does. Non-regular targets (devices, FIFOs) are skipped rather
+    // than read.
+    //
     // `onlyFiles: true` with `followSymbolicLinks: false` drops symlink entries
     // at enumeration, so we never `readFile` a symlink target (which would
     // bypass the O_NOFOLLOW protection used by read()/write()/edit() and escape
     // the search root). This matches ripgrep's default no-follow behavior, so
     // the fallback and primary grep paths return the same files.
-    const files = await fg("**/*", {
-      cwd: root,
-      absolute: true,
-      onlyFiles: true,
-      dot: true,
-      followSymbolicLinks: false,
-    });
+    const files = stat.isDirectory()
+      ? await fg("**/*", {
+          cwd: baseFull,
+          absolute: true,
+          onlyFiles: true,
+          dot: true,
+          followSymbolicLinks: false,
+        })
+      : stat.isFile()
+        ? [baseFull]
+        : [];
 
     for (const fp of files) {
       try {

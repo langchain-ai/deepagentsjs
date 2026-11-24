@@ -1280,3 +1280,93 @@ describe("toSlashRootedPath", () => {
     },
   );
 });
+
+describe("FilesystemBackend grep fallback is scoped to the requested file", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+  });
+
+  afterEach(async () => {
+    await removeDir(tmpDir);
+  });
+
+  /** Force the non-ripgrep path, which is what these cases guard. */
+  const forceFallback = (backend: FilesystemBackend) => {
+    vi.spyOn(
+      backend as unknown as { ripgrepSearch: () => Promise<null> },
+      "ripgrepSearch",
+    ).mockResolvedValue(null);
+  };
+
+  it.each([true, false])(
+    "returns only the requested file when ripgrep is unavailable (virtualMode=%s)",
+    async (virtualMode) => {
+      const target = path.join(tmpDir, "target.txt");
+      await writeFile(target, "needle target");
+      await writeFile(path.join(tmpDir, "sibling.txt"), "needle sibling-only");
+      await writeFile(
+        path.join(tmpDir, "child", "nested.txt"),
+        "needle descendant",
+      );
+
+      const backend = new FilesystemBackend({ rootDir: tmpDir, virtualMode });
+      forceFallback(backend);
+
+      const result = await backend.grep(
+        "needle",
+        virtualMode ? "/target.txt" : target,
+      );
+
+      expect(result.error).toBeUndefined();
+      expect(result.matches).toEqual([
+        {
+          path: virtualMode ? "/target.txt" : target,
+          line: 1,
+          text: "needle target",
+        },
+      ]);
+    },
+  );
+
+  it("returns no matches when the requested file does not contain the pattern", async () => {
+    await writeFile(path.join(tmpDir, "target.txt"), "target only");
+    await writeFile(path.join(tmpDir, "sibling.txt"), "needle sibling-only");
+
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: true,
+    });
+    forceFallback(backend);
+
+    const result = await backend.grep("needle", "/target.txt");
+
+    expect(result.error).toBeUndefined();
+    expect(result.matches).toEqual([]);
+  });
+
+  it("still recurses when the path is a directory", async () => {
+    await writeFile(path.join(tmpDir, "target.txt"), "needle target");
+    await writeFile(path.join(tmpDir, "sibling.txt"), "needle sibling-only");
+    await writeFile(
+      path.join(tmpDir, "child", "nested.txt"),
+      "needle descendant",
+    );
+
+    const backend = new FilesystemBackend({
+      rootDir: tmpDir,
+      virtualMode: true,
+    });
+    forceFallback(backend);
+
+    const result = await backend.grep("needle", "/");
+
+    expect(result.error).toBeUndefined();
+    expect((result.matches ?? []).map((m) => m.path).sort()).toEqual([
+      "/child/nested.txt",
+      "/sibling.txt",
+      "/target.txt",
+    ]);
+  });
+});
