@@ -1,5 +1,13 @@
 # deepagents-acp
 
+## 0.1.45
+
+### Patch Changes
+
+- [#557](https://github.com/langchain-ai/deepagentsjs/pull/557) [`e21fb23`](https://github.com/langchain-ai/deepagentsjs/commit/e21fb23ec369c87f79e2bb01ef116f791431d662) Thanks [@johannes117](https://github.com/johannes117)! - fix(acp): run the filesystem backend in virtual mode so tool searches stay within the workspace instead of scanning (and crashing on) the host filesystem
+- Updated dependencies [[`e21fb23`](https://github.com/langchain-ai/deepagentsjs/commit/e21fb23ec369c87f79e2bb01ef116f791431d662), [`e261b7c`](https://github.com/langchain-ai/deepagentsjs/commit/e261b7c94625993947b591e37ed501c2d8f206ec), [`2dd1d79`](https://github.com/langchain-ai/deepagentsjs/commit/2dd1d79860c5d1dcd83cd22c8e5171dbc6d188af), [`a979eb9`](https://github.com/langchain-ai/deepagentsjs/commit/a979eb96c0066ccd18d43006f60e80e1c0911430), [`cc136b0`](https://github.com/langchain-ai/deepagentsjs/commit/cc136b0ef58f326066b018e18a2ed95e12b3f4a9), [`ea4e981`](https://github.com/langchain-ai/deepagentsjs/commit/ea4e981cedc5e79cbcad3fb45448e63b5c83afd6), [`d2f82ca`](https://github.com/langchain-ai/deepagentsjs/commit/d2f82ca52696198bf86819b6c3210fd9fd46e857)]:
+  - deepagents@1.17.1
+
 ## 0.1.44
 
 ### Patch Changes
