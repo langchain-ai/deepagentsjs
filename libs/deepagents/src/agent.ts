@@ -57,7 +57,7 @@ import type {
  */
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
-import type { AnyStateSchema, StreamTransformer } from "@langchain/langgraph";
+import type { AnyStateSchema } from "@langchain/langgraph";
 import { deepAgentStateSchema } from "./values.js";
 import {
   resolveHarnessProfile,
@@ -152,9 +152,6 @@ export function createDeepAgent<
   const TMiddleware extends readonly AgentMiddleware[] = readonly [],
   const TSubagents extends readonly AnySubAgent[] = readonly [],
   const TTools extends readonly (ClientTool | ServerTool)[] = readonly [],
-  const TStreamTransformers extends ReadonlyArray<
-    () => StreamTransformer<any>
-  > = readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
     undefined,
   const TSkills extends readonly string[] | undefined = undefined,
@@ -165,7 +162,6 @@ export function createDeepAgent<
     TMiddleware,
     TSubagents,
     TTools,
-    TStreamTransformers,
     TStateSchema,
     TSkills
   > = {} as CreateDeepAgentParams<
@@ -174,7 +170,6 @@ export function createDeepAgent<
     TMiddleware,
     TSubagents,
     TTools,
-    TStreamTransformers,
     TStateSchema,
     TSkills
   >,
@@ -196,7 +191,6 @@ export function createDeepAgent<
     memory,
     skills,
     permissions = [],
-    streamTransformers = [],
   } = params;
 
   const collidingTools = tools
@@ -590,7 +584,6 @@ export function createDeepAgent<
     checkpointer,
     store,
     name,
-    streamTransformers,
   }).withConfig({
     recursionLimit: 10_000,
     metadata: {
@@ -620,7 +613,6 @@ export function createDeepAgent<
    * - Middleware: AllMiddleware (built-in + custom + subagent middleware for state inference)
    * - Tools: TTools
    * - Subagents: TSubagents (for type-safe streaming)
-   * - StreamTransformers: TStreamTransformers
    */
   return agent as unknown as DeepAgent<
     DeepAgentTypeConfig<
@@ -629,8 +621,7 @@ export function createDeepAgent<
       ContextSchema,
       AllMiddleware,
       TTools,
-      TSubagents,
-      TStreamTransformers
+      TSubagents
     >
   >;
 }

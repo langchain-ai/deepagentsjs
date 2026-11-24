@@ -14,6 +14,7 @@ import {
   createAgent,
   createMiddleware,
   type ReactAgent,
+  type DefaultAgentTypeConfig,
   InferAgentMiddleware,
   SystemMessage,
   toolStrategy,
@@ -26,6 +27,8 @@ import { createDeepAgent } from "./agent.js";
 import { createSubAgent } from "./middleware/subagents.js";
 import type { SystemPromptConfig } from "./index.js";
 import type {
+  DeepAgent,
+  DefaultDeepAgentTypeConfig,
   MergedDeepAgentState,
   InferSubagentByName,
   InferDeepAgentSubagents,
@@ -456,5 +459,15 @@ describe("createDeepAgent types", () => {
     it("returns the default ReactAgent type", () => {
       expectTypeOf(createSubAgent).returns.toEqualTypeOf<ReactAgent>();
     });
+  });
+
+  it("should stay assignable to langchain's default ReactAgent", () => {
+    expectTypeOf<DeepAgent<DefaultDeepAgentTypeConfig>>().toExtend<
+      ReactAgent<DefaultAgentTypeConfig>
+    >();
+    const agent = createDeepAgent();
+    expectTypeOf<
+      (typeof agent)["~agentTypes"]["StreamTransformers"]
+    >().toEqualTypeOf<readonly []>();
   });
 });
