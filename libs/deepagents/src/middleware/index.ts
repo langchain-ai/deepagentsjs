@@ -79,6 +79,14 @@ export {
 } from "./async_subagents.js";
 
 export {
+  anthropicCacheKeepaliveMiddleware,
+  expectedCacheSavings,
+  CACHE_KEEPALIVE_PING_TAG,
+  type AnthropicCacheKeepaliveMiddlewareOptions,
+  type CachePricing,
+} from "./cache_keepalive.js";
+
+export {
   createUnsupportedContentMiddleware,
   scrubUnsupportedMultimodalContent,
   multimodalBlockSupported,
