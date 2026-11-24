@@ -34,7 +34,6 @@ export {
   REQUIRED_MIDDLEWARE_NAMES,
 } from "./profiles/index.js";
 
-export type { DeepAgentRunStream, SubagentRunStream } from "./stream.js";
 export type { SystemPromptConfig } from "./compat.js";
 export type {
   AnySubAgent,

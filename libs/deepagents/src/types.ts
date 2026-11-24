@@ -34,57 +34,13 @@ import type {
   AnnotationRoot,
   AnyStateSchema,
   StateDefinitionInit,
-  StreamTransformer,
 } from "@langchain/langgraph";
 import type { CompiledSubAgent } from "./middleware/subagents.js";
-import type {
-  ASYNC_TASK_TOOL_NAMES,
-  FILESYSTEM_TOOL_NAMES,
-} from "./middleware/index.js";
-import type { DeepAgentRunStream } from "./stream.js";
 import type { FilesystemPermission } from "./permissions/index.js";
 
 // LangChain uses AnyAnnotationRoot internally but doesn't export it
 // We use AnnotationRoot<any> as a compatible equivalent
 type AnyAnnotationRoot = AnnotationRoot<any>;
-
-/**
- * Literal union of deep agent tool names that are always present regardless of
- * user-provided tools.
- */
-type DeepAgentBuiltinToolName =
-  | (typeof FILESYSTEM_TOOL_NAMES)[number]
-  | (typeof ASYNC_TASK_TOOL_NAMES)[number]
-  | "task";
-
-/**
- * A placeholder StructuredTool type with a literal `name` for each
- * built-in tool. Used to thread built-in tool names into the
- * `ToolCallStreamUnion` so they appear in `run.toolCalls` alongside
- * user-provided tools.
- */
-type BuiltinToolPlaceholder<N extends string> = {
-  name: N;
-} & StructuredTool;
-
-/**
- * Tuple of placeholder tool types for all built-in deep agent tools.
- * Combined with `TTypes["Tools"]` in the `DeepAgentRunStream` return type.
- */
-type DeepAgentBuiltinToolsTuple = {
-  [K in DeepAgentBuiltinToolName]: BuiltinToolPlaceholder<K>;
-}[DeepAgentBuiltinToolName][];
-
-type InferDeepAgentStreamExtensions<
-  T extends ReadonlyArray<() => StreamTransformer<any>>,
-> = T extends readonly []
-  ? Record<string, never>
-  : T extends readonly [
-        () => StreamTransformer<infer P>,
-        ...infer Rest extends ReadonlyArray<() => StreamTransformer<any>>,
-      ]
-    ? P & InferDeepAgentStreamExtensions<Rest>
-    : Record<string, unknown>;
 
 /** Any subagent specification — sync, compiled, or async. */
 export type AnySubAgent = SubAgent | CompiledSubAgent | AsyncSubAgent;
@@ -220,18 +176,13 @@ export interface DeepAgentTypeConfig<
     | ServerTool
   )[],
   TSubagents extends readonly AnySubAgent[] = readonly AnySubAgent[],
-  TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
-    ReadonlyArray<() => StreamTransformer<any>>,
-> extends AgentTypeConfig<
-  TResponse,
-  TState,
-  TContext,
-  TMiddleware,
-  TTools,
-  TStreamTransformers
-> {
+> extends AgentTypeConfig<TResponse, TState, TContext, TMiddleware, TTools> {
   /** The subagents array type for type-safe streaming */
   Subagents: TSubagents;
+  // langchain defaults this to an open array, which would make
+  // `DeepAgent<DefaultDeepAgentTypeConfig>` unassignable to
+  // `ReactAgent<DefaultAgentTypeConfig>`.
+  StreamTransformers: readonly [];
 }
 
 /**
@@ -245,7 +196,6 @@ export interface DefaultDeepAgentTypeConfig extends DeepAgentTypeConfig {
   Middleware: readonly AgentMiddleware[];
   Tools: readonly (ClientTool | ServerTool)[];
   Subagents: readonly AnySubAgent[];
-  StreamTransformers: readonly [];
 }
 
 /**
@@ -269,94 +219,6 @@ export interface DeepAgent<
 > extends ReactAgent<TTypes> {
   /** Type brand for DeepAgent type inference */
   readonly "~deepAgentTypes": TTypes;
-
-  /**
-   * Executes the agent with the v3 streaming interface, returning an
-   * {@link DeepAgentRunStream} that provides ergonomic, typed projections for
-   * messages, tool calls, subagents, and middleware events.
-   *
-   * Pass `version: "v3"` to opt into this projection-oriented stream. Omitting
-   * `version` preserves the legacy internal LangGraph event-stream behavior
-   * for compatibility with LangGraph Platform integrations.
-   *
-   * This v3 stream is experimental and its API may change in future releases.
-   * It will become the default in a future major release.
-   *
-   * @param state - The initial state for the agent execution. Can be:
-   *   - An object containing `messages` array and any middleware-specific state properties
-   *   - A Command object for more advanced control flow
-   *
-   * @param config - Runtime configuration including:
-   * @param config.version - Must be `"v3"` to use the {@link DeepAgentRunStream}
-   *   interface. The default legacy event stream is maintained for internal
-   *   integrations and should not be used for new user-facing agent streaming.
-   * @param config.context - The context for the agent execution.
-   * @param config.configurable - LangGraph configuration options like `thread_id`, `run_id`, etc.
-   * @param config.store - The store for the agent execution for persisting state.
-   * @param config.signal - An optional AbortSignal for the agent execution.
-   * @param config.recursionLimit - The recursion limit for the agent execution.
-   *
-   * @returns A Promise that resolves to an {@link DeepAgentRunStream} providing:
-   *   - `run.messages` — all AI message lifecycles with streaming `.text` and `.reasoning`
-   *   - `run.toolCalls` — individual tool call streams with `.input`, `.output`, `.status`
-   *   - `run.subagents` — subagent delegation streams
-   *   - `run.middleware` — middleware lifecycle events (before/after agent/model)
-   *   - `run.values` — state snapshots (async iterable + promise-like)
-   *   - `run.output` — final agent state when the run completes
-   *   - `run.subgraphs` — child subgraph run streams
-   *   - `run.extensions` — merged projections from user-supplied transformers
-   *
-   * @example
-   * ```typescript
-   * const run = await agent.streamEvents(
-   *   {
-   *     messages: [{ role: "user", content: "What's the weather in Paris?" }],
-   *   },
-   *   { version: "v3" }
-   * );
-   *
-   * // Stream all messages
-   * for await (const msg of run.messages) {
-   *   for await (const token of msg.text) {
-   *     process.stdout.write(token);
-   *   }
-   * }
-   *
-   * // Observe tool calls
-   * for await (const call of run.toolCalls) {
-   *   console.log(`Tool: ${call.name}`, call.input);
-   *   console.log(`Result:`, await call.output);
-   * }
-   *
-   * // Observe subagent delegations
-   * for await (const subagent of run.subagents) {
-   *   console.log(`Subagent: ${subagent.name}`);
-   *
-   *   for await (const msg of subagent.messages) {
-   *     for await (const token of msg.text) {
-   *       process.stdout.write(token);
-   *     }
-   *   }
-   * }
-   *
-   * // Get final state
-   * const state = await run.output;
-   * ```
-   */
-  streamEvents: ((
-    state: Parameters<ReactAgent<TTypes>["invoke"]>[0],
-    config: NonNullable<Parameters<ReactAgent<TTypes>["invoke"]>[1]> & {
-      version: "v3";
-    },
-  ) => Promise<
-    DeepAgentRunStream<
-      Awaited<ReturnType<ReactAgent<TTypes>["invoke"]>>,
-      readonly [...TTypes["Tools"], ...DeepAgentBuiltinToolsTuple],
-      TTypes["Subagents"],
-      InferDeepAgentStreamExtensions<TTypes["StreamTransformers"]>
-    >
-  >) &
-    ReactAgent<TTypes>["streamEvents"];
 }
 
 /**
@@ -524,7 +386,6 @@ export type InferOptionalMiddleware<
  * @typeParam TMiddleware - The middleware array type for proper type inference
  * @typeParam TSubagents - The subagents array type for extracting subagent middleware states
  * @typeParam TTools - The tools array type
- * @typeParam TStreamTransformers - Custom stream transformer factories
  * @typeParam TStateSchema - The custom state schema type
  * @typeParam TSkills - The `skills` option, used to infer skills-middleware state
  */
@@ -538,8 +399,6 @@ export interface CreateDeepAgentParams<
     | ClientTool
     | ServerTool
   )[],
-  TStreamTransformers extends ReadonlyArray<() => StreamTransformer<any>> =
-    readonly [],
   TStateSchema extends AnyStateSchema | InteropZodObject | undefined =
     undefined,
   TSkills extends readonly string[] | undefined = readonly string[] | undefined,
@@ -671,16 +530,4 @@ export interface CreateDeepAgentParams<
    * ```
    */
   permissions?: FilesystemPermission[];
-  /**
-   * Optional {@link StreamTransformer} factories to register with the underlying agent.
-   *
-   * These are forwarded as-is to `createAgent` and their projections are
-   * exposed under `run.extensions` when using `streamEvents(..., { version:
-   * "v3" })`.
-   *
-   * This is separate from the built-in streams `createAgent` provides on its
-   * own — such as `run.subagents` (nested named agents) and `run.toolCalls`
-   * (tool calls), which land directly on the run, not under `run.extensions`.
-   */
-  streamTransformers?: TStreamTransformers;
 }
