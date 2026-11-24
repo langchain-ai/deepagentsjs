@@ -714,6 +714,18 @@ describe("FilesystemBackend", () => {
         fs.stat(path.join(tmpDir, "important.txt")),
       ).resolves.toBeDefined();
     });
+
+    it("should return not found when parent directories are missing", async () => {
+      const backend = new FilesystemBackend({
+        rootDir: tmpDir,
+        virtualMode: true,
+      });
+
+      const result = await backend.delete("/a/b/missing.md");
+
+      expect(result.path).toBeUndefined();
+      expect(result.error).toContain("not found");
+    });
   });
 
   describe("binary file handling", () => {
