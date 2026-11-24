@@ -544,7 +544,7 @@ export interface CreateDeepAgentParams<
     undefined,
   TSkills extends readonly string[] | undefined = readonly string[] | undefined,
 > {
-  /** The model to use (model name string or LanguageModelLike instance). Defaults to claude-sonnet-4-5-20250929 */
+  /** The model to use (model name string or LanguageModelLike instance). Defaults to anthropic:claude-sonnet-4-6 */
   model?: BaseLanguageModel | string;
   /**
    * Additional tools for the agent. Passing tools here does not remove built-in

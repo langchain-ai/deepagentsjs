@@ -30,8 +30,7 @@ const workspaceDir = path.join(process.cwd(), "workspace");
 
 export const agent = createDeepAgent({
   model: new ChatAnthropic({
-    model: "claude-sonnet-4-5",
-    temperature: 0,
+    model: "claude-sonnet-5-5",
   }),
   systemPrompt,
   backend: new LocalShellBackend({

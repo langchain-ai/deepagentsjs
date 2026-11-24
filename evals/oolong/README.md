@@ -37,23 +37,23 @@ The shared test logic lives in `make-tests.ts`.
 
 ```bash
 # Run all datasets
-EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-oolong test:eval
+EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-oolong test:eval
 
 # Run a single dataset
-EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-oolong test:eval -- datasets/spam.test.ts
+EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-oolong test:eval -- datasets/spam.test.ts
 
 # Run all validation tasks (~1300)
-OOLONG_MAX_PER_DATASET=0 EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-oolong test:eval
+OOLONG_MAX_PER_DATASET=0 EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-oolong test:eval
 
 # Custom subset size
-OOLONG_MAX_PER_DATASET=5 EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-oolong test:eval
+OOLONG_MAX_PER_DATASET=5 EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-oolong test:eval
 ```
 
 ## Environment variables
 
 | Variable                 | Default    | Description                                                |
 | ------------------------ | ---------- | ---------------------------------------------------------- |
-| `EVAL_RUNNER`            | (required) | Model runner to use (e.g. `sonnet-4-5`, `opus-4-6`)        |
+| `EVAL_RUNNER`            | (required) | Model runner to use (e.g. `sonnet-5-5`, `opus-4-6`)        |
 | `OOLONG_MAX_PER_DATASET` | `10`       | Max tasks per source dataset. Set to `0` for all.          |
 | `OOLONG_CONTEXT_LEN`     | (all)      | Filter to a specific `context_len` (e.g. `1024`, `131072`) |
 

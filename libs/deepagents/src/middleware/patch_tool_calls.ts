@@ -128,7 +128,7 @@ export function patchDanglingToolCalls(messages: BaseMessage[]): {
  * import { createPatchToolCallsMiddleware } from "./middleware/patch_tool_calls";
  *
  * const agent = createAgent({
- *   model: "claude-sonnet-4-5-20250929",
+ *   model: "claude-sonnet-5-5",
  *   middleware: [createPatchToolCallsMiddleware()],
  * });
  * ```

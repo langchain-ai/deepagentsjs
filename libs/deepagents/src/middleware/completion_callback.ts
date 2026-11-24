@@ -261,7 +261,7 @@ export function extractLastMessage(
  * });
  *
  * const agent = createDeepAgent({
- *   model: "claude-sonnet-4-5-20250929",
+ *   model: "claude-sonnet-5-5",
  *   middleware: [notifier],
  * });
  * ```

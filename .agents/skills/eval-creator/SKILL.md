@@ -312,7 +312,7 @@ that logs feedback automatically:
 import * as ls from "langsmith/vitest";
 import { ChatAnthropic } from "@langchain/anthropic";
 
-const judge = new ChatAnthropic({ model: "claude-sonnet-4-5-20250929" });
+const judge = new ChatAnthropic({ model: "claude-sonnet-5-5" });
 
 const evaluateHelpfulness = ls.wrapEvaluator(
   async ({ inputs, outputs, referenceOutputs }) => {
@@ -328,7 +328,7 @@ const evaluateHelpfulness = ls.wrapEvaluator(
       },
     ]);
 
-    const parsed = JSON.parse(response.content as string);
+    const parsed = JSON.parse(response.text);
     return {
       key: "helpfulness",
       score: parsed.score,
@@ -543,7 +543,7 @@ pnpm install
 cd internal/eval-harness && pnpm build && cd ../..
 
 # Run the new eval
-EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-<name> test:eval
+EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-<name> test:eval
 ```
 
 ### 7. Update documentation
@@ -625,7 +625,7 @@ ls.test.each([
 
 | Variable | Purpose |
 | --- | --- |
-| `EVAL_RUNNER` | Which model runner to use (e.g. `sonnet-4-5`) |
+| `EVAL_RUNNER` | Which model runner to use (e.g. `sonnet-5-5`) |
 | `LANGSMITH_API_KEY` | LangSmith auth |
 | `LANGSMITH_PROJECT` | Override tracing project (normally set via `projectName`) |
 | `LANGSMITH_TEST_TRACKING` | Set to `"false"` to disable LangSmith reporting |
@@ -638,8 +638,8 @@ Defined in `internal/eval-harness/src/setup.ts`:
 
 | Runner name | Model |
 | --- | --- |
-| `sonnet-4-5` | Claude Sonnet 4.5 |
-| `sonnet-4-5-thinking` | Claude Sonnet 4.5 with extended thinking |
+| `sonnet-5-5` | Claude Sonnet 5.5 |
+| `sonnet-5-5-thinking` | Claude Sonnet 5.5 at high effort |
 | `opus-4-6` | Claude Opus 4.6 |
 | `gpt-4.1` | GPT-4.1 |
 | `gpt-4.1-mini` | GPT-4.1 Mini |

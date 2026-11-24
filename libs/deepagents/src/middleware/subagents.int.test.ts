@@ -1031,7 +1031,7 @@ describe("Subagent Fork Cache Integration Tests", () => {
       // which would silently no-op the cache middleware (pre-existing gap,
       // unrelated to forking).
       const anthropicModel = new ChatAnthropic({
-        model: "claude-sonnet-4-5-20250929",
+        model: "claude-sonnet-5-5",
       });
 
       const agent = createDeepAgent({

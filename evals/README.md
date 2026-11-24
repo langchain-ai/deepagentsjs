@@ -38,14 +38,14 @@ You also need `LANGSMITH_API_KEY` set for result tracking (and the appropriate
 `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` for the model you choose).
 
 ```bash
-# Run all eval suites with Sonnet 4.5
-EVAL_RUNNER=sonnet-4-5 pnpm test:eval
+# Run all eval suites with Sonnet 5.5
+EVAL_RUNNER=sonnet-5-5 pnpm test:eval
 
 # Run a single suite
-EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-basic test:eval
+EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-basic test:eval
 
 # Run every suite in one execution (single reporter session)
-EVAL_RUNNER=sonnet-4-5 pnpm --filter @deepagents/eval-all test:eval
+EVAL_RUNNER=sonnet-5-5 pnpm --filter @deepagents/eval-all test:eval
 
 # Run with a different model
 EVAL_RUNNER=gpt-4.1 pnpm --filter @deepagents/eval-files test:eval

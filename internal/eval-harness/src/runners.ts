@@ -3,19 +3,20 @@ import { ChatOpenAI } from "@langchain/openai";
 import { createDeepAgent } from "deepagents";
 import { registerDeepAgentRunner } from "./deepagent.js";
 
-registerDeepAgentRunner("sonnet-4-5", (config) =>
+registerDeepAgentRunner("sonnet-5-5", (config) =>
   createDeepAgent({
     ...config,
-    model: new ChatAnthropic({ model: "claude-sonnet-4-5-20250929" }),
+    model: new ChatAnthropic({ model: "claude-sonnet-5-5" }),
   }),
 );
 
-registerDeepAgentRunner("sonnet-4-5-thinking", (config) =>
+registerDeepAgentRunner("sonnet-5-5-thinking", (config) =>
   createDeepAgent({
     ...config,
     model: new ChatAnthropic({
-      model: "claude-sonnet-4-5-20250929",
-      thinking: { type: "enabled", budget_tokens: 5000 },
+      model: "claude-sonnet-5-5",
+      thinking: { type: "adaptive" },
+      outputConfig: { effort: "high" },
     }),
   }),
 );
