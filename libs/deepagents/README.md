@@ -113,6 +113,17 @@ See the [JavaScript Deep Agents docs](https://docs.langchain.com/oss/javascript/
 
 `createDeepAgent` returns a compiled [LangGraph](https://docs.langchain.com/oss/javascript/langgraph/overview) graph, so you can use streaming, Studio, checkpointers, and other LangGraph features.
 
+By default, `createDeepAgent` stores `messages` as deltas. A checkpoint stores only the messages written in its step, with a full copy every 50 updates, and a load rebuilds the list from the thread's earlier checkpoints. The default needs a checkpointer that keeps a thread's checkpoint history. Some checkpointers delete, expire, or overwrite old checkpoints, such as a shallow saver or a saver with a TTL. On those, the default loads a thread with messages missing and raises no error. To store the full list in every checkpoint, declare `messages` with `MessagesValue` in `stateSchema`:
+
+```typescript
+import { MessagesValue, StateSchema } from "@langchain/langgraph";
+import { createDeepAgent } from "deepagents";
+
+const agent = createDeepAgent({
+  stateSchema: new StateSchema({ messages: MessagesValue }),
+});
+```
+
 ## Why Use It
 
 - **100% open source** — MIT licensed and extensible
