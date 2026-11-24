@@ -739,4 +739,40 @@ describe("tool result eviction with image blocks", () => {
     expect(image).toEqual(imageBlock);
     expect(messages[0].content).toHaveLength(2);
   });
+
+  it("should keep audio and video blocks when evicting large text", async () => {
+    const audioBlock = {
+      type: "audio",
+      data: "A".repeat(200_000),
+      mimeType: "audio/wav",
+    };
+    const videoBlock = {
+      type: "video",
+      data: "A".repeat(200_000),
+      mimeType: "video/mp4",
+    };
+    const largeText = "large result\n".repeat(500);
+    const wrapped = await wrapToolResult([
+      { type: "text", text: largeText },
+      audioBlock,
+      videoBlock,
+    ]);
+
+    expect(isCommand(wrapped)).toBe(true);
+    const { files, messages } = (wrapped as any).update;
+    const evictedPath = "/large_tool_results/call_screenshot.txt";
+    expect(files[evictedPath].content).toBe(largeText);
+    expect(messages[0].content.slice(1)).toEqual([audioBlock, videoBlock]);
+  });
+
+  it("should not count audio or video blocks toward the eviction limit", async () => {
+    const content = [
+      { type: "text", text: "Recording captured" },
+      { type: "audio", data: "A".repeat(200_000), mimeType: "audio/wav" },
+    ];
+    const wrapped = await wrapToolResult(content);
+
+    expect(isCommand(wrapped)).toBe(false);
+    expect(wrapped.content).toEqual(content);
+  });
 });

@@ -500,17 +500,25 @@ function extractTextFromMessage(message: {
   return String(message.content);
 }
 
+const MEDIA_BLOCK_TYPES: ReadonlySet<unknown> = new Set([
+  "image",
+  "image_url",
+  "audio",
+  "video",
+]);
+
 /**
- * Whether a content block is an image. Tool-result eviction skips images when
- * sizing a result and keeps them when evicting it: base64 length says little
- * about what a provider charges for an image.
+ * Whether a content block is an image, audio or video block. Tool-result
+ * eviction skips them when sizing a result and keeps them when evicting it:
+ * base64 length says little about what a provider charges for media, and it is
+ * not text the model could page through.
  */
-function isImageBlock(block: unknown): boolean {
+function isMediaBlock(block: unknown): boolean {
   return (
     typeof block === "object" &&
     block !== null &&
     "type" in block &&
-    (block.type === "image" || block.type === "image_url")
+    MEDIA_BLOCK_TYPES.has(block.type)
   );
 }
 
@@ -520,7 +528,7 @@ function stringifyToolContent(content: unknown): string {
   }
   if (Array.isArray(content)) {
     return content
-      .filter((block) => !isImageBlock(block))
+      .filter((block) => !isMediaBlock(block))
       .map((block) => {
         if (
           typeof block === "object" &&
@@ -2601,7 +2609,7 @@ export function createFilesystemMiddleware(
           .replace("{content_sample}", contentSample);
 
     const truncatedMessage = new ToolMessage({
-      content: buildEvictedContent(msg, replacementText, isImageBlock),
+      content: buildEvictedContent(msg, replacementText, isMediaBlock),
       tool_call_id: msg.tool_call_id,
       name: msg.name,
       id: msg.id,
