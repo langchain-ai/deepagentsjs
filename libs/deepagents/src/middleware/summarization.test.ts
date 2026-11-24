@@ -6,8 +6,10 @@ import {
   getNotificationMetadata,
 } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
+import { fakeModel } from "@langchain/core/testing";
 import { isCommand } from "@langchain/langgraph";
 import { ContextOverflowError } from "@langchain/core/errors";
+import { createAgent } from "langchain";
 import {
   createSummarizationMiddleware,
   type SummarizationEvent,
@@ -1402,7 +1404,56 @@ describe("createSummarizationMiddleware", () => {
       expect(isCommand(result)).toBe(true);
       expect(capturedRequest).not.toBeNull();
       expect(invoke).toHaveBeenCalledTimes(1);
-      expect(invoke).toHaveBeenCalledWith(expect.any(Array));
+      expect(invoke).toHaveBeenCalledWith(expect.any(Array), {
+        tags: ["nostream"],
+      });
+    });
+  });
+
+  describe("streaming", () => {
+    it("keeps the summary model's output off the messages stream", async () => {
+      const reply = (messages: BaseMessage[]) =>
+        new AIMessage(
+          messages[0].text.startsWith("SUMMARIZE")
+            ? "private summary"
+            : "visible answer",
+        );
+      const model = fakeModel().respond(reply).respond(reply);
+
+      const agent = createAgent({
+        model,
+        tools: [],
+        middleware: [
+          createSummarizationMiddleware({
+            backend: createMockBackend(),
+            summaryPrompt: "SUMMARIZE {conversation}",
+            trigger: { type: "messages", value: 3 },
+            keep: { type: "messages", value: 1 },
+          }),
+        ],
+      });
+
+      const streamed: string[] = [];
+      for await (const [message] of await agent.stream(
+        {
+          messages: [
+            new HumanMessage("one"),
+            new AIMessage("two"),
+            new HumanMessage("three"),
+            new AIMessage("four"),
+            new HumanMessage("five"),
+          ],
+        },
+        { streamMode: "messages" },
+      )) {
+        streamed.push(message.text);
+      }
+
+      expect(
+        model.callCount,
+        "the summary call and the answer call both ran",
+      ).toBe(2);
+      expect(streamed).toEqual(["visible answer"]);
     });
   });
 });
