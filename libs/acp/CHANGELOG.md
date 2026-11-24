@@ -1,5 +1,77 @@
 # deepagents-acp
 
+## 0.1.44
+
+### Patch Changes
+
+- [#1058](https://github.com/langchain-ai/deepagentsjs/pull/1058) [`06fa9a9`](https://github.com/langchain-ai/deepagentsjs/commit/06fa9a9a91dedb7ac67c2838a5d349cdbc448c59) Thanks [@byhow](https://github.com/byhow)! - `session/load` reads the thread's messages through the agent's state instead of the raw checkpoint, so it replays the agent's replies and tool calls now that deep agents store messages as deltas. The `@langchain/langgraph` peer floor rises to `^1.6.1`, as in `deepagents`.
+- Updated dependencies [[`eed9717`](https://github.com/langchain-ai/deepagentsjs/commit/eed97173355dfb7a03ed7dc6cd062381c53a8584), [`06fa9a9`](https://github.com/langchain-ai/deepagentsjs/commit/06fa9a9a91dedb7ac67c2838a5d349cdbc448c59)]:
+  - deepagents@1.17.0
+
+## 0.1.43
+
+### Patch Changes
+
+- [#1064](https://github.com/langchain-ai/deepagentsjs/pull/1064) [`035f19b`](https://github.com/langchain-ai/deepagentsjs/commit/035f19b1b386add02ee3aaa8af429bb85baf8bfa) Thanks [@thushanth-bengre-langchain](https://github.com/thushanth-bengre-langchain)! - fix(acp): ask for tool permission before the tool runs, and refuse when the request fails
+  
+  The permission prompt now runs inside the agent, in front of each of the agent's tool calls, so the tool does not start until the user allows it. A failed permission request, including one from a client that does not implement `session/request_permission`, now rejects the call instead of approving it, as does an option the server did not offer. `langchain` is now a peer dependency.
+
+## 0.1.42
+
+### Patch Changes
+
+- Updated dependencies [[`a7cb900`](https://github.com/langchain-ai/deepagentsjs/commit/a7cb90020ca886a533279774b1b7d9ee110060bf), [`b9501d4`](https://github.com/langchain-ai/deepagentsjs/commit/b9501d4824e424d31e9786273e674a8f51243019), [`cca721d`](https://github.com/langchain-ai/deepagentsjs/commit/cca721d0289ca0f9eb1c483e2cbff1bc7dc07b81), [`2a9144b`](https://github.com/langchain-ai/deepagentsjs/commit/2a9144b4ceb801936e217037483020542bc1a937)]:
+  - deepagents@1.16.5
+
+## 0.1.41
+
+### Patch Changes
+
+- Updated dependencies [[`a0b7eb3`](https://github.com/langchain-ai/deepagentsjs/commit/a0b7eb3a08aba936065211e74c0fa428cd0bfb61), [`ea67c7e`](https://github.com/langchain-ai/deepagentsjs/commit/ea67c7ec9d3d4fa1fa074220339325cd9a82b1d1)]:
+  - deepagents@1.16.4
+
+## 0.1.40
+
+### Patch Changes
+
+- Updated dependencies [[`e520516`](https://github.com/langchain-ai/deepagentsjs/commit/e520516c1ddef008b6929dc635c9459736b3dabb), [`2160d18`](https://github.com/langchain-ai/deepagentsjs/commit/2160d187f5d5c330ed83e575ad0f406e98bdada3), [`ef35a77`](https://github.com/langchain-ai/deepagentsjs/commit/ef35a77099ec1a69b2592504c03f10a1b18e7474)]:
+  - deepagents@1.16.3
+
+## 0.1.39
+
+### Patch Changes
+
+- Updated dependencies [[`f4b4fd4`](https://github.com/langchain-ai/deepagentsjs/commit/f4b4fd4f2b0944b1b1f09b894d96f2453abdcd0b), [`0bf3e35`](https://github.com/langchain-ai/deepagentsjs/commit/0bf3e359c67bc6bcd695452e8ba582239925b6a7)]:
+  - deepagents@1.16.2
+
+## 0.1.38
+
+### Patch Changes
+
+- Updated dependencies [[`bf83c27`](https://github.com/langchain-ai/deepagentsjs/commit/bf83c27fd322a56082590c3426bbcea9014a5b6e), [`fcb8249`](https://github.com/langchain-ai/deepagentsjs/commit/fcb8249fa02debf96a7c293af939ce4276ffaded)]:
+  - deepagents@1.16.1
+
+## 0.1.37
+
+### Patch Changes
+
+- Updated dependencies [[`f002924`](https://github.com/langchain-ai/deepagentsjs/commit/f002924f7bac66d36568684430a5d64337c06dfa)]:
+  - deepagents@1.16.0
+
+## 0.1.36
+
+### Patch Changes
+
+- Updated dependencies [[`0e4d3ee`](https://github.com/langchain-ai/deepagentsjs/commit/0e4d3ee00d0ff8873f285833893db66738a66eee)]:
+  - deepagents@1.15.1
+
+## 0.1.35
+
+### Patch Changes
+
+- Updated dependencies [[`b448f22`](https://github.com/langchain-ai/deepagentsjs/commit/b448f220866bbb5d41924dfdbb1e0079c3b11838), [`5f42f2d`](https://github.com/langchain-ai/deepagentsjs/commit/5f42f2df3c814bebbac445c759a34f96c10bc036), [`389e8da`](https://github.com/langchain-ai/deepagentsjs/commit/389e8da2325cd726171a32f6f1ce9103c8789119), [`9333679`](https://github.com/langchain-ai/deepagentsjs/commit/9333679d3b5a5e4fb4d5e0104bf0630213c3ffff), [`9333679`](https://github.com/langchain-ai/deepagentsjs/commit/9333679d3b5a5e4fb4d5e0104bf0630213c3ffff)]:
+  - deepagents@1.15.0
+
 ## 0.1.34
 
 ### Patch Changes

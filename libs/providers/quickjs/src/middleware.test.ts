@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { tool } from "langchain";
+import { createAgent, tool } from "langchain";
+import { fakeModel } from "@langchain/core/testing";
+import { awaitAllCallbacks } from "@langchain/core/callbacks/promises";
+import { LangChainTracer } from "@langchain/core/tracers/tracer_langchain";
 import * as z from "zod";
-import { SystemMessage, ToolMessage } from "@langchain/core/messages";
+import {
+  AIMessage,
+  HumanMessage,
+  SystemMessage,
+  ToolMessage,
+} from "@langchain/core/messages";
 import { Command } from "@langchain/langgraph";
 import {
   createCodeInterpreterMiddleware,
@@ -13,6 +21,33 @@ import { ReplSession } from "./session.js";
 describe("createCodeInterpreterMiddleware", () => {
   beforeEach(() => {
     ReplSession.clearCache();
+  });
+
+  it("omits conversation inputs from the cleanup run sent to LangSmith", async () => {
+    const client = { createRun: vi.fn(), updateRun: vi.fn() };
+    const tracer = new LangChainTracer({
+      client: client as unknown as LangChainTracer["client"],
+    });
+    const agent = createAgent({
+      model: fakeModel().respond(new AIMessage("Done")),
+      middleware: [createCodeInterpreterMiddleware()],
+    });
+
+    const result = await agent.invoke(
+      {
+        messages: [
+          new HumanMessage("Long conversation context. ".repeat(1024)),
+        ],
+      },
+      { callbacks: [tracer] },
+    );
+    await awaitAllCallbacks();
+
+    expect(result.messages.at(-1)?.content).toBe("Done");
+    const cleanup = client.createRun.mock.calls
+      .map(([run]) => run)
+      .find((run) => run.name === "CodeInterpreterMiddleware.after_agent");
+    expect(cleanup?.inputs).toEqual({});
   });
 
   describe("tool registration", () => {
@@ -88,6 +123,59 @@ describe("createCodeInterpreterMiddleware", () => {
       const req = mockHandler.mock.calls[0][0];
       expect(req.systemMessage.text).toContain("Custom REPL prompt");
       expect(req.systemMessage.text).not.toContain("### Interpreter");
+    });
+  });
+
+  describe("execution timeout", () => {
+    const SPIN = "let i = 0; while (i < 5_000_000) { i++ } i";
+
+    async function promptFor(executionTimeoutMs: number | null) {
+      const middleware = createCodeInterpreterMiddleware({
+        executionTimeoutMs,
+      });
+      const mockHandler = vi.fn().mockReturnValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: "timeout-prompt" } },
+          tools: middleware.tools || [],
+        } as any,
+        mockHandler,
+      );
+      return mockHandler.mock.calls[0][0].systemMessage.text as string;
+    }
+
+    async function evalWith(executionTimeoutMs: number | null) {
+      const middleware = createCodeInterpreterMiddleware({
+        executionTimeoutMs,
+      });
+      return (middleware.tools![0] as any).invoke(
+        { code: SPIN },
+        { configurable: { thread_id: `timeout-${executionTimeoutMs}` } },
+      );
+    }
+
+    it.each([0, NaN])("rejects %s", (executionTimeoutMs) => {
+      expect(() =>
+        createCodeInterpreterMiddleware({ executionTimeoutMs }),
+      ).toThrow("`executionTimeoutMs` must be > 0 or null");
+    });
+
+    it.each([null, -1, Infinity])(
+      "omits the timeout from the prompt for %s",
+      async (executionTimeoutMs) => {
+        const text = await promptFor(executionTimeoutMs);
+        expect(text).toContain("- Memory: 64 MB total.");
+        expect(text).not.toContain("Timeout:");
+      },
+    );
+
+    it("runs past a deadline that would interrupt the same code", async () => {
+      expect(await evalWith(1)).toContain("interrupted");
+      const result = await evalWith(null);
+      expect(result).not.toContain("interrupted");
+      expect(result).toContain("5000000");
     });
   });
 
@@ -340,8 +428,148 @@ describe("createCodeInterpreterMiddleware", () => {
   });
 
   describe("subagent primitive", () => {
+    it.each([0, -1, 1.5, Infinity, NaN, null, true, "40"])(
+      "rejects invalid concurrency %s",
+      (maxSubagentConcurrency) => {
+        expect(() =>
+          createCodeInterpreterMiddleware({ maxSubagentConcurrency } as any),
+        ).toThrow();
+      },
+    );
+
+    it.each([undefined, 2, 40])(
+      "limits dispatch concurrency to %s across evaluations",
+      async (maxSubagentConcurrency) => {
+        const limit = maxSubagentConcurrency ?? 32;
+        const releases: (() => void)[] = [];
+        const mockTaskTool = {
+          name: "task",
+          invoke: vi.fn(
+            () =>
+              new Promise<string>((resolve) => {
+                releases.push(() => resolve("ok"));
+              }),
+          ),
+        };
+        const middleware = createCodeInterpreterMiddleware({
+          maxSubagentConcurrency,
+        });
+        const handler = vi.fn().mockResolvedValue({ response: "ok" });
+        await middleware.wrapModelCall!(
+          {
+            systemMessage: new SystemMessage("Base"),
+            state: {},
+            runtime: { configurable: { thread_id: "concurrency" } },
+            tools: [...(middleware.tools || []), mockTaskTool],
+          } as any,
+          handler,
+        );
+        expect(handler.mock.calls[0][0].systemMessage.text).toContain(
+          `cap of ${limit} concurrent subagent calls`,
+        );
+        const evalTool = middleware.tools![0] as any;
+        for (let round = 0; round < 2; round++) {
+          mockTaskTool.invoke.mockClear();
+          const result = evalTool.invoke(
+            {
+              code: `await Promise.all(Array.from({length: ${limit + 1}}, () => task({description: "work", subagentType: "worker"}))).then(r => r.length)`,
+            },
+            { configurable: { thread_id: "concurrency" } },
+          );
+          await vi.waitFor(() =>
+            expect(mockTaskTool.invoke).toHaveBeenCalledTimes(limit),
+          );
+          releases.shift()!();
+          await vi.waitFor(() =>
+            expect(mockTaskTool.invoke).toHaveBeenCalledTimes(limit + 1),
+          );
+          releases.splice(0).forEach((release) => release());
+          expect(await result).toContain(String(limit + 1));
+        }
+      },
+    );
+
+    it("keeps task disabled with a custom concurrency limit", async () => {
+      const middleware = createCodeInterpreterMiddleware({
+        subagents: false,
+        maxSubagentConcurrency: 40,
+      });
+      const handler = vi.fn().mockResolvedValue({ response: "ok" });
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: {},
+          tools: [...(middleware.tools || []), { name: "task" }],
+        } as any,
+        handler,
+      );
+      const result = await (middleware.tools![0] as any).invoke({
+        code: "typeof task",
+      });
+      expect(result).toContain("undefined");
+      expect(handler.mock.calls[0][0].systemMessage.text).not.toContain(
+        "Dispatching Subagents",
+      );
+    });
     beforeEach(() => {
       vi.clearAllMocks();
+    });
+
+    async function setUpSubagents(
+      threadId: string,
+      invoke: (...args: any[]) => unknown,
+    ) {
+      const mockTaskTool = { name: "task", invoke: vi.fn(invoke) };
+      const middleware = createCodeInterpreterMiddleware();
+      const jsTool = middleware.tools!.find(
+        (t: any) => t.name === "eval",
+      ) as any;
+      await middleware.wrapModelCall!(
+        {
+          systemMessage: new SystemMessage("Base"),
+          state: {},
+          runtime: { configurable: { thread_id: threadId } },
+          tools: [...(middleware.tools || []), mockTaskTool],
+        } as any,
+        vi.fn().mockReturnValue({ response: "ok" }),
+      );
+      return { jsTool, mockTaskTool };
+    }
+
+    it("should reject an eval from a subagent its own session's task() is waiting on", async () => {
+      let nested: unknown;
+      const { jsTool } = await setUpSubagents(
+        "nested-eval",
+        async (_input, config) => {
+          nested = await jsTool.invoke({ code: "40 + 2" }, config);
+          return "subagent done";
+        },
+      );
+      const result = await jsTool.invoke(
+        { code: `await task({ description: "d", subagentType: "general" })` },
+        { configurable: { thread_id: "nested-eval" } },
+      );
+      expect(result).toContain("subagent done");
+      expect(String(nested)).toContain("REPL session busy");
+    });
+
+    it("should queue a sibling eval behind one awaiting task()", async () => {
+      const { jsTool, mockTaskTool } = await setUpSubagents(
+        "sibling-evals",
+        () => new Promise((r) => setTimeout(() => r("subagent done"), 200)),
+      );
+      const config = { configurable: { thread_id: "sibling-evals" } };
+      const first = jsTool.invoke(
+        { code: `await task({ description: "d", subagentType: "general" })` },
+        config,
+      );
+      await vi.waitFor(() => expect(mockTaskTool.invoke).toHaveBeenCalled());
+      const sibling = await jsTool.invoke({ code: "40 + 2" }, config);
+      const awaiting = await first;
+      expect(awaiting).toContain("subagent done");
+      expect(sibling).toContain("42");
+      expect(sibling).not.toContain("busy");
     });
 
     it("should invoke subagent from within the REPL", async () => {

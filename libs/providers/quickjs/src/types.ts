@@ -27,11 +27,20 @@ export interface CodeInterpreterMiddlewareOptions {
   maxStackSizeBytes?: number;
 
   /**
-   * Execution timeout in milliseconds per evaluation.
-   * Set to a negative value to disable the timeout entirely.
+   * Execution budget in milliseconds per evaluation. It counts only time
+   * spent running JavaScript: time spent awaiting host calls such as
+   * `tools.*` or `task()` is not counted, so it does not bound an eval's
+   * total wall-clock duration. An eval also waits, uncounted, for host calls
+   * it started but did not await.
+   * Set to `null` to disable the timeout entirely; negative values and
+   * `Infinity` are treated the same way. Zero and `NaN` are rejected.
+   *
+   * Without a timeout, a synchronous infinite loop blocks the event loop
+   * and cannot be stopped by aborting the agent run. Use process
+   * isolation when running untrusted code without a timeout.
    * @default 5000 (5s)
    */
-  executionTimeoutMs?: number;
+  executionTimeoutMs?: number | null;
 
   /**
    * Custom system prompt override. Set to null to disable the system prompt.
@@ -82,13 +91,16 @@ export interface CodeInterpreterMiddlewareOptions {
    *
    * When `true` (default) and subagent specs are available, a `task()`
    * global is installed in the REPL that dispatches subagents
-   * programmatically with a fixed concurrency cap of 32.
+   * programmatically with the `maxSubagentConcurrency` cap.
    * Set to `false` to require subagent dispatch through the normal
    * `task` tool path.
    *
    * @default true
    */
   subagents?: boolean;
+
+  /** Maximum concurrent `task()` calls per REPL; positive integer, default 32. Higher limits increase host memory, downstream load, and cost; use external admission controls. */
+  maxSubagentConcurrency?: number;
 }
 
 /**

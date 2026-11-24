@@ -3,6 +3,7 @@ import {
   humanInTheLoopMiddleware,
   anthropicPromptCachingMiddleware,
   bedrockPromptCachingMiddleware,
+  modelRefusalMiddleware,
   SystemMessage,
   type AgentMiddleware,
 } from "langchain";
@@ -32,6 +33,7 @@ import { ConfigurationError } from "./errors.js";
 import type { SystemPromptConfig } from "./compat.js";
 import { InteropZodObject } from "@langchain/core/utils/types";
 import { createCacheBreakpointMiddleware } from "./middleware/cache.js";
+import { createParentNotifierMiddleware } from "./middleware/parent_notifier.js";
 import { createToolExclusionMiddleware } from "./middleware/tool_exclusion.js";
 import { mergeMiddleware, mergeMiddlewareStack } from "./middleware/utils.js";
 import {
@@ -56,6 +58,7 @@ import type {
 import type * as _messages from "@langchain/core/messages";
 import type * as _langgraph from "@langchain/langgraph";
 import type { AnyStateSchema, StreamTransformer } from "@langchain/langgraph";
+import { deepAgentStateSchema } from "./values.js";
 import {
   resolveHarnessProfile,
   applyProfilePrompt,
@@ -392,6 +395,8 @@ export function createDeepAgent<
               }),
             ]
           : []),
+        // Last, so a spec's `modelFallbackMiddleware` catches refusals first.
+        modelRefusalMiddleware(),
       ],
     );
 
@@ -518,6 +523,8 @@ export function createDeepAgent<
 
   // Runtime middleware array: combine core middleware, custom overrides, and tail middleware.
   const coreMiddleware: AgentMiddleware[] = [
+    // Wakes the agent that launched this one as an async subagent, when its run ends.
+    createParentNotifierMiddleware(),
     fsMiddleware,
     subagentMiddleware,
     summarizationMiddleware,
@@ -541,6 +548,8 @@ export function createDeepAgent<
     ...memoryMiddleware,
     // Optional human-in-the-loop tool interrupts.
     ...(interruptOn ? [humanInTheLoopMiddleware({ interruptOn })] : []),
+    // In the tail, so a caller's `modelFallbackMiddleware` catches refusals first.
+    modelRefusalMiddleware(),
   ];
 
   let middleware: AgentMiddleware[] = mergeMiddlewareStack(
@@ -573,7 +582,7 @@ export function createDeepAgent<
   const agent = createAgent({
     model,
     ...(finalSystemPrompt !== "" && { systemPrompt: finalSystemPrompt }),
-    stateSchema,
+    stateSchema: deepAgentStateSchema(stateSchema),
     tools: effectiveTools,
     middleware,
     ...(responseFormat !== null && { responseFormat }),

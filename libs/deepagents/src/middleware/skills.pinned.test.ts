@@ -10,6 +10,7 @@
 import { describe, it, expect } from "vitest";
 import {
   AIMessage,
+  getNotificationMetadata,
   HumanMessage,
   ToolMessage,
   type BaseMessage,
@@ -159,6 +160,10 @@ describe("pinned skills", () => {
         ],
       ],
     );
+    expect(skills.map((m) => getNotificationMetadata(m))).toEqual([
+      { source: "pinned_skill" },
+      { source: "pinned_skill" },
+    ]);
   });
 
   it("are stored once and cleared from the result", async () => {

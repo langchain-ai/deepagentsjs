@@ -12,6 +12,7 @@ import {
   tool,
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { z } from "zod/v4";
 import type { StructuredToolInterface } from "@langchain/core/tools";
 import { SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY } from "deepagents";
@@ -54,10 +55,28 @@ import { LangGraphRunnableConfig } from "@langchain/langgraph";
 const DEFAULT_TOOL_NAME = "eval";
 
 /**
+ * `configurable` key listing the REPL sessions whose `task()` dispatch a run
+ * descends from, so an eval inside such a subagent is recognised as nested.
+ */
+const DISPATCHING_SESSIONS_CONFIG_KEY = "__quickjs_dispatching_sessions";
+
+function dispatchingSessions(config: {
+  configurable?: Record<string, unknown>;
+}): string[] {
+  const value = config.configurable?.[DISPATCHING_SESSIONS_CONFIG_KEY];
+  return Array.isArray(value)
+    ? value.filter((key): key is string => typeof key === "string")
+    : [];
+}
+
+/**
  * Render the subagent dispatch prompt section for the system message.
  * Ported from the Python `_SUBAGENT_SYSTEM_PROMPT_TEMPLATE`.
  */
-function renderSubagentPrompt(toolName: string): string {
+function renderSubagentPrompt(
+  toolName: string,
+  maxSubagentConcurrency: number,
+): string {
   return dedent`
 
     ### Dispatching Subagents with \`task\`
@@ -126,9 +145,11 @@ function renderSubagentPrompt(toolName: string): string {
 
     #### Fan out with bounded concurrency
 
-    Dispatch independent work in parallel with \`Promise.all\`, but in explicit
-    batches around 10 so you do not launch hundreds of subagents at once. The bridge
-    enforces a hard per-REPL cap of 32 concurrent subagent calls.
+    Dispatch independent work in parallel with \`Promise.all\`. Batches around 10 are
+    a conservative recommendation, not a required limit; use larger batches when
+    appropriate for the workload and its admission controls. The bridge enforces
+    a per-REPL cap of ${maxSubagentConcurrency} concurrent subagent calls; excess
+    calls wait for capacity.
 
     \`\`\`javascript
     const files = ["/src/a.ts", "/src/b.ts", "/src/c.ts"]; // found while exploring
@@ -283,13 +304,15 @@ function renderSubagentPrompt(toolName: string): string {
 
 function renderReplSystemPrompt(opts: {
   toolName: string;
-  timeout: number;
+  timeout: number | null;
   memoryLimitMb: number;
   hasPtc: boolean;
 }): string {
   const sideEffects = opts.hasPtc
     ? " External side effects from inside the REPL are reachable only via the `tools.*` namespace documented below."
     : " The REPL is pure computation; do any filesystem or other I/O with your normal tools, outside this tool.";
+  const timeoutLine =
+    opts.timeout === null ? "" : `Timeout: ${opts.timeout}s per call. `;
   return dedent`
     ### Interpreter
 
@@ -297,7 +320,7 @@ function renderReplSystemPrompt(opts: {
     - State (variables, functions) persists across tool calls within a single turn of conversation. They DO NOT persist across multiple turns.
     - Top-level \`await\` works; Promises resolve before the call returns.
     - Runtime sandbox: no built-in filesystem, network, stdlib, or wall-clock APIs (\`fetch\`, \`require\`, \`fs\`, \`process\`, real \`Date.now()\` are unavailable or stubbed).${sideEffects}
-    - Timeout: ${opts.timeout}s per call. Memory: ${opts.memoryLimitMb} MB total.
+    - ${timeoutLine}Memory: ${opts.memoryLimitMb} MB total.
     - \`console.log\` output is captured and returned alongside the result.
   `;
 }
@@ -399,15 +422,26 @@ export function createCodeInterpreterMiddleware(
     toolName = DEFAULT_TOOL_NAME,
     captureConsole = true,
     subagents = true,
+    maxSubagentConcurrency = DEFAULT_MAX_SUBAGENT_CONCURRENCY,
   } = options;
 
-  const maxSubagentConcurrency = subagents
-    ? DEFAULT_MAX_SUBAGENT_CONCURRENCY
-    : 0;
+  if (!Number.isInteger(maxSubagentConcurrency) || maxSubagentConcurrency < 1) {
+    throw new Error("`maxSubagentConcurrency` must be a positive integer");
+  }
 
   if (maxPtcCalls !== null && maxPtcCalls !== undefined && maxPtcCalls < 1) {
     throw new Error("`maxPtcCalls` must be >= 1 or null");
   }
+
+  if (executionTimeoutMs === 0 || Number.isNaN(executionTimeoutMs)) {
+    throw new Error("`executionTimeoutMs` must be > 0 or null");
+  }
+  const timeoutMs =
+    executionTimeoutMs === null ||
+    executionTimeoutMs < 0 ||
+    executionTimeoutMs === Infinity
+      ? null
+      : executionTimeoutMs;
 
   const middlewareId = crypto.randomUUID();
 
@@ -434,6 +468,7 @@ export function createCodeInterpreterMiddleware(
   function createBridgeDispatch(
     subagentTaskTool: StructuredToolInterface,
     config: LangGraphRunnableConfig,
+    sessionKey: string,
   ): SubagentBridgeOptions["dispatch"] {
     return async (input) => {
       const hasSchema = input.responseSchema != null;
@@ -445,6 +480,12 @@ export function createCodeInterpreterMiddleware(
         ...config,
         configurable: {
           ...config.configurable,
+          // The subagent inherits this, so its own eval can tell it would run
+          // on a session that is waiting for it.
+          [DISPATCHING_SESSIONS_CONFIG_KEY]: [
+            ...dispatchingSessions(config),
+            sessionKey,
+          ],
           ...(hasSchema && {
             [SUBAGENT_RESPONSE_FORMAT_CONFIG_KEY]: input.responseSchema,
           }),
@@ -479,6 +520,20 @@ export function createCodeInterpreterMiddleware(
       const threadId = config.configurable?.thread_id || DEFAULT_SESSION_ID;
       const sessionKey = `${threadId}:${middlewareId}`;
 
+      // Evals on a session run one at a time, so one from a subagent that this
+      // session's own task() is waiting on would wait for itself.
+      if (dispatchingSessions(config).includes(sessionKey)) {
+        return formatReplResult({
+          ok: false,
+          error: {
+            message:
+              "REPL session busy: this eval runs inside a task() that an eval on the same session is waiting on. Use the REPL after that eval finishes.",
+          },
+          logs: [],
+          logsDroppedChars: 0,
+        });
+      }
+
       const session = ReplSession.getOrCreate(sessionKey, {
         memoryLimitBytes,
         maxStackSizeBytes,
@@ -488,19 +543,21 @@ export function createCodeInterpreterMiddleware(
         captureConsole,
         sessionId: threadId,
         subagentBridge:
-          taskTool && maxSubagentConcurrency > 0
+          taskTool && subagents
             ? {
-                dispatch: createBridgeDispatch(taskTool, config),
+                dispatch: createBridgeDispatch(taskTool, config, sessionKey),
                 maxConcurrency: maxSubagentConcurrency,
               }
             : undefined,
       });
 
-      if (taskTool && maxSubagentConcurrency > 0) {
-        session.updateBridgeDispatch(createBridgeDispatch(taskTool, config));
+      if (taskTool && subagents) {
+        session.updateBridgeDispatch(
+          createBridgeDispatch(taskTool, config, sessionKey),
+        );
       }
 
-      const result = await session.eval(input.code, executionTimeoutMs);
+      const result = await session.eval(input.code, timeoutMs ?? -1);
       return formatReplResult(result);
     },
     {
@@ -523,12 +580,13 @@ export function createCodeInterpreterMiddleware(
 
   return createMiddleware({
     name: "CodeInterpreterMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     tools: [evalTool],
     wrapModelCall: async (request, handler) => {
       const agentTools = (request.tools || []) as StructuredToolInterface[];
       ptcTools = filterToolsForPtc(agentTools);
 
-      if (!taskTool && maxSubagentConcurrency > 0) {
+      if (!taskTool && subagents) {
         taskTool = findTaskTool(agentTools);
       }
 
@@ -540,14 +598,14 @@ export function createCodeInterpreterMiddleware(
         customSystemPrompt ||
         renderReplSystemPrompt({
           toolName,
-          timeout: executionTimeoutMs / 1000,
+          timeout: timeoutMs === null ? null : timeoutMs / 1000,
           memoryLimitMb: Math.floor(memoryLimitBytes / (1024 * 1024)),
           hasPtc: ptcTools.length > 0,
         });
 
       const subagentPrompt =
-        taskTool && maxSubagentConcurrency > 0
-          ? renderSubagentPrompt(toolName)
+        taskTool && subagents
+          ? renderSubagentPrompt(toolName, maxSubagentConcurrency)
           : "";
 
       const systemMessage = request.systemMessage

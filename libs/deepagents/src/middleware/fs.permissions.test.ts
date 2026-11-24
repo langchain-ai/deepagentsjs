@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createFilesystemMiddleware, findDeleteDenyPatterns } from "./fs.js";
 import type { BackendProtocolV2 } from "../backends/protocol.js";
 import { FilesystemBackend } from "../backends/filesystem.js";
+import { CompositeBackend } from "../backends/composite.js";
+import { getRealpath, setRealpath } from "../backends/realpath.js";
 import type { FilesystemPermission } from "../permissions/types.js";
 import * as fs from "node:fs/promises";
 import fsPromises from "node:fs/promises";
@@ -1589,6 +1591,52 @@ describe.skipIf(process.platform === "win32")(
       ).resolves.toBeDefined();
     });
 
+    it("operates on the checked target when an intermediate symlink is swapped after the check", async () => {
+      await fs.mkdir(path.join(root, "public"));
+      await fs.writeFile(path.join(root, "public", "key"), "PUBLIC");
+      const swap = path.join(root, "work", "swap");
+      await fs.symlink(path.join("..", "public"), swap);
+
+      // Repoint the symlink at the denied directory right after the first
+      // resolution, i.e. between the permission decision and the operation.
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: true,
+      });
+      const realpath = getRealpath(backend)!;
+      let swapped = false;
+      setRealpath(backend, async (p) => {
+        const resolved = await realpath(p);
+        if (!swapped) {
+          swapped = true;
+          await fs.unlink(swap);
+          await fs.symlink(path.join("..", "secret"), swap);
+        }
+        return resolved;
+      });
+      const middleware = createFilesystemMiddleware({
+        backend,
+        permissions: [deny(["/secret/**"])],
+      });
+
+      const read = await getTool(middleware, "read_file").invoke({
+        file_path: "/work/swap/key",
+      });
+      expect(resultText(read)).toContain("PUBLIC");
+      expect(resultText(read)).not.toContain("TOPSECRET");
+
+      await fs.unlink(swap);
+      await fs.symlink(path.join("..", "public"), swap);
+      swapped = false;
+      await getTool(middleware, "write_file").invoke({
+        file_path: "/work/swap/key",
+        content: "OVERWRITTEN",
+      });
+      expect(await fs.readFile(path.join(root, "secret", "key"), "utf8")).toBe(
+        "TOPSECRET",
+      );
+    });
+
     it("blocks a symlink that resolves outside the virtual root", async () => {
       const outside = fsSync.mkdtempSync(
         path.join(os.tmpdir(), "deepagents-real-perm-out-"),
@@ -1669,3 +1717,292 @@ describe("permissions with a non-virtual FilesystemBackend", () => {
     },
   );
 });
+
+describe.runIf(process.platform === "linux")(
+  "operations stay on the directory the decision was made on",
+  () => {
+    let root: string;
+
+    beforeEach(async () => {
+      root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-pin-"));
+      await fs.mkdir(path.join(root, "public"));
+      await fs.mkdir(path.join(root, "secret"));
+      await fs.writeFile(path.join(root, "public", "key"), "PUBLIC");
+      await fs.writeFile(path.join(root, "secret", "key"), "TOPSECRET");
+    });
+
+    afterEach(async () => {
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    const secretKey = () => path.join(root, "secret", "key");
+    const movedKey = () => path.join(root, "moved", "key");
+
+    /** Replace the real `public` directory with a symlink to `secret`. */
+    async function replacePublic() {
+      await fs.rename(path.join(root, "public"), path.join(root, "moved"));
+      await fs.symlink("secret", path.join(root, "public"));
+    }
+
+    /** Run `swap` once, when `method` is entered: after the permission decision. */
+    function swapOnEntry(
+      backend: FilesystemBackend,
+      method: "read" | "write" | "edit" | "delete",
+      swap: () => Promise<void>,
+    ) {
+      const original = backend[method].bind(backend) as (
+        ...args: unknown[]
+      ) => Promise<unknown>;
+      Object.assign(backend, {
+        [method]: async (...args: unknown[]) => {
+          Object.assign(backend, { [method]: original });
+          await swap();
+          return original(...args);
+        },
+      });
+    }
+
+    function setup(method: "read" | "write" | "edit" | "delete") {
+      const backend = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: true,
+      });
+      swapOnEntry(backend, method, replacePublic);
+      return createFilesystemMiddleware({
+        backend,
+        permissions: [deny(["/secret/**"])],
+      });
+    }
+
+    it("read_file reads the checked file", async () => {
+      const result = await getTool(setup("read"), "read_file").invoke({
+        file_path: "/public/key",
+      });
+      expect(resultText(result)).toContain("PUBLIC");
+      expect(resultText(result)).not.toContain("TOPSECRET");
+    });
+
+    it("write_file writes the checked file", async () => {
+      await getTool(setup("write"), "write_file").invoke({
+        file_path: "/public/key",
+        content: "WRITTEN",
+      });
+      expect(await fs.readFile(secretKey(), "utf8")).toBe("TOPSECRET");
+      expect(await fs.readFile(movedKey(), "utf8")).toBe("WRITTEN");
+    });
+
+    it("edit_file edits the checked file", async () => {
+      await fs.writeFile(secretKey(), "PUBLIC");
+      await getTool(setup("edit"), "edit_file").invoke({
+        file_path: "/public/key",
+        old_string: "PUBLIC",
+        new_string: "EDITED",
+      });
+      expect(await fs.readFile(secretKey(), "utf8")).toBe("PUBLIC");
+      expect(await fs.readFile(movedKey(), "utf8")).toBe("EDITED");
+    });
+
+    it("delete removes the checked file", async () => {
+      await getTool(setup("delete"), "delete").invoke({
+        file_path: "/public/key",
+      });
+      expect(await fs.readFile(secretKey(), "utf8")).toBe("TOPSECRET");
+      expect(fsSync.existsSync(movedKey())).toBe(false);
+    });
+
+    it("write_file does not follow a symlink planted in a missing parent", async () => {
+      const mkdir = fsPromises.mkdir;
+      const spy = vi
+        .spyOn(fsPromises, "mkdir")
+        .mockImplementation(async (...args: Parameters<typeof mkdir>) => {
+          spy.mockRestore();
+          await fs.symlink(
+            path.join("..", "secret"),
+            path.join(root, "public", "new"),
+          );
+          return mkdir(...args);
+        });
+      const result = await getTool(
+        createFilesystemMiddleware({
+          backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          permissions: [deny(["/secret/**"])],
+        }),
+        "write_file",
+      ).invoke({ file_path: "/public/new/key", content: "WRITTEN" });
+      expect(resultStatus(result)).toBe("error");
+      expect(await fs.readFile(secretKey(), "utf8")).toBe("TOPSECRET");
+    });
+
+    it("write_file creates missing parents for an allowed path", async () => {
+      await getTool(
+        createFilesystemMiddleware({
+          backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          permissions: [deny(["/secret/**"])],
+        }),
+        "write_file",
+      ).invoke({ file_path: "/public/a/b/key", content: "NESTED" });
+      expect(
+        await fs.readFile(path.join(root, "public", "a", "b", "key"), "utf8"),
+      ).toBe("NESTED");
+    });
+
+    it("denies when the directory is replaced before the backend opens it", async () => {
+      const open = fsPromises.open;
+      const spy = vi
+        .spyOn(fsPromises, "open")
+        .mockImplementation(async (...args: Parameters<typeof open>) => {
+          spy.mockRestore();
+          await replacePublic();
+          return open(...args);
+        });
+
+      const result = await getTool(
+        createFilesystemMiddleware({
+          backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          permissions: [deny(["/secret/**"])],
+        }),
+        "read_file",
+      ).invoke({ file_path: "/public/key" });
+      expect(resultText(result)).toContain("permission denied for read");
+      expect(resultText(result)).not.toContain("TOPSECRET");
+    });
+
+    it("reports errors by path, not by descriptor", async () => {
+      await fs.writeFile(path.join(root, "plainfile"), "x");
+      const middleware = createFilesystemMiddleware({
+        backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+        permissions: [deny(["/secret/**"])],
+      });
+
+      const results = [
+        await getTool(middleware, "read_file").invoke({
+          file_path: "/public/missing",
+        }),
+        await getTool(middleware, "read_file").invoke({
+          file_path: "/nodir/missing",
+        }),
+        await getTool(middleware, "write_file").invoke({
+          file_path: "/plainfile/x",
+          content: "x",
+        }),
+      ];
+      for (const result of results) {
+        expect(resultStatus(result)).toBe("error");
+        expect(resultText(result)).not.toContain("/proc/self/fd");
+        expect(resultText(result)).not.toContain("Error: Error:");
+      }
+    });
+
+    it("delete reports the requested path", async () => {
+      await fs.symlink("public", path.join(root, "swap"));
+      const result = await getTool(
+        createFilesystemMiddleware({
+          backend: new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          permissions: [deny(["/secret/**"])],
+        }),
+        "delete",
+      ).invoke({ file_path: "/swap/key" });
+      expect(resultText(result)).toBe("Deleted /swap/key");
+    });
+
+    it.skipIf(process.getuid?.() === 0)(
+      "works in a directory that can be entered but not listed",
+      async () => {
+        await fs.chmod(path.join(root, "public"), 0o311);
+        try {
+          const result = await getTool(
+            createFilesystemMiddleware({
+              backend: new FilesystemBackend({
+                rootDir: root,
+                virtualMode: true,
+              }),
+              permissions: [deny(["/secret/**"])],
+            }),
+            "read_file",
+          ).invoke({ file_path: "/public/key" });
+          expect(resultText(result)).toContain("PUBLIC");
+        } finally {
+          await fs.chmod(path.join(root, "public"), 0o755);
+        }
+      },
+    );
+
+    it("read_file through a CompositeBackend route reads the checked file", async () => {
+      const routed = new FilesystemBackend({
+        rootDir: root,
+        virtualMode: true,
+      });
+      swapOnEntry(routed, "read", replacePublic);
+      const middleware = createFilesystemMiddleware({
+        backend: new CompositeBackend(
+          new FilesystemBackend({ rootDir: os.tmpdir(), virtualMode: true }),
+          { "/data/": routed },
+        ),
+        permissions: [deny(["/data/secret/**"])],
+      });
+
+      const result = await getTool(middleware, "read_file").invoke({
+        file_path: "/data/public/key",
+      });
+      expect(resultText(result)).toContain("PUBLIC");
+      expect(resultText(result)).not.toContain("TOPSECRET");
+    });
+  },
+);
+
+describe.skipIf(process.platform === "win32")(
+  "symlinks do not move an operation to another CompositeBackend route",
+  () => {
+    let root: string;
+    let routed: string;
+
+    beforeEach(async () => {
+      root = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-route-"));
+      routed = fsSync.mkdtempSync(path.join(os.tmpdir(), "deepagents-route-"));
+      await fs.mkdir(path.join(root, "mem"));
+      await fs.writeFile(path.join(root, "mem", "x"), "DEFAULT");
+      await fs.writeFile(path.join(routed, "x"), "ROUTED");
+      await fs.symlink("mem", path.join(root, "link"));
+    });
+
+    afterEach(async () => {
+      await fs.rm(root, { recursive: true, force: true });
+      await fs.rm(routed, { recursive: true, force: true });
+    });
+
+    function middleware() {
+      return createFilesystemMiddleware({
+        backend: new CompositeBackend(
+          new FilesystemBackend({ rootDir: root, virtualMode: true }),
+          {
+            "/mem/": new FilesystemBackend({
+              rootDir: routed,
+              virtualMode: true,
+            }),
+          },
+        ),
+        permissions: [deny(["/nothing/**"])],
+      });
+    }
+
+    it("refuses write_file", async () => {
+      const result = await getTool(middleware(), "write_file").invoke({
+        file_path: "/link/x",
+        content: "WRITTEN",
+      });
+      expect(resultText(result)).toContain("served by a different backend");
+      expect(await fs.readFile(path.join(routed, "x"), "utf8")).toBe("ROUTED");
+      expect(await fs.readFile(path.join(root, "mem", "x"), "utf8")).toBe(
+        "DEFAULT",
+      );
+    });
+
+    it("refuses delete", async () => {
+      const result = await getTool(middleware(), "delete").invoke({
+        file_path: "/link/x",
+      });
+      expect(resultText(result)).toContain("served by a different backend");
+      expect(fsSync.existsSync(path.join(routed, "x"))).toBe(true);
+    });
+  },
+);

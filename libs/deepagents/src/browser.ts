@@ -106,6 +106,7 @@ export {
   type AsyncSubAgent,
   type AsyncTask,
   type AsyncTaskStatus,
+  type TaskEvent,
 } from "./middleware/index.js";
 
 // Export shared state values (similar to LangGraph's messagesValue pattern)

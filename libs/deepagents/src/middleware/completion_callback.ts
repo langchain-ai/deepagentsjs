@@ -3,6 +3,9 @@
  *
  * @experimental - this middleware is experimental and may change in future releases.
  *
+ * @deprecated `createDeepAgent` now notifies the launching agent on its own;
+ * adding this middleware too sends the parent two notifications per task.
+ *
  * This middleware sends a notification to a callback thread when a subagent
  * completes successfully or raises an error. The callback agent can then
  * process that notification instead of relying only on polling via
@@ -83,6 +86,7 @@ import {
    */
   type AgentMiddleware as _AgentMiddleware,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import { Client } from "@langchain/langgraph-sdk";
 import { AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -242,6 +246,9 @@ export function extractLastMessage(
  * If `callbackThreadId` is not present in state, the middleware does
  * nothing.
  *
+ * @deprecated `createDeepAgent` now notifies the launching agent on its own;
+ * adding this middleware too sends the parent two notifications per task.
+ *
  * @param options - Configuration options.
  * @returns An `AgentMiddleware` instance.
  *
@@ -303,6 +310,7 @@ export function createCompletionCallbackMiddleware(
 
   return createMiddleware({
     name: "CompletionCallbackMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: CompletionCallbackStateSchema,
 
     /**

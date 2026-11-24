@@ -1239,16 +1239,52 @@ describe("ContextHubBackend", () => {
     expect(paths).toEqual(["/a.md", "/c.md"]);
   });
 
-  it("glob ignores path argument and matches nested files like Python fnmatch", async () => {
+  it("glob matches nested files like Python fnmatch", async () => {
     const { backend } = makeBackend({
       "a.md": { type: "file", content: "a" },
       "nested/b.md": { type: "file", content: "b" },
       "nested/c.txt": { type: "file", content: "c" },
     });
 
-    const result = await backend.glob("*.md", "/nested");
+    const result = await backend.glob("*.md");
     const paths = (result.files ?? []).map((file) => file.path).sort();
     expect(paths).toEqual(["/a.md", "/nested/b.md"]);
+  });
+
+  it("glob only matches files under the path argument", async () => {
+    const { backend } = makeBackend({
+      "a.md": { type: "file", content: "a" },
+      "nested/b.md": { type: "file", content: "b" },
+      "nested/c.txt": { type: "file", content: "c" },
+      "nested-other/d.md": { type: "file", content: "d" },
+    });
+
+    const result = await backend.glob("*.md", "/nested/");
+    const paths = (result.files ?? []).map((file) => file.path);
+    expect(paths).toEqual(["/nested/b.md"]);
+  });
+
+  it("glob on a file path only matches that file", async () => {
+    const { backend } = makeBackend({
+      "instructions.md": { type: "file", content: "a" },
+      ".mda/deploy-manifest.json": { type: "file", content: "{}" },
+      "skills/research/SKILL.md": { type: "file", content: "b" },
+    });
+
+    const result = await backend.glob("**/*", "/instructions.md");
+    const paths = (result.files ?? []).map((file) => file.path);
+    expect(paths).toEqual(["/instructions.md"]);
+  });
+
+  it("glob under a path still accepts patterns written from the repo root", async () => {
+    const { backend } = makeBackend({
+      "skills/research/SKILL.md": { type: "file", content: "a" },
+      "memories/AGENTS.md": { type: "file", content: "b" },
+    });
+
+    const result = await backend.glob("skills/**/SKILL.md", "/skills");
+    const paths = (result.files ?? []).map((file) => file.path);
+    expect(paths).toEqual(["/skills/research/SKILL.md"]);
   });
 
   it("grep glob follows Python fnmatch semantics for nested paths", async () => {

@@ -15,7 +15,9 @@ import {
   ToolMessage,
   type AgentMiddleware as _AgentMiddleware,
   type ToolRuntime,
+  type ToolCallRequest,
 } from "langchain";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
 import type { BaseMessage } from "@langchain/core/messages";
 import { ContextOverflowError } from "@langchain/core/errors";
 import {
@@ -31,9 +33,11 @@ import type {
   BackendProtocolV2,
   BackendRuntime,
   DeleteResult,
+  EditResult,
   FileData,
   LsResult,
   ReadResult,
+  WriteResult,
 } from "../backends/protocol.js";
 import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import { StateBackend } from "../backends/state.js";
@@ -42,6 +46,7 @@ import {
   hydrateMessages,
   offloadHumanMessages,
   offloadToolResult,
+  withoutBlobRefs,
 } from "./blobOffload.js";
 import {
   sanitizeToolCallId,
@@ -73,6 +78,45 @@ function normalizeFilePathInput(input: unknown): unknown {
     return { ...rest, file_path: path };
   }
   return input;
+}
+
+function fileMutationPath(
+  call: ToolCallRequest["toolCall"],
+): string | undefined {
+  if (!["write_file", "edit_file", "delete"].includes(call.name)) return;
+  const input = normalizeFilePathInput(call.args) as
+    | { file_path?: unknown }
+    | undefined;
+  if (typeof input?.file_path !== "string") return;
+  try {
+    return validatePath(input.file_path);
+  } catch {
+    return;
+  }
+}
+
+function parallelFileMutationError(
+  request: ToolCallRequest,
+): ToolMessage | undefined {
+  const { toolCall, state } = request;
+  const path = fileMutationPath(toolCall);
+  if (!path || !toolCall.id) return;
+  const turn = state.messages?.findLast((message) =>
+    AIMessage.isInstance(message),
+  );
+  for (const sibling of turn?.tool_calls ?? []) {
+    if (sibling.id === toolCall.id) return;
+    if (fileMutationPath(sibling) === path) {
+      return new ToolMessage({
+        content:
+          "Error: parallel file mutations to the same path are not allowed.",
+        tool_call_id: toolCall.id,
+        name: toolCall.name,
+        status: "error",
+      });
+    }
+  }
+  return;
 }
 
 /**
@@ -372,6 +416,32 @@ export const GREP_TRUNCATION_NOTE =
   "specific pattern or a narrower path), or raise max_count, to see the rest.";
 
 /**
+ * Characters of a grep line shown to the model. Longer lines (minified JSON,
+ * offloaded tool results) show a window around the match instead, so one hit
+ * can't return the whole line.
+ */
+export const GREP_LINE_CHAR_LIMIT = 2000;
+
+/**
+ * Clip `text` to a `GREP_LINE_CHAR_LIMIT` window centered on `pattern`,
+ * falling back to the head of the line when `pattern` isn't found in it.
+ */
+function clipGrepLine(text: string, pattern: string): string {
+  if (text.length <= GREP_LINE_CHAR_LIMIT) return text;
+  const center =
+    Math.max(text.indexOf(pattern), 0) + Math.floor(pattern.length / 2);
+  const start = Math.min(
+    Math.max(center - GREP_LINE_CHAR_LIMIT / 2, 0),
+    text.length - GREP_LINE_CHAR_LIMIT,
+  );
+  const end = start + GREP_LINE_CHAR_LIMIT;
+  const before = start > 0 ? `[${start} chars clipped] ` : "";
+  const after =
+    end < text.length ? ` [${text.length - end} chars clipped]` : "";
+  return `${before}${text.slice(start, end)}${after}`;
+}
+
+/**
  * Default cap on the number of matches the grep tool returns.
  * Set to null to disable the cap.
  */
@@ -431,22 +501,16 @@ function extractTextFromMessage(message: {
 }
 
 /**
- * Image, audio and video blocks a tool returns (e.g. an MCP screenshot). They
- * are kept on an evicted tool message and do not count toward its size, since
- * their base64 payload is not text the model could page through.
+ * Whether a content block is an image. Tool-result eviction skips images when
+ * sizing a result and keeps them when evicting it: base64 length says little
+ * about what a provider charges for an image.
  */
-const TOOL_MEDIA_BLOCK_TYPES: ReadonlySet<unknown> = new Set([
-  "image",
-  "image_url",
-  "audio",
-  "video",
-]);
-
-function isToolMediaBlock(block: unknown): boolean {
+function isImageBlock(block: unknown): boolean {
   return (
     typeof block === "object" &&
     block !== null &&
-    TOOL_MEDIA_BLOCK_TYPES.has((block as { type?: unknown }).type)
+    "type" in block &&
+    (block.type === "image" || block.type === "image_url")
   );
 }
 
@@ -456,7 +520,7 @@ function stringifyToolContent(content: unknown): string {
   }
   if (Array.isArray(content)) {
     return content
-      .filter((block) => !isToolMediaBlock(block))
+      .filter((block) => !isImageBlock(block))
       .map((block) => {
         if (
           typeof block === "object" &&
@@ -476,28 +540,29 @@ function stringifyToolContent(content: unknown): string {
 }
 
 /**
- * Build replacement content for an evicted HumanMessage, preserving non-text blocks.
+ * Build replacement content for an evicted message, preserving the blocks `keep` selects.
  *
  * For plain string content, returns the replacement text directly. For list content
- * with mixed block types (e.g., text + image), replaces all text blocks with a single
- * text block containing the replacement text while keeping non-text blocks intact.
+ * with mixed block types (e.g., text + image), replaces the other blocks with a single
+ * text block containing the replacement text while keeping the selected blocks intact.
+ * By default every non-text block is kept.
  */
-function buildEvictedHumanContent(
-  message: HumanMessage,
+function buildEvictedContent(
+  message: BaseMessage,
   replacementText: string,
-): string | Array<Record<string, unknown>> {
+  keep: (block: { type: string }) => boolean = (block) => block.type !== "text",
+): BaseMessage["content"] {
   if (typeof message.content === "string") {
     return replacementText;
   }
   if (Array.isArray(message.content)) {
-    const mediaBlocks = message.content.filter(
-      (block) =>
-        typeof block === "object" && block !== null && block.type !== "text",
+    const keptBlocks = message.content.filter(
+      (block) => typeof block === "object" && block !== null && keep(block),
     );
-    if (mediaBlocks.length === 0) {
+    if (keptBlocks.length === 0) {
       return replacementText;
     }
-    return [{ type: "text", text: replacementText }, ...mediaBlocks];
+    return [{ type: "text", text: replacementText }, ...keptBlocks];
   }
   return replacementText;
 }
@@ -519,9 +584,9 @@ function buildTruncatedHumanMessage(
     "{file_path}",
     filePath,
   ).replace("{content_sample}", contentSample);
-  const evictedContent = buildEvictedHumanContent(message, replacementText);
+  const evictedContent = buildEvictedContent(message, replacementText);
   return new HumanMessage({
-    content: evictedContent as any,
+    content: evictedContent,
     id: message.id,
     additional_kwargs: { ...message.additional_kwargs },
     response_metadata: { ...message.response_metadata },
@@ -581,6 +646,7 @@ import {
 } from "../permissions/enforce.js";
 import { CompositeBackend } from "../backends/composite.js";
 import { getRealpath } from "../backends/realpath.js";
+import { getPin } from "../backends/pin.js";
 
 /**
  * Zod schema for legacy FileDataV1 (content as line array).
@@ -597,6 +663,7 @@ export const FileDataV1Schema = z.object({
 export const FileDataV2Schema = z.object({
   content: z.union([z.string(), z.instanceof(Uint8Array)]),
   mimeType: z.string(),
+  encoding: z.enum(["utf-8", "base64"]).optional(),
   created_at: z.string(),
   modified_at: z.string(),
 });
@@ -707,11 +774,15 @@ async function resolveRealPath(
 /**
  * Check whether `path` is permitted under `rules` for `operation`.
  *
- * Returns the canonical path to hand the backend, or an error string to
- * surface to the model. The decision covers every form of the target: the
- * lexical canonical path (dot and empty segments dropped) and, when the
- * backend has a realpath hook, the symlink-resolved path it would actually
- * touch. A deny on either blocks the call.
+ * Returns the canonical path, the `target` to hand the backend for a
+ * single-file operation, or an error string to surface to the model. The
+ * decision covers every form of the target: the lexical canonical path (dot
+ * and empty segments dropped) and, when the backend has a realpath hook, the
+ * symlink-resolved path it would actually touch. A deny on either blocks the
+ * call.
+ *
+ * `target` is the path with its parent resolved once and checked, so a
+ * symlink swapped after the check cannot redirect the operation.
  *
  * Never throws: an invalid path (non-absolute, or containing `..` or `~`), one
  * the backend cannot resolve, or a denied one is a recoverable tool error, not
@@ -724,12 +795,15 @@ async function checkPermission(
   rules: FilesystemPermission[],
   operation: FilesystemOperation,
   path: string,
-): Promise<{ path: string; error?: undefined } | { error: string }> {
+): Promise<
+  { path: string; target: string; error?: undefined } | { error: string }
+> {
   if (rules.length === 0) {
-    return { path };
+    return { path, target: path };
   }
 
   let canonical: string;
+  let target: string;
   let real: string;
   try {
     canonical = validatePath(path);
@@ -738,9 +812,16 @@ async function checkPermission(
         error: `Error: permission denied for ${operation} on ${canonical}`,
       };
     }
-    real = await resolveRealPath(backend, canonical);
+    target = await resolveParentRealPath(backend, canonical);
+    real = await resolveRealPath(backend, target);
   } catch (error) {
     return { error: `Error: ${getErrorMessage(error)}` };
+  }
+
+  if (crossesRoute(backend, canonical, target)) {
+    return {
+      error: `Error: ${canonical} resolves to ${target}, which is served by a different backend`,
+    };
   }
 
   if (
@@ -752,15 +833,87 @@ async function checkPermission(
     };
   }
 
-  return { path: canonical };
+  return { path: canonical, target };
 }
 
 /**
- * Build an error {@link ToolMessage} for a rejected or denied path. Returning a
- * bare string would be wrapped as a `status: "success"` message whose content
- * merely starts with "Error:"; marking `status: "error"` reports the failure
- * accurately so callers and the model can distinguish a real failure from a
- * successful result.
+ * Run a single-path `operation` on `target` through the backend's pin hook when
+ * rules are configured and the backend has one, so the final decision is made
+ * on the directory the operation actually uses. `isDenied` receives the real
+ * path. Without a hook, `operation` runs on the path `checkPermission` resolved.
+ *
+ * Errors raised here, rather than by `operation`, start with `errorPrefix` so
+ * they match how the calling tool formats backend errors.
+ */
+async function runBoundToTarget<T extends { error?: string }>(
+  backend: BackendProtocolV2,
+  rules: FilesystemPermission[],
+  target: string,
+  options: { create: boolean; describe: string; errorPrefix: string },
+  isDenied: (realPath: string) => boolean,
+  operation: () => Promise<T>,
+): Promise<T | { error: string }> {
+  const pin = rules.length > 0 ? getPin(backend) : undefined;
+  if (pin === undefined) {
+    return operation();
+  }
+  const { create, describe, errorPrefix } = options;
+  let operationStarted = false;
+  try {
+    return await pin(
+      target,
+      { create },
+      (realPath) => {
+        const real = validatePath(realPath);
+        return isDenied(real)
+          ? `${errorPrefix}permission denied for ${describe} (resolves to ${real})`
+          : undefined;
+      },
+      () => {
+        operationStarted = true;
+        return operation();
+      },
+    );
+  } catch (error) {
+    if (operationStarted) {
+      throw error;
+    }
+    return {
+      error: `${errorPrefix}${describe} failed: ${getErrorMessage(error)}`,
+    };
+  }
+}
+
+/**
+ * Whether `target` is served by a different `CompositeBackend` route than
+ * `requested`. Symlink resolution must not move an operation to another
+ * backend.
+ */
+function crossesRoute(
+  backend: BackendProtocolV2,
+  requested: string,
+  target: string,
+): boolean {
+  const resolveBackendForPath = (
+    backend as {
+      resolveBackendForPath?: (path: string) => [BackendProtocolV2, string];
+    }
+  ).resolveBackendForPath;
+  if (typeof resolveBackendForPath !== "function" || requested === target) {
+    return false;
+  }
+  return (
+    resolveBackendForPath.call(backend, requested)[0] !==
+    resolveBackendForPath.call(backend, target)[0]
+  );
+}
+
+/**
+ * Build an error {@link ToolMessage} for a denied path or a failed backend
+ * operation. Returning a bare string would be wrapped as a `status: "success"`
+ * message whose content merely starts with "Error:"; marking `status: "error"`
+ * reports the failure accurately so callers and the model can distinguish a
+ * real failure from a successful result.
  */
 function toolError(
   runtime: ToolRuntime,
@@ -1028,10 +1181,11 @@ function parentPath(path: string): string {
 }
 
 /**
- * Resolve the path a delete of `target` would actually remove. Backends unlink
- * a symlink leaf rather than following it, so only the parent is resolved.
+ * Resolve symlinks in the parent of `target`, keeping its leaf as given.
+ * Backends refuse to follow (or, for delete, unlink) a symlinked leaf, so this
+ * is the path a single-file operation actually touches.
  */
-async function resolveDeleteRealPath(
+async function resolveParentRealPath(
   backend: BackendProtocolV2,
   target: string,
 ): Promise<string> {
@@ -1137,7 +1291,7 @@ export const EDIT_FILE_TOOL_DESCRIPTION = context`
   Performs exact string replacements in files.
 
   Usage:
-  - You must read the file before editing; this tool errors otherwise.
+  - You must read the file before editing.
   - Preserve the exact source indentation from the read output, and never include the read status header in old_string or new_string.
   - Prefer editing an existing file over creating a new one.
   - Only use emojis if the user explicitly requests it.
@@ -1180,6 +1334,8 @@ const EXECUTE_SEARCH_GUIDANCE = {
   none: "",
 } as const;
 
+// Only shown to the model when the backend implements SandboxBackendProtocol
+// (see `isSandboxBackend`); otherwise `execute` is removed from the tool list.
 function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
   const searchGuidance = hasGrep
     ? hasGlob
@@ -1205,8 +1361,6 @@ function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
     - Chain commands with ';' or '&&' (use '&&' when a command depends on the previous); do not use newlines except inside quoted strings.
     - Use absolute paths and avoid \`cd\` so the working directory stays stable.
     - ${searchGuidance}Use read_file rather than cat/head/tail.${examples.length ? `\n${examples.join("\n")}` : ""}
-
-    Only available on backends implementing SandboxBackendProtocol; otherwise it returns an error.
   `;
 }
 
@@ -1320,10 +1474,17 @@ function createReadFileTool(
         requestedLimit,
       );
 
-      const readResult = await resolvedBackend.read(
-        permission.path,
-        offset,
-        limit,
+      const readResult: ReadResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        {
+          create: false,
+          describe: `read on ${permission.path}`,
+          errorPrefix: "",
+        },
+        (real) => decidePathAccess(permissions, "read", real) === "deny",
+        async () => resolvedBackend.read(permission.target, offset, limit),
       );
       if (readResult.error) {
         return toolError(runtime, "read_file", `Error: ${readResult.error}`);
@@ -1469,10 +1630,21 @@ function createWriteFileTool(
       }
 
       const { file_path, content } = input;
-      const result = await resolvedBackend.write(permission.path, content);
+      const result: WriteResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        {
+          create: true,
+          describe: `write on ${permission.path}`,
+          errorPrefix: "Error: ",
+        },
+        (real) => decidePathAccess(permissions, "write", real) === "deny",
+        async () => resolvedBackend.write(permission.target, content),
+      );
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "write_file", result.error);
       }
 
       // If filesUpdate is present, return Command to update state
@@ -1538,15 +1710,27 @@ function createEditFileTool(
       }
 
       const { file_path, old_string, new_string, replace_all = false } = input;
-      const result = await resolvedBackend.edit(
-        permission.path,
-        old_string,
-        new_string,
-        replace_all,
+      const result: EditResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        permission.target,
+        {
+          create: false,
+          describe: `write on ${permission.path}`,
+          errorPrefix: "Error: ",
+        },
+        (real) => decidePathAccess(permissions, "write", real) === "deny",
+        async () =>
+          resolvedBackend.edit(
+            permission.target,
+            old_string,
+            new_string,
+            replace_all,
+          ),
       );
 
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "edit_file", result.error);
       }
 
       const message = new ToolMessage({
@@ -1636,10 +1820,11 @@ function createDeleteTool(
         );
       }
 
+      let deleteTarget = validatedPath;
       if (permissions.length > 0) {
         let realTarget: string;
         try {
-          realTarget = await resolveDeleteRealPath(
+          realTarget = await resolveParentRealPath(
             resolvedBackend,
             validatedPath,
           );
@@ -1648,6 +1833,13 @@ function createDeleteTool(
             runtime,
             "delete",
             `Error: ${getErrorMessage(error)}`,
+          );
+        }
+        if (crossesRoute(resolvedBackend, validatedPath, realTarget)) {
+          return toolError(
+            runtime,
+            "delete",
+            `Error: ${validatedPath} resolves to ${realTarget}, which is served by a different backend`,
           );
         }
         if (realTarget !== validatedPath) {
@@ -1664,6 +1856,7 @@ function createDeleteTool(
             );
           }
         }
+        deleteTarget = realTarget;
       }
 
       if (!supportsDelete(resolvedBackend)) {
@@ -1674,13 +1867,25 @@ function createDeleteTool(
         );
       }
 
-      const result: DeleteResult = await resolvedBackend.delete(validatedPath);
+      const result: DeleteResult = await runBoundToTarget(
+        resolvedBackend,
+        permissions,
+        deleteTarget,
+        {
+          create: false,
+          describe: `write on ${validatedPath}`,
+          errorPrefix: "Error: ",
+        },
+        (real) =>
+          findDeleteDenyPatterns(permissions, real, hasDescendants).length > 0,
+        async () => resolvedBackend.delete(deleteTarget),
+      );
       if (result.error) {
         return toolError(runtime, "delete", result.error);
       }
 
       const message = new ToolMessage({
-        content: `Deleted ${result.path ?? validatedPath}`,
+        content: `Deleted ${result.path === undefined || result.path === deleteTarget ? validatedPath : result.path}`,
         tool_call_id: runtime.toolCall?.id as string,
         name: "delete",
         metadata: result.metadata,
@@ -1743,7 +1948,11 @@ function createGlobTool(
       );
 
       if (globResult.error) {
-        return `Error finding files: ${globResult.error}`;
+        return toolError(
+          runtime,
+          "glob",
+          `Error finding files: ${globResult.error}`,
+        );
       }
 
       const infos = await filterByPermissions(
@@ -1828,9 +2037,8 @@ function createGrepTool(
         maxCount,
       );
 
-      // If string, it's an error
       if (result.error) {
-        return result.error;
+        return toolError(runtime, "grep", result.error);
       }
 
       const matches = await filterByPermissions(
@@ -1845,7 +2053,10 @@ function createGrepTool(
         return `No matches found for pattern '${pattern}'`;
       }
 
-      const formatted = formatGrepMatches(matches, output_mode);
+      const formatted = formatGrepMatches(
+        matches.map((m) => ({ ...m, text: clipGrepLine(m.text, pattern) })),
+        output_mode,
+      );
       const truncated = truncateIfTooLong(formatted);
       let content =
         typeof truncated === "string" ? truncated : truncated.join("\n");
@@ -2389,14 +2600,8 @@ export function createFilesystemMiddleware(
           .replace("{file_path}", evictPath)
           .replace("{content_sample}", contentSample);
 
-    const mediaBlocks = Array.isArray(msg.content)
-      ? msg.content.filter(isToolMediaBlock)
-      : [];
     const truncatedMessage = new ToolMessage({
-      content:
-        mediaBlocks.length > 0
-          ? [{ type: "text", text: replacementText }, ...mediaBlocks]
-          : replacementText,
+      content: buildEvictedContent(msg, replacementText, isImageBlock),
       tool_call_id: msg.tool_call_id,
       name: msg.name,
       id: msg.id,
@@ -2415,6 +2620,7 @@ export function createFilesystemMiddleware(
 
   return createMiddleware({
     name: "FilesystemMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: FilesystemStateSchema,
     tools: allTools,
     async beforeAgent(state) {
@@ -2544,6 +2750,9 @@ export function createFilesystemMiddleware(
           BLOBS_PREFIX,
           blobCache,
         )) as typeof messages;
+      } else if (messages) {
+        // References this agent can't load (e.g. from a forked parent) become a notice the model accepts.
+        messages = withoutBlobRefs(messages);
       }
 
       const finalRequest = {
@@ -2604,6 +2813,8 @@ export function createFilesystemMiddleware(
       }
     },
     wrapToolCall: async (request, handler) => {
+      const parallelMutationError = parallelFileMutationError(request);
+      if (parallelMutationError) return parallelMutationError;
       const toolName = request.toolCall?.name;
       let result = await handler(request);
 

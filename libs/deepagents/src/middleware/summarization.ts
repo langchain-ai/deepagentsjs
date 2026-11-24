@@ -52,7 +52,11 @@ import {
   type AgentMiddleware as _AgentMiddleware,
   context,
 } from "langchain";
-import { getBufferString } from "@langchain/core/messages";
+import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
+import {
+  addNotificationMetadata,
+  getBufferString,
+} from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import type { BaseLanguageModel } from "@langchain/core/language_models/base";
 import type { ClientTool, ServerTool } from "@langchain/core/tools";
@@ -995,9 +999,8 @@ export function createSummarizationMiddleware(
       content = `Here is a summary of the conversation to date:\n\n${summary}`;
     }
 
-    return new HumanMessage({
-      content,
-      additional_kwargs: { lc_source: "summarization" },
+    return addNotificationMetadata(new HumanMessage({ content }), {
+      source: "summarization",
     });
   }
 
@@ -1182,6 +1185,7 @@ export function createSummarizationMiddleware(
 
   return createMiddleware({
     name: "SummarizationMiddleware",
+    tracePolicy: { processInputs: omitPayload },
     stateSchema: SummarizationStateSchema,
 
     async wrapModelCall(request, handler) {

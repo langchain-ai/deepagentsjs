@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+import {
+  HumanMessage,
+  AIMessage,
+  ToolMessage,
+  getNotificationMetadata,
+} from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import { isCommand } from "@langchain/langgraph";
 import { ContextOverflowError } from "@langchain/core/errors";
@@ -515,6 +520,9 @@ describe("createSummarizationMiddleware", () => {
       expect(capturedRequest).not.toBeNull();
       const summaryMessage = capturedRequest!.messages[0];
       expect(summaryMessage.additional_kwargs?.lc_source).toBe("summarization");
+      expect(getNotificationMetadata(summaryMessage)).toEqual({
+        source: "summarization",
+      });
     });
   });
 

@@ -2079,11 +2079,29 @@ describe("provider payloads", () => {
       );
     });
 
-    it.each(["gpt-6", "gpt-5.6"])(
-      "discloses inline for the undated %s alias",
-      async (alias) => {
+    it.each(["claude-sonnet-5-5", "claude-haiku-5-5"])(
+      "discloses inline for %s, whose profile sets midConversationTools",
+      async (modelName) => {
+        const { model, stub } = stubAnthropic(
+          [[read("r1")], "done"],
+          modelName,
+        );
+
+        await skillsAgent(model).invoke(
+          skillsInput({ crm: "create_customer_request" }),
+        );
+
+        expect(disclosedNames("anthropic", stub.bodies[1])).toEqual([
+          "create_customer_request",
+        ]);
+      },
+    );
+
+    it.each(["gpt-4.1", "gpt-5.5", "gpt-6.1-sol"])(
+      "discloses inline for %s, whose profile sets midConversationTools",
+      async (modelName) => {
         const { model, stub } = stubOpenAI([[read("r1")], "done"], {
-          model: alias,
+          model: modelName,
         });
 
         await skillsAgent(model).invoke(
@@ -2095,6 +2113,24 @@ describe("provider payloads", () => {
         ]);
       },
     );
+
+    it("discloses inline for a ChatOpenAI that routes to the Responses API on its own", async () => {
+      const stub = new ProviderStub(openaiResponse, [[read("r1")], "done"]);
+      const model = new ChatOpenAI({
+        model: "gpt-5.6-sol",
+        apiKey: "test-key",
+        maxRetries: 0,
+        configuration: { fetch: stub.fetch },
+      });
+
+      await skillsAgent(model).invoke(
+        skillsInput({ crm: "create_customer_request" }),
+      );
+
+      expect(disclosedNames("openai", stub.bodies[1])).toEqual([
+        "create_customer_request",
+      ]);
+    });
 
     it("discloses inline for a string model", async () => {
       const stub = new ProviderStub(anthropicMessage, [[read("r1")], "done"]);
@@ -2548,8 +2584,8 @@ describe("provider payloads", () => {
         () => stubOpenAI(fallbackTurns(), { useResponsesApi: false }),
       ],
       [
-        "an OpenAI Responses model off the allowlist",
-        () => stubOpenAI(fallbackTurns(), { model: "gpt-5.5" }),
+        "an OpenAI Responses model without the capability",
+        () => stubOpenAI(fallbackTurns(), { model: "gpt-4o" }),
       ],
       ["AzureChatOpenAI", () => stubAzureOpenAI(fallbackTurns())],
     ])(

@@ -464,3 +464,14 @@ export async function hydrateMessages(
   }
   return restorePayloads(messages, payloads);
 }
+
+/**
+ * Replace each blob reference in `messages` with a notice that the content is
+ * unavailable, for an agent that can't load blobs, so the model still accepts
+ * the request.
+ */
+export function withoutBlobRefs<T extends readonly unknown[]>(messages: T): T {
+  return messages.some(messageHasRefs)
+    ? (restorePayloads(messages, new Map()) as unknown as T)
+    : messages;
+}
