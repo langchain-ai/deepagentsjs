@@ -472,6 +472,20 @@ describe("StoreBackend", () => {
       expect(raw.data!.content).toBeInstanceOf(Uint8Array);
       expect(raw.data!.content).toEqual(pngBytes);
     });
+
+    it("keeps non-UTF-8 bytes at a text path byte-for-byte", async () => {
+      const { runtime } = makeConfig();
+      const backend = new StoreBackend(runtime);
+
+      const bytes = new Uint8Array([0x63, 0x61, 0x66, 0xe9, 0xff, 0x00, 0x41]);
+      const result = await backend.uploadFiles([["/latin1.txt", bytes]]);
+      expect(result[0].error).toBeNull();
+
+      const raw = await backend.readRaw("/latin1.txt");
+      expect(raw.data).toMatchObject({ mimeType: "application/octet-stream" });
+      const [download] = await backend.downloadFiles(["/latin1.txt"]);
+      expect(new Uint8Array(download.content!)).toEqual(bytes);
+    });
   });
 
   describe("downloadFiles", () => {
