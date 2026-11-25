@@ -49,7 +49,8 @@ export interface LocalShellBackendOptions {
 
   /**
    * Maximum time in seconds to wait for shell command execution.
-   * Commands exceeding this timeout will be terminated.
+   * Commands exceeding this timeout will be forcefully terminated, together
+   * with their process group (POSIX) or process tree (Windows).
    * @defaultValue `120`
    */
   timeout?: number;
@@ -368,16 +369,55 @@ export class LocalShellBackend
       let stdout = "";
       let stderr = "";
       let timedOut = false;
+      const resolveTimeout = (error?: Error | null) => {
+        resolve({
+          output:
+            `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.` +
+            (error ? `\nError terminating command: ${error.message}` : ""),
+          exitCode: 124,
+          truncated: false,
+        });
+      };
 
       const child = cp.spawn(command, {
         shell: true,
         env: this.#env,
         cwd: this.cwd,
+        // Give each command its own process group on POSIX for timeout cleanup.
+        detached: process.platform !== "win32",
       });
 
       const timer = setTimeout(() => {
         timedOut = true;
-        child.kill("SIGTERM");
+        if (child.pid === undefined || child.pid <= 0) {
+          resolveTimeout();
+          return;
+        }
+        if (process.platform === "win32") {
+          // Killing only cmd.exe leaves its descendants and output pipes alive.
+          cp.execFile(
+            path.join(
+              process.env.SystemRoot ?? "C:\\Windows",
+              "System32",
+              "taskkill.exe",
+            ),
+            ["/PID", String(child.pid), "/T", "/F"],
+            { windowsHide: true, timeout: 1000 },
+            resolveTimeout,
+          );
+        } else {
+          try {
+            process.kill(-child.pid, "SIGKILL");
+            resolveTimeout();
+          } catch (error) {
+            // The group may have exited just as the timeout fired.
+            resolveTimeout(
+              (error as NodeJS.ErrnoException).code === "ESRCH"
+                ? undefined
+                : (error as Error),
+            );
+          }
+        }
       }, this.#timeout * 1000);
 
       child.stdout.on("data", (data: Buffer) => {
@@ -399,13 +439,11 @@ export class LocalShellBackend
 
       child.on("close", (code, signal) => {
         clearTimeout(timer);
+        // Timeout settlement belongs to the process-tree cleanup above.
+        if (timedOut) return;
 
-        if (timedOut || signal === "SIGTERM") {
-          resolve({
-            output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
-            exitCode: 124,
-            truncated: false,
-          });
+        if (signal === "SIGTERM") {
+          resolveTimeout();
           return;
         }
 
