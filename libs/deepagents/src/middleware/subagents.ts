@@ -17,6 +17,7 @@ import {
   context,
 } from "langchain";
 import { omitPayload } from "@langchain/core/tracers/tracer_langchain";
+import { deepCompareStrict } from "@langchain/core/utils/json_schema";
 import { Command, getCurrentTaskInput } from "@langchain/langgraph";
 import type { LanguageModelLike } from "@langchain/core/language_models/base";
 import { RunnableBinding, type Runnable } from "@langchain/core/runnables";
@@ -26,6 +27,7 @@ import { FilesystemPermission } from "../permissions/types.js";
 import { getEffectiveMessages } from "./summarization.js";
 import { appendToSystemMessage } from "./utils.js";
 import { createUnsupportedContentMiddleware } from "./unsupportedContent.js";
+import type { FilesRecord, FilesRecordUpdate } from "./fs.js";
 
 export type { AgentMiddleware };
 
@@ -451,8 +453,33 @@ function returnCommandWithStateUpdate(
   result: Record<string, unknown>,
   toolCallId: string,
   checkpointNs: string | undefined,
+  initialFiles: FilesRecord = {},
+  inferFileDeletions = true,
 ): Command {
   const stateUpdate = filterStateForSubagent(result);
+
+  // Returning inherited files would overwrite a parallel sibling's changes.
+  // Compare per file so unchanged copies never enter the parent's reducer.
+  if (stateUpdate.files != null) {
+    const files = stateUpdate.files as FilesRecordUpdate;
+    const delta: FilesRecordUpdate = {};
+    for (const [path, file] of Object.entries(files)) {
+      if (!deepCompareStrict(file, initialFiles[path])) {
+        delta[path] = file;
+      }
+    }
+    // Opaque compiled runnables can return partial updates, not full snapshots.
+    if (inferFileDeletions) {
+      for (const path of Object.keys(initialFiles)) {
+        if (!(path in files)) delta[path] = null;
+      }
+    }
+    if (Object.keys(delta).length > 0) {
+      stateUpdate.files = delta;
+    } else {
+      delete stateUpdate.files;
+    }
+  }
 
   let content: string | ContentBlock[];
 
@@ -1053,6 +1080,8 @@ function createTaskTool(options: {
       result,
       config.toolCall.id,
       checkpointNs,
+      currentState.files as FilesRecord | undefined,
+      !("runnable" in spec),
     );
   }
 
