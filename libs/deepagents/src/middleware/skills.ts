@@ -86,7 +86,7 @@ import type {
   BackendFactory,
   BackendProtocolV2,
 } from "../backends/protocol.js";
-import { resolveBackend } from "../backends/protocol.js";
+import { isSandboxBackend, resolveBackend } from "../backends/protocol.js";
 import type { StateBackend } from "../backends/state.js";
 import type { BaseStore } from "@langchain/langgraph-checkpoint";
 import { filesValue } from "../values.js";
@@ -418,7 +418,7 @@ const SKILLS_SYSTEM_PROMPT = context`
   2. **Read the skill's full instructions**: Use \`read_file\` on the path shown in the skill list above.
      Pass \`limit=${DEFAULT_SKILL_READ_LINE_LIMIT}\` since the default of ${DEFAULT_READ_LINE_LIMIT} lines is too small for most skill files.
   3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
-  4. **Access supporting files**: Skills may include scripts, configs, or reference docs - use absolute paths
+  4. **Access supporting files**: Resolve relative paths in a skill's instructions against the directory containing its SKILL.md, then use the resolved paths to read helper scripts, configs, or reference docs
 
   **When to Use Skills:**
   - When the user's request matches a skill's domain (e.g., "research X" → web-research skill)
@@ -428,8 +428,8 @@ const SKILLS_SYSTEM_PROMPT = context`
   - Each SKILL.md tells you exactly what the skill does and how to use it
   - The skill list above shows the full path for each skill's SKILL.md file
 
-  **Executing Skill Scripts:**
-  Skills may contain scripts or other executable files. Always use absolute paths from the skill list.
+  **Skill Scripts:**
+  Skills may contain scripts or other executable files. {skill_script_usage}
 
   **Example Workflow:**
 
@@ -438,7 +438,7 @@ const SKILLS_SYSTEM_PROMPT = context`
   1. Check available skills above → See "web-research" skill with its full path
   2. Read the full skill file: \`read_file(file_path, limit=${DEFAULT_SKILL_READ_LINE_LIMIT})\`
   3. Follow the skill's research workflow (search → organize → synthesize)
-  4. Use any helper scripts with absolute paths
+  4. Resolve supporting file paths against the skill's directory before using them
 
   Remember: Skills are tools to make you more capable and consistent. When in doubt, check if a skill exists for the task!
 `;
@@ -1693,11 +1693,20 @@ export function createSkillsMiddleware<TContext = unknown>(
       // Format skills section
       const skillsLocations = formatSkillsLocations(sources);
       const skillsList = formatSkillsList(skillsMetadata, sources);
+      const resolvedBackend =
+        typeof backend === "function"
+          ? await resolveBackend(backend, request)
+          : backend;
+      const skillScriptUsage = isSandboxBackend(resolvedBackend)
+        ? "You can read or execute scripts using their resolved paths. Only execute scripts whose paths are accessible to the shell; translate host-mapped paths when needed. Read backend-only virtual files with `read_file` instead."
+        : "Read scripts with `read_file`; this backend does not support execution.";
 
       const skillsSection = SKILLS_SYSTEM_PROMPT.replace(
-        "{skills_locations}",
-        skillsLocations,
-      ).replace("{skills_list}", skillsList);
+        "{skill_script_usage}",
+        skillScriptUsage,
+      )
+        .replace("{skills_locations}", skillsLocations)
+        .replace("{skills_list}", skillsList);
 
       // Combine with existing system message
       const newSystemMessage = request.systemMessage.concat(skillsSection);
