@@ -1,0 +1,214 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:97673b3aabcceb4fb7c290b949e1c682b67bc3b3dc38393aa9ebdd2b2c8d236c",
+  "claims": [
+    {
+      "id": "claim_1e13d6ec0f734e4db475dc30ef2f7ed3",
+      "statement": "The pnpm workspace covers direct packages under `libs/*`, provider packages under `libs/providers/*`, and packages under `internal/*`, `evals/*`, and `examples` including nested examples; root scripts intentionally apply different filters, with build targeting libraries and providers, unit tests targeting direct libraries, and integration tests targeting both direct libraries and providers.",
+      "evidence": [
+        {
+          "resource": "repo://package.json#L7-L21",
+          "version": "repo-lines-v1:sha256:98c4e60791263f2fc0123fe9f3f056e39d290d476b22e74f3c52139ad7d1b06c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ODMzZDU5NDljMDNhNDBjYTk1MjQ5MTYxMGE2NjU5NjQ0YjNhYTQ2NjM2MmY3OTkwMjBkYmYxOTgxNTQ3ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyODczMTQ5NGExZGZhNGZlMDYzZDhmNDhiNmRhNjRiM2RiM2MwY2I4YWQ4MjJlYzE0ZjI3Yzk5NTkxMmMwMTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5OTFkYTM3ZGRhMDkzMmUwZWVkODJhOTlmMjdjYWYyMGM4ZWI4MmJlMTQyMmU5YTNiNTQzMGFkYjZkNzk0YzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0YTg2YmNmZGQ0OWEwMzQ3MDZjMmZjZjQ2NjIxMTg0M2ZiYTE1M2JhNGRlOWQwYmVlMWY1MjVkZGYxZjhmNzkifQ"
+        },
+        {
+          "resource": "repo://pnpm-workspace.yaml#L1-L7",
+          "version": "repo-lines-v1:sha256:9a830adb22c244338652b32c8f05e9cfe45334614020cfec5e4fa3d3ef1684d3:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWRiMDc2ZWI4MGFkZTE5ZmVhM2UwYTQzMTk4NmI2NTVmNWZhNTllZDYyNjdlMTA3ZDY4OGI2MWMzZjQyMTc5NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VjM2JhZDVlMDI3ZWI4ZWQyNjQ3MTk1YjIwYzI0NzE5OWY0ZGJmN2IzZDE5OGM0MDEyODJlYzcxZjRkNGY1ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGQyYzRmNTZmZmZkYWRhOTllYThiM2RhZWY1MWZkMDNkODU4ZmE4MDBjMTg1MTY2MDRlZGIzYWNiOWU5YmM1NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_63236d37881247ee991bea91b8948c96",
+      "statement": "The repository's root `pnpm test` runs `pnpm format:check`, then `pnpm lint`, then direct-library `test` scripts, while `pnpm typecheck` is a separate direct-library command and is not a separate job in the CI workflow.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L25-L58",
+          "version": "repo-lines-v1:sha256:ce60c879393a1bab7fc6cf6420e067b20901ee3b75e666eb5c84786606df858b:eyJzZWxlY3RlZExpbmVDb3VudCI6MzQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5ZDgwMTU0ZWQ0MmZjNWM3NzliMTMzMTU3OGI1OGI4OWM4MDFlYWNlNzRmMjRjZDQ4ZWI0YTIzNTc5NDBhOTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYxYWZjZmJjNjkxNWZiYWEyNzZhZjNiYTk3MTBiYjUxOTRhYzk2ODY3MTEzYWU5YWM0ZjBkNTRiOTY1MDY3YTkiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIxNjdkNDFiY2IyOTQ1MmE0ZGUwODI5NTZhNjYyZGQ1ZDMyZWVjNzYwODRmZDAwZjE3MjE0MDg5ZDk1YTUzNDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI1MTUzMWM4N2NmMmViYjkzYzlkNjRmMzY4MTBiOWFiNGJkNjI5OGNhZGZkYWJiMTdmNDQ1MWNmOTVhZDk1OWUifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/ci.yml#L80-L96",
+          "version": "repo-lines-v1:sha256:4df1ff5bcdc639004e1ce26f4269680dc985a08441d2392ff49174b6226dd389:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlZTNjNjBkYjI1M2NiY2VhNzI0YWFkZDkxOGViOTQ2NjRmN2M2N2U3ODRmNzk2Zjc4NGNmMTAyMjA3ZDI2YmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjhlMmQ0NDlhNDJkNDY2NWQ4NWIzZTMzZjBiZmRkN2FmMjBkNmJkMDIxMzE3MzA0MWUxMGE4ZmJlZjIzMTJkNGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZmQ5YWIyYjVhYzAxNmQyOWIzMWE2OTAwOTgxM2QzYWEwM2E3NjI1YjBkOGM5NTg2MThlMTA1ZGU0YjJlMGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImExNGNmZjk3YzJiNDgzNGUxNDBhYmZjZGRmNTlmMzcwMmJlMDI1M2VhZjYxYTIwMjYzNTBjNTNkMjhmYTI5YzYifQ"
+        },
+        {
+          "resource": "repo://package.json#L7-L21",
+          "version": "repo-lines-v1:sha256:98c4e60791263f2fc0123fe9f3f056e39d290d476b22e74f3c52139ad7d1b06c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ODMzZDU5NDljMDNhNDBjYTk1MjQ5MTYxMGE2NjU5NjQ0YjNhYTQ2NjM2MmY3OTkwMjBkYmYxOTgxNTQ3ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyODczMTQ5NGExZGZhNGZlMDYzZDhmNDhiNmRhNjRiM2RiM2MwY2I4YWQ4MjJlYzE0ZjI3Yzk5NTkxMmMwMTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5OTFkYTM3ZGRhMDkzMmUwZWVkODJhOTlmMjdjYWYyMGM4ZWI4MmJlMTQyMmU5YTNiNTQzMGFkYjZkNzk0YzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0YTg2YmNmZGQ0OWEwMzQ3MDZjMmZjZjQ2NjIxMTg0M2ZiYTE1M2JhNGRlOWQwYmVlMWY1MjVkZGYxZjhmNzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b4e776f2d1ee46c59d3b39c88c2a7ce1",
+      "statement": "The main CI workflow runs on pushes to `main`, pull requests, and manual dispatch, cancels an in-progress run for the same workflow and ref when a newer run arrives, and gates the build on independent formatting, lint, README-spelling, and `libs` code-spelling jobs.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L1-L23",
+          "version": "repo-lines-v1:sha256:5bcffa465677f4d24ff8f15ea38cfa25fe2cc69dfabc339390fe1c164c844726:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MTQxYWJjNmQxMjRjZDNmMGM2Y2Q2MDc0YmE0ZjUxNDRkZjFmNDE2YzQxY2JhNDE5ZGY0MmI4NjliZWJjMzYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0YTc5NmEwMWY4NDU4Yzg5OWQ1YjIyODkwZTVkZjQ0ODAzY2E0ZDgwMTdjMzg3OGQ3Zjg3OTQ0NDkxMjBjOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQyNzdmN2U4ZDNlZGZmNTM3MzRhYTU4ZDNjZTZlNzM2NjJkNDQ1N2EyMTY2NWYzM2RhZDZiZmUwODRhY2Q5NTIifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/ci.yml#L25-L79",
+          "version": "repo-lines-v1:sha256:4ef1f0db40f434cd1872762c910fed930a5a157a296fd8fd2909f2fa1e744fb1:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5ZDgwMTU0ZWQ0MmZjNWM3NzliMTMzMTU3OGI1OGI4OWM4MDFlYWNlNzRmMjRjZDQ4ZWI0YTIzNTc5NDBhOTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIxNjdkNDFiY2IyOTQ1MmE0ZGUwODI5NTZhNjYyZGQ1ZDMyZWVjNzYwODRmZDAwZjE3MjE0MDg5ZDk1YTUzNDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjlkZmExZjIxNzRmZTgzNGE3YzQ3MzZlNmRlNmMzMDBmZjc2MjhkYzEzNzdiODFiYTJiNDAxNTdiMTM5NjVjMmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_2c7d2896adca493ca19bf52373306858",
+      "statement": "The CI build job uses `pnpm install --frozen-lockfile`, runs `pnpm build`, archives build output for downstream jobs, and treats pull-request `pkg-pr-new` preview publication as non-blocking; the unit and integration jobs download that archive instead of rebuilding.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L110-L160",
+          "version": "repo-lines-v1:sha256:e71c81917e334b6c57f65a340872aa007e2d53c17c5c14454e686b436892fb10:eyJzZWxlY3RlZExpbmVDb3VudCI6NTEsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMDA1Nzc3NzZjNjY4YjcwMWQ3MTY1YTk3MmNiYWJiNmVkZWQxMjhiYjg1ZmE3MGMzMjYwYjU4ZTBlOWIwNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjYzOTg3ZDBkYTJmYzBjODcyZjJiYjA4MGNhMTA2YzdkOGYzNDQ0MzJhNjM4NGNkZjY5ODJlOGNhYTZjMjczNGYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJmNjM4NDI5NGQxNGUwY2YxYzE0MTVjMTE2ZDc1NjdlNWQ2MTllOWIxOTMzNjRhYWRlMzNlMzgxMGU0NWU2NDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImZiMjE0OWM5NTI3ZjQ2NWEwNDMxMDhhN2VkMzgxM2ViMzQ0ZjYwNWI1M2JmZjljZjVhNjBjN2M3YzE0ZTdlMDgifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/ci.yml#L80-L109",
+          "version": "repo-lines-v1:sha256:db042beed2a648271c374fe4ad9f6682d2402f5cb92ec525c65db70ce2a9a373:eyJzZWxlY3RlZExpbmVDb3VudCI6MzAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlZTNjNjBkYjI1M2NiY2VhNzI0YWFkZDkxOGViOTQ2NjRmN2M2N2U3ODRmNzk2Zjc4NGNmMTAyMjA3ZDI2YmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjAxYmE0NzE5YzgwYjZmZTkxMWIwOTFhN2MwNTEyNGI2NGVlZWNlOTY0ZTA5YzA1OGVmOGY5ODA1ZGFjYTU0NmIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZmQ5YWIyYjVhYzAxNmQyOWIzMWE2OTAwOTgxM2QzYWEwM2E3NjI1YjBkOGM5NTg2MThlMTA1ZGU0YjJlMGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg5MDU5YmRhMjI4ZGJlY2QzM2QyNzA0NjA2YzIzMGY3ZDRhOTMxMzJkNjc2NDI5N2NlY2IwNTQwNWZjNTNkZTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d3fa8f0610b24379b28c0cf888ff5f74",
+      "statement": "CI unit testing is a four-cell matrix covering `ubuntu-latest` and `windows-latest` with Node.js `22.x` and `24.x`; each cell restores the build artifact and runs the root `pnpm test` command.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L110-L136",
+          "version": "repo-lines-v1:sha256:331aa43d85e1fdb7ea0db0778c40ac187fc6aff973708aee94b21c9c6a8a967f:eyJzZWxlY3RlZExpbmVDb3VudCI6MjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMDA1Nzc3NzZjNjY4YjcwMWQ3MTY1YTk3MmNiYWJiNmVkZWQxMjhiYjg1ZmE3MGMzMjYwYjU4ZTBlOWIwNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImNhYjNhZDEyYjIyOWNmYWNiZWI5M2QwYjZjMjcxNzhhYjA2ZWRkYmEwM2EyN2IxMGE0OWIyMzczYmQ5ODE0ZTYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJmNjM4NDI5NGQxNGUwY2YxYzE0MTVjMTE2ZDc1NjdlNWQ2MTllOWIxOTMzNjRhYWRlMzNlMzgxMGU0NWU2NDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4ZjY5ZjZhMzZmZjJjOTJhODE5MjJmYmRlZWQ4Y2Q0Mzg5MzM2MTUxNTNhOWY5ZTRhMmVhMDY0MGRiZjZkNDcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b588d76bdf1246e48c6d68d158a21810",
+      "statement": "The CI integration job runs after the build on pushes, manual runs, and same-repository pull requests except Dependabot pull requests; fork pull requests and Dependabot pull requests are excluded before secrets are used, and the job runs `pnpm test:int` with gateway, direct-provider, and sandbox-provider secrets.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L138-L172",
+          "version": "repo-lines-v1:sha256:3b5ce945950d4ef2cea3efe11429f6fae47a4fecc4d89e6734b6038a3172da36:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlNTJlZGY3YTc1ZDg1ZmQyZmM0Yjg5MTUyMGIwNjdkMzNkZGMzOTk5ZjNlNDc4OTI2MjYyZTc0YmNiYzhkMDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3NjI4MmY3NzI1MGU3OTMxMTc4YzJjOWViN2ViMDZkMTQxNzBmNzQwODJjMGEyYTg4Njc5OTE0ZGUzZmM0ZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhM2I1ZGRmNDMzNjcyYmY1YWVmYjk0NDI3NDJkOTI5NGNjNDMyNThjODczYWI5MGYwMDhmZDM2ODZkMWU0NjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_a256aab46f3f479aa6eaad496e8bb212",
+      "statement": "Integration tests are deliberately external-resource tests rather than offline unit tests: Deno tests skip without `DENO_DEPLOY_TOKEN` and probe provider availability, Modal tests skip without both Modal token variables, Daytona tests require `DAYTONA_API_KEY` and label resources for cleanup, and LangSmith sandbox tests require `LANGSMITH_API_KEY` plus a deployed `deepagents-cli` template.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/src/backends/langsmith.int.test.ts#L1-L47",
+          "version": "repo-lines-v1:sha256:9da982ec3bd339387309522a4870cd251c0141fad37d558e763272a3114f19e1:eyJzZWxlY3RlZExpbmVDb3VudCI6NDcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ5NjQ3ZTYwZmM4ZTJiMjYyNjRmZTljZWM1Y2IwZmI5NGM1ZGNiNjNmNWEwZmNjN2RiMTgzYzViZmIzMmU5OWYiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/daytona/src/sandbox.int.test.ts#L1-L55",
+          "version": "repo-lines-v1:sha256:32e2d599d14f3e1b71c6f088e40c898d20a9a99ecef9b662cb7eb62e8af21150:eyJzZWxlY3RlZExpbmVDb3VudCI6NTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJlYjFiYzI5NzQ0YzBkOWIxZDFiODBmNzBiNjc3YTZlYThhZjc5ZWY5ZmNjOGI3MGY4YTA3MTUxMzljODE0OWUifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/src/sandbox.int.test.ts#L1-L67",
+          "version": "repo-lines-v1:sha256:ea4d9a12d0ab7067837d6987cea128c1472b413ba0dfa712cfdec528d7697389:eyJzZWxlY3RlZExpbmVDb3VudCI6NjcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM2MTFmMzNhMjgzNTRiZDU4YjI3MTQ5YzNlNzJkM2VkODVhNmFmYTJmZGQ1NDU2NWQ3Y2UxNmI4MzMyZmIzZjAifQ"
+        },
+        {
+          "resource": "repo://libs/providers/modal/src/sandbox.int.test.ts#L1-L50",
+          "version": "repo-lines-v1:sha256:2526de1b50486c9ea8eed65e62e3c2e4be5757fd2808365c5e71f44880836083:eyJzZWxlY3RlZExpbmVDb3VudCI6NTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQwOWU2NjM0YjA5MDRhNDUxZDE4N2I5NTYxZGJiYTQ1NzRjZDdlZDUzZGIzNmMwODM4YWJhZDNiMWU2ZmVmYjEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjA5ODA0YzJhNzlhM2ExNTVmYTIwYWJjYjg3ZDRlZTBiOTI1YzI5MTBlZTE2M2I5ZmQ2YjExOTlkYmM0MzRlNTcifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_c4a255f3932649fa86a9e71121e1a6f9",
+      "statement": "The Vitest configurations keep `**/*.int.test.ts` out of default runs and select ordinary unit tests by default; `--mode int` includes integration files, applies longer timeouts, loads the LangSmith gateway setup, and provider configurations run integration tests sequentially.",
+      "evidence": [
+        {
+          "resource": "repo://libs/acp/vitest.config.ts#L13-L61",
+          "version": "repo-lines-v1:sha256:82fd01ed4a0c6ccdb161434c6e362f209a486204629d67aec6309dda6c930068:eyJzZWxlY3RlZExpbmVDb3VudCI6NDksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzYTViZjcyYWRiNjhjNzMxZTA4ZjNkOGJjYzQ4NzY0OGNjMWE3OWU3M2ZhOGZkNjJhMDMyYjdlNGUxYzczZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkNTc3M2I0ZmM3ZjFlZGZlNmYzOThlZDgyNmM1OGMzYjRjY2ExOTNjNTEyNWFiYmQ3NzllMjQzOTU2M2E5N2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1YTMwZWVjNDc3OGM5OGI0MmU3Nzk0MWQyOGI4NzJlMmNkODY4YzJjNWQ2M2NhNzRjMDIxZmRkMmFhNzljYjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/vitest.config.ts#L13-L48",
+          "version": "repo-lines-v1:sha256:94c78bee43945abeea4194a0e67c5989d3920558d7cc5fd0dce032edfc41342d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzYTViZjcyYWRiNjhjNzMxZTA4ZjNkOGJjYzQ4NzY0OGNjMWE3OWU3M2ZhOGZkNjJhMDMyYjdlNGUxYzczZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkNTc3M2I0ZmM3ZjFlZGZlNmYzOThlZDgyNmM1OGMzYjRjY2ExOTNjNTEyNWFiYmQ3NzllMjQzOTU2M2E5N2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1YTMwZWVjNDc3OGM5OGI0MmU3Nzk0MWQyOGI4NzJlMmNkODY4YzJjNWQ2M2NhNzRjMDIxZmRkMmFhNzljYjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        },
+        {
+          "resource": "repo://libs/providers/deno/vitest.config.ts#L13-L48",
+          "version": "repo-lines-v1:sha256:38baee41292ad62f374b36e81940795674d768e4b0761ad16fccc26fa574c581:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzYTViZjcyYWRiNjhjNzMxZTA4ZjNkOGJjYzQ4NzY0OGNjMWE3OWU3M2ZhOGZkNjJhMDMyYjdlNGUxYzczZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkNTc3M2I0ZmM3ZjFlZGZlNmYzOThlZDgyNmM1OGMzYjRjY2ExOTNjNTEyNWFiYmQ3NzllMjQzOTU2M2E5N2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImRlM2MwMzMzOTMyN2E0ZjRmYzM0YWVmOTkxMmE3M2RjZjZmZThhZGFmMzljOTk1OThjYjhkOWUzNjBmMmYzMWMiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_3fd962f7b0464021a915d5c54bc55b85",
+      "statement": "`scripts/vitest-setup-langsmith-gateway.ts` is a no-op without `LANGSMITH_GATEWAY_KEY` or `LC_GATEWAY_KEY`; when configured, it routes supported Anthropic, OpenAI, Gemini, Fireworks, and Baseten clients through the configured or default LangSmith gateway and substitutes the gateway key for provider SDK credentials.",
+      "evidence": [
+        {
+          "resource": "repo://scripts/vitest-setup-langsmith-gateway.ts#L1-L10",
+          "version": "repo-lines-v1:sha256:dd6eeafdf9a6c5f546a22cd7cccc35b8f830dabc9d069693b93a67b1b46df783:eyJzZWxlY3RlZExpbmVDb3VudCI6MTAsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijk3MmE0MjkzODJiMmUxNDcxOGUwZTM3YjA1NzBhOGExNzAyOTkxZmNkODQ5OGNkODQwNjBhOGJmNGYwNTAxN2IiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImM1MjNiMGEyOTZhNjA3ZDVkZmIxMDcxN2M4OGUwMTMwYjA3MGU0MDdjOWNjY2Y5YWE1Nzc4N2M4ZTgwN2RkMWMifQ"
+        },
+        {
+          "resource": "repo://scripts/vitest-setup-langsmith-gateway.ts#L22-L50",
+          "version": "repo-lines-v1:sha256:94fe52e7311258360481c46991047454a32c387b51a4084f0659c08ee2631b1e:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjRlYzhkOGU3Y2U1MTg4YzM1NjkzNzNmNGU2OWM4Yzc3ZmJiMGE5ZTZhMGM3ODFhMzhlZTYyYjRkNTllZTU2ODIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjY0NWMwNWFmOTBiMDY1ZTViOTM0NGVmMDA5ZTQyZWMyYzVlZThmZjJjNjcyMjE0ZDNkMDViNTcwY2NjMDhjNDIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_ce82abbd25044d1dbb1baf634f2c2003",
+      "statement": "Changesets are configured for public publication with the GitHub changelog for `langchain-ai/deepagentsjs`, `main` as the base branch, patch updates for internal dependencies, and `examples` ignored; fixed and linked package groups are empty.",
+      "evidence": [
+        {
+          "resource": "repo://.changeset/config.json#L1-L19",
+          "version": "repo-lines-v1:sha256:e15e71861b97552a136161650043e0f4815b58b790abd5f3636a015d9fd03540:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImE2ZmIwOGZkYTFhY2I5NTdiNjExNmJkMzc4MTFhMWZlNDFhMDE2MTFjMDYzMWVkYmY3ODZkNjg4OWEyN2E1NWMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQxMmNhMzQ1Y2NmNzViZjljMDgwNmJjZTY5NWJlOGRlODA4Yjc5OTg0MjUxYTdhNTRkMjAyY2Y2MTAxZGQ0NTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_b03f9bbcdf9b47bbb19d422fdc641a1b",
+      "statement": "The Changesets release workflow runs on pushes to `main` and `alpha`, installs from the frozen lockfile, uses `pnpm run changeset:version` for versioning and `pnpm release` for publication, and enables npm provenance with `NPM_CONFIG_PROVENANCE: true` while granting contents, pull-request, and OIDC permissions.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/release.yml#L1-L19",
+          "version": "repo-lines-v1:sha256:f2018b8755d9ce086e96fb145760591ee9a7417dddc4d13371715f53acde3800:eyJzZWxlY3RlZExpbmVDb3VudCI6MTksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjEyZWVmOTAzMGQwYzcwMjkwMTBjNDYzNTY4OWY1ODMyOGQxMDllNmE4NWVkMWE5MjQ1YjIwZjM5NTViN2RiMzkiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImM4OTk5MTEwM2Y2YmE4ODhlM2RlNzY1MWM1YTMwNWM3N2U1NTQ3Njc3M2FiYTgzOTU5MWVjYzViZDBmMmFiMWUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjFhMTIyYjcxZTVhYjY1MTQyNjY5MTYyZWUzYjBiYzA4NTFkOGRjOGI2NGQ4MTA3Nzc1ZWRmNjMyODA4N2YxMmMifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/release.yml#L20-L51",
+          "version": "repo-lines-v1:sha256:ad50d430f0a478111126f5f6fe2a0a944797751405e8f1b7f6a21ba4b04c4522:eyJzZWxlY3RlZExpbmVDb3VudCI6MzIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlOWFhODFhOTAxYzAxNjE1NzI3Y2I0ODY2Mzg0ZGNlNmYzODBiZTE1MjA2MWM0NjA3MjJmYWRlNWU4MjRiNzAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI5MTZlYzk0NDFkYmYwOTdkNGFlZjgxNWQ0ODM0NmY1MmY5YTFkZjg5NzkxMTVjNzIxYmIwNDE2M2E4OWU4OWQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg3ODQ5M2U1MDQ2Y2E3NThiM2MwMjk1YWMyMDBjM2ZmM2RhNGI4ZWI2ODkwNmZkMDg4NmY5NTAzYWNjNzI2OTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://package.json#L20-L21",
+          "version": "repo-lines-v1:sha256:fd6bd9dc9897fefca8db1502fbda2443eeb255c468990e2710619f8fbfb957ec:eyJzZWxlY3RlZExpbmVDb3VudCI6MiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMmM5MjRiYzMyNjZkMTY2MWU3YmNmYThkNjQwZmJiZTc5MDExYzc0MzcxMzM3ZTEwYzE1NmJkNWMwY2JkY2NiZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiYzI4NzMxNDk0YTFkZmE0ZmUwNjNkOGY0OGI2ZGE2NGIzZGIzYzBjYjhhZDgyMmVjMTRmMjdjOTk1OTEyYzAxNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNGU4NjhlOWU1NGYxMWU4MjgwZGU5YzI3ZjY3Y2RmZTQ2MTcxMzM4YWU5NmI4ZjQwOGY2NTlhNGFkZjE3YzlhMiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZDRhODZiY2ZkZDQ5YTAzNDcwNmMyZmNmNDY2MjExODQzZmJhMTUzYmE0ZGU5ZDBiZWUxZjUyNWRkZjFmOGY3OSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_d486a16d9aaf44ff80cf2746ce8072d5",
+      "statement": "The separate CLI release workflow runs manually or daily at 06:00 UTC, compares the latest PyPI `deepagents-cli` version with npm, builds five platform packages only when needed or manually overridden, supports a dry run, publishes with `NPM_TOKEN`, and creates a `cli-v<version>` GitHub release after a non-dry publication.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/cli-release.yml#L1-L39",
+          "version": "repo-lines-v1:sha256:ca145fea66544edc4b6a4bb5eaef4e412d5cc4aa6b59cc6b6974e9c0ff94f91a:eyJzZWxlY3RlZExpbmVDb3VudCI6MzksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhNDYzODU1N2QxYWI3MWIwNThhNTVhMzgzZWEyNDAyNDQwY2RjNjk5NGI1NDQ4NDVlOGUxYzQyMjg2MjYzMGQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY0YTAxZjI4YjZiMDRkNDVjYWQwZmU2Yjg2MmQxYTgwMmQ3YzFiYzVlNzdlYjg4NTgwMGI4ZDkxY2Y3ZjQ0ODEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjI2MWNjMmJkN2E2OTkzMGMxOWQ3MThiNmU4OTQ3NTg3YWQxYmUxOTc0ODA4NTM0ZDE4Mjg2NDgyMGMzMGViOTIifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/cli-release.yml#L177-L260",
+          "version": "repo-lines-v1:sha256:2ec2f51b7a95718cdba25247535e5f6916612f4fc51dfedfac6990dbeab82083:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU4MjU0YzkxNmE0NDgxMjNlMmQzZDk1ZWJhYTJlNGIxZGIwZmE3YjU0M2UxMmMzZTFiMTFjZjM2MjE2ZjIwMGEiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdiMDc4NDhhNDM2NjY1NmIyYmE2MTk3YmUwMmI5MjA4MTQ1NDZmOWQ5YWQwYjUzMzllNGMyNmEyYzk0NjUxMTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjQzZmY5ZWI5MGRmOTE3YWIxZDY4MjVjYTIwMjU3YWE3NTdlMzMzMDM3NzdmNDY4OWNjNzRmMjYxZDFmYWQ2ZWUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjBkYjYzZjVlMDhlMjNiNjQzYWRkMWIzYTAzNjQ4NTM4OGEyNzRmMTMyYjJhZTAwNWU3MzcxZTM0ZDg3ODhiYzUifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/cli-release.yml#L287-L332",
+          "version": "repo-lines-v1:sha256:8cfe2a213db1194d56da114505a94997597d3cbce888acb25593e52b5de1780a:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdkYTk4NTdkY2JkZjU0MzQ1MTVmM2Y3MjA4NjFhMTE3YmU3OTYxOTJlMGU4NTUzOGIyZDdjYTVkODRmNmM0MmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjkyZDYxZWQwNzg3MzRlMzM2ZGIyYWU5YjIyYTY4ZjNmOTZlNGUxMTQ3MDE3YmQxZDZlNzg5NDAwOTYwYzc3OTAiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjYyZTBjNmRjZmNkNWNmNjJiYjIzNDU4MTkyZGUxMjBkZTAyMDU2ODc1M2FhMzc3YzI1NmEzYmM4NWQyOTQzYzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/cli-release.yml#L41-L124",
+          "version": "repo-lines-v1:sha256:bb70db75c0cb98ccb992e80d7529e29944a8e5a883cba2849c1759004087e52a:eyJzZWxlY3RlZExpbmVDb3VudCI6ODQsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5ZDgwMTU0ZWQ0MmZjNWM3NzliMTMzMTU3OGI1OGI4OWM4MDFlYWNlNzRmMjRjZDQ4ZWI0YTIzNTc5NDBhOTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjY4MmIzMWRiY2E5MmY1YzQ1NDFiYWI2YmE2MGE5YzkyMDkxOTFhZGNjODBjYmQ4ZTZlOGY3YjViNWIwNTRlOGMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijk4OGFkZTlkNWY2MWEwYWE3OGYzZTMxNWM0MmJlY2FlMTZkMmMzYThlMTM4YThjOWZkNmZkMzlmMDNlYzA5NDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjkwZjA4ZTY3ZDlhZWNlMzc3M2VjMDg3MWI5ODViZTdlMWFkZjhkM2JmMDQzNmE1YzM4NDJmYTE4Mjc1ZGQwNmQifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_089d528d51bc40c48c8173682e09aca1",
+      "statement": "The scheduled OpenWiki workflow runs manually or daily at 08:00 UTC, checks out full history so `openwiki code --update` can calculate its change summary, installs OpenWiki with Mermaid and jsdom validation dependencies, and runs `openwiki code --update --print` with OpenAI and LangSmith connector credentials.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/openwiki-update.yml#L1-L48",
+          "version": "repo-lines-v1:sha256:abe608534a264e6fb19ee97c82630a547bc7fa32a7c4548068535959e23feb58:eyJzZWxlY3RlZExpbmVDb3VudCI6NDgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA2MDI3ODdhZjZkY2MwODM0ZGUxMjFjYmIxY2I5NWY5NDU5YjcyMWVhYjAzNDlmMTA1MDFiOTk2YzFjNzdmZmYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImI4ZjhiODAyNzQxYWZjN2ZiMzg0MGZlY2RjNDNkN2Y4ZTQwMjNiYmZjYjViN2VjNjVlZTA4ODc5OGQ4NTE3MTMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU0ZTc5NGRkZjMyYTNlMmRhYWFkODgyNjMxM2MyNGY0ZTRjZGE2ZjYxYWJmNDE3ZTQ4OWJlMzlkNWI5OGE1NTkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f248157f30bb44caa946b04b69583897",
+      "statement": "The OpenWiki workflow keeps the update step non-blocking long enough to remove transient `openwiki/.run.json` and create an `openwiki/update` pull request containing the allowed documentation and instruction paths, then propagates the OpenWiki failure status; its PR body explicitly preserves pages completed before a partial failure as the next baseline.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/openwiki-update.yml#L33-L77",
+          "version": "repo-lines-v1:sha256:bccb7ebf2423764fd61469442b7cc961eee4e8bc5f87b955627f8301c7970472:eyJzZWxlY3RlZExpbmVDb3VudCI6NDUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcwZThmOWZhNDBlN2JkMDQ5OWQxYzBkODNmZDc1OGFhODViMzA4NDJkYmQ2MWYwZWE2YjdhZTEwZWZlYzc2ZDAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM2NzE4ZjA2N2I1ZTVjMWYwOTkxYTZlNzQ3MjZmZTJhMjNkMjY0MzQ1ZTA4ZTRlYWQwNGZhZjczYzI3ZWQ0NDMiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg2MjNlMDMxMmRmZWQ1MGJmN2UxYmI2ZWU1ODg2MjA5NGFkYzJjYmE1OGM4NzViMzI5ZWQ3ZTc3NWFlMDZkZmYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}

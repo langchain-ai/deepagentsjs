@@ -1,0 +1,6 @@
+# Files
+
+- [Skills, Memory, Summarization, and Prompt Context](context-management.md) - Explains how deepagents loads always-available AGENTS.md memory, discovers and validates progressive-disclosure SKILL.md sources, caches stable and dynamic prompt blocks, and offloads and summarizes conversation history. Covers source precedence, backend portability, failure behavior, configuration, and the deprecated direct agent-memory middleware.
+- [Subagent Delegation and Async Tasks](delegation.md) - How Deep Agents route work to local declarative, compiled, forked, and remote asynchronous subagents. Covers context and state isolation, permissions, structured results, parallel execution, task persistence, lifecycle controls, and completion callbacks.
+- [Filesystem Tools, Limits, and Permissions](filesystem-tools.md) - Explains the built-in filesystem tool surface, backend delegation, line and size limits, result eviction, path safety, and first-match permission enforcement. Use it to predict tool behavior, configure storage, and extend or troubleshoot filesystem access safely.
+- [Harness Model Profiles](model-profiles.md) - Explains how deepagents resolves provider- and model-specific harness profiles, applies prompt, tool, middleware, and subagent overlays, and safely registers, merges, serializes, and parses them.

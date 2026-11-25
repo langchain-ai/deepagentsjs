@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "pageVersion": "sha256:d01b8373106f11831f8fb0682b4a6f3b3161afaa84c23874f672a23a1c6747a7",
+  "claims": [
+    {
+      "id": "claim_6a346d6f78854314af126c50a2eca529",
+      "statement": "The repository is a pnpm workspace spanning direct libraries, provider libraries, internal packages, eval packages, and examples, with Node.js 24 selected by `.nvmrc` and pnpm 10.29.2 declared by the root package.",
+      "evidence": [
+        {
+          "resource": "repo://.nvmrc#L1-L1",
+          "version": "repo-lines-v1:sha256:68ca3fba3b7e864770cb61aeb306d4bd4354b68ab4dd38450860c5d823e42a53:eyJzZWxlY3RlZExpbmVDb3VudCI6MSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNjhjYTNmYmEzYjdlODY0NzcwY2I2MWFlYjMwNmQ0YmQ0MzU0YjY4YWI0ZGQzODQ1MDg2MGM1ZDgyM2U0MmE1MyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNjhjYTNmYmEzYjdlODY0NzcwY2I2MWFlYjMwNmQ0YmQ0MzU0YjY4YWI0ZGQzODQ1MDg2MGM1ZDgyM2U0MmE1MyIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjAsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSJ9"
+        },
+        {
+          "resource": "repo://package.json#L55-L59",
+          "version": "repo-lines-v1:sha256:ff50943bf52d10ad77321d57c67c1ecf5f218baab58f39019723fe20ea30fc7c:eyJzZWxlY3RlZExpbmVDb3VudCI6NSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZDdhZGRlYTcxNmZkYzQwNGZmN2FiZTJjMTdlMDJiODZiZGVkODgyNWE4Zjc2MWJiZWQxOWZkYTFkOTRlOGYwZSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNWUzMTE4ODg4ZGU4ZGI3NzYzYmQzMjlmODdmYTYzNDAwZWIwZGRhNWIwZWMyNWNmNmMwNjQ1YjU1ZDA1NDU1NCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNmYyMGNhOWViMTI2MDdlZTI3MjZiM2MxYmVkNzYxZDJiNGI3ZjFhOTZiYjE1ZDQ1NzA0N2JkNjQ5OTE0NzViYyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjEsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiNDEyY2EzNDVjY2Y3NWJmOWMwODA2YmNlNjk1YmU4ZGU4MDhiNzk5ODQyNTFhN2E1NGQyMDJjZjYxMDFkZDQ1MSJ9"
+        },
+        {
+          "resource": "repo://pnpm-workspace.yaml#L1-L7",
+          "version": "repo-lines-v1:sha256:9a830adb22c244338652b32c8f05e9cfe45334614020cfec5e4fa3d3ef1684d3:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWRiMDc2ZWI4MGFkZTE5ZmVhM2UwYTQzMTk4NmI2NTVmNWZhNTllZDYyNjdlMTA3ZDY4OGI2MWMzZjQyMTc5NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VjM2JhZDVlMDI3ZWI4ZWQyNjQ3MTk1YjIwYzI0NzE5OWY0ZGJmN2IzZDE5OGM0MDEyODJlYzcxZjRkNGY1ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGQyYzRmNTZmZmZkYWRhOTllYThiM2RhZWY1MWZkMDNkODU4ZmE4MDBjMTg1MTY2MDRlZGIzYWNiOWU5YmM1NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_3bda0e6c2e0b4306b9644bf538a1da78",
+      "statement": "The root command surface separates formatting, linting, building, typechecking, unit tests, integration tests, watch mode, coverage, and Changesets release operations; `pnpm test` runs formatting and linting before the direct-library test scripts, while `pnpm build` targets libraries and provider libraries.",
+      "evidence": [
+        {
+          "resource": "repo://package.json#L7-L21",
+          "version": "repo-lines-v1:sha256:98c4e60791263f2fc0123fe9f3f056e39d290d476b22e74f3c52139ad7d1b06c:eyJzZWxlY3RlZExpbmVDb3VudCI6MTUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjM0ODMzZDU5NDljMDNhNDBjYTk1MjQ5MTYxMGE2NjU5NjQ0YjNhYTQ2NjM2MmY3OTkwMjBkYmYxOTgxNTQ3ZGIiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImMyODczMTQ5NGExZGZhNGZlMDYzZDhmNDhiNmRhNjRiM2RiM2MwY2I4YWQ4MjJlYzE0ZjI3Yzk5NTkxMmMwMTUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjM5OTFkYTM3ZGRhMDkzMmUwZWVkODJhOTlmMjdjYWYyMGM4ZWI4MmJlMTQyMmU5YTNiNTQzMGFkYjZkNzk0YzYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImQ0YTg2YmNmZGQ0OWEwMzQ3MDZjMmZjZjQ2NjIxMTg0M2ZiYTE1M2JhNGRlOWQwYmVlMWY1MjVkZGYxZjhmNzkifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_d481f7c1f739410ab0bf4741753c7cad",
+      "statement": "The examples workspace is private, participates in the monorepo, and exposes a TypeScript `typecheck` script rather than a single general-purpose example runner.",
+      "evidence": [
+        {
+          "resource": "repo://examples/package.json#L1-L7",
+          "version": "repo-lines-v1:sha256:c10657b35945ada9b8dc9b5de3fb4b5048fa1fc2576bdd1d76b952cd07c49df5:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiYTZmYjA4ZmRhMWFjYjk1N2I2MTE2YmQzNzgxMWExZmU0MWEwMTYxMWMwNjMxZWRiZjc4NmQ2ODg5YTI3YTU1YyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiNGQ1Y2QyZmI0ZjNkZjg4NDUxNTI1NWIzOTUyM2YyZjhiNTQ3MmJlZWE5ZjU2NmZmY2EyMDRkYjgwMjU2MTA0MSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiN2I1MzdlMmI4NmFmMjFmZTZiOGEzM2E5Y2U2NmI1MDY0ZjM5OGQ2YzgxNjkxYzM5Njg2ZmYxOTc3NzkyM2UyYSJ9"
+        },
+        {
+          "resource": "repo://pnpm-workspace.yaml#L1-L7",
+          "version": "repo-lines-v1:sha256:9a830adb22c244338652b32c8f05e9cfe45334614020cfec5e4fa3d3ef1684d3:eyJzZWxlY3RlZExpbmVDb3VudCI6NywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiZWRiMDc2ZWI4MGFkZTE5ZmVhM2UwYTQzMTk4NmI2NTVmNWZhNTllZDYyNjdlMTA3ZDY4OGI2MWMzZjQyMTc5NiIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiY2VjM2JhZDVlMDI3ZWI4ZWQyNjQ3MTk1YjIwYzI0NzE5OWY0ZGJmN2IzZDE5OGM0MDEyODJlYzcxZjRkNGY1ZiIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjAsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZTNiMGM0NDI5OGZjMWMxNDlhZmJmNGM4OTk2ZmI5MjQyN2FlNDFlNDY0OWI5MzRjYTQ5NTk5MWI3ODUyYjg1NSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMGQyYzRmNTZmZmZkYWRhOTllYThiM2RhZWY1MWZkMDNkODU4ZmE4MDBjMTg1MTY2MDRlZGIzYWNiOWU5YmM1NiJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_30de55332e554cc8bc28b67a5f61fb76",
+      "statement": "DeepAgents exposes `createDeepAgent` from its main package surface, and the published package provides default, browser, and explicit Node entrypoints; `createDeepAgent` returns a compiled LangGraph graph usable with LangGraph streaming and persistence features.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/README.md#L112-L114",
+          "version": "repo-lines-v1:sha256:479fb3cd8937d6340482736cd6d232161d8b6e7b67f2810761c4a7fb97fc5fcf:eyJzZWxlY3RlZExpbmVDb3VudCI6MywiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTdhZTgyZGM4NzdmNzAxMjQ1NWUwMTRhMzBmZDhhNzE3NWQzOTNhMDljYWZhMTA0NDJiN2FmNDRlYTFmYWU5YSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiMjhlZjFlMmRhNDEzMmM1N2VhYjM1ZTA0NDhjOTQ3NWVmYjU5MWNmNTQ5MzY3MWQxNmFkYzRmNTliODllYTYyYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMjU2MjA0MzBjMWY1ZDFkNDQyYmQwNzEwYzdkYTAyNWEzMzZmYTA4MmRlNjA4NzI1NDhlM2RmYzY0ZmI5NGVhMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiYzBhODZlNWM1NjY3MGFkYjM4NmJjMTMxYTEyMTc0NDcxNDJiNTk3ZDM4MmU2YzI0Y2FjNjU4MWFmMjJmYWY5YSJ9"
+        },
+        {
+          "resource": "repo://libs/deepagents/README.md#L76-L93",
+          "version": "repo-lines-v1:sha256:c9c416f564210713543973f53e99de1f0ce93cd26ad373ababbd9540fff21187:eyJzZWxlY3RlZExpbmVDb3VudCI6MTgsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImUxNjBlOGE0N2YzZjY2OGI4MTE1NzZlOWFhZGQzMmMxMjg4NGFjYzgzZDYwYzlhOWQ0ODI5MmJlMzljZGFkZTYiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjQ3YzA2YzU2MWQ1YzMyNzM0MzY4NTI2OGE0NmIzMzkxZjM5OThlZWU4OTBkMmJlNTFmMGQyMWNjNGE1M2FlNmQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVkMGE3YWM5ZGQwYWJjZmM0YTJmM2FlNmEzZjJlZDQ0MzdiNDgzODkxZjdlZmM3NzIyNGIyYTEzZjNlNDUwN2QiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ4NWQ2YzA2MzI3YjIzYzJlZDQyYTFhOTFjZjdmZWZmNzQ1OGQ0MGM1NTZlYzM0ZGViNjBkM2E3MTBkZWM0ODEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/package.json#L67-L99",
+          "version": "repo-lines-v1:sha256:1f74f3d6dfc721bb1d85ec36efba58abc0e04a4e2ff2472ddc7cd5403c8f5658:eyJzZWxlY3RlZExpbmVDb3VudCI6MzMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNjMDViYjlmNGE4Yjk4NDUxMGY4MTVhNWZjNDA3OGQ3N2M1YTIwZTkzZjMzNzNkYzVkZGU0YTM0MWQxYjQwYzgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImJkMTEyY2QwYjU1M2VmNWYxMDM1NTRiNjVhZDY3NDU4MDkxOGQwMjI2ZTljNDNlZmMyOGRhMTIxYTgyYzNkMGEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijg1ZDkwNGQ4MjcxY2M4MTVjYjg3YWY2NjZkM2VhZDljZjkwZDQxYzEzNGYxMWFiMjA4MTI3MDZlZDhkZGZmNGEiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImU5MjY1YzRlMTNjMGU5ZmYyZDZjNTlkZmU4MWQ1NWExMTQ2ZGYzZjc0ZmE5YjI3NjAyYWRmNzk0N2I3YzVmNzEifQ"
+        },
+        {
+          "resource": "repo://libs/deepagents/src/index.ts#L8-L15",
+          "version": "repo-lines-v1:sha256:f3b45fc542022a987572b05ff69610a83ae2b9c2df76ddcaf5dd5a72e02f337f:eyJzZWxlY3RlZExpbmVDb3VudCI6OCwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiNWY1M2EwOGJiM2QwNzJmYjZmNjQ4ZDU2NGVmNTJlMGU4NGRhMDQ5ZWFiZDMzNzdjMzU3NWQ2MDIzNzEzYTMxMyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZTkwZGY0NWE2MWY5NDhmM2E4NTBkMDI3YmQ4ZWE4YTg2NWVmZWE5ZDVhNjI4ZDBmYWVhNzM3OWM2MTZiZDkxOSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiZDlkNjc0ODMwMWY2YzczZTRhNjkyZDkzNDRiNGFiM2RiYTcyNjRhYWE1N2MzOGZkMWMzMDU5MjE2NzEzNDYyMyIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiZGVkYzUyMWU4ZTVmMTU0OWIzZWU0YTc3MWQwZjczZTJhZTgzYjgxMjA4ZjBmMzZiYTYyMDkxMmFhODdlMjE1MSJ9"
+        }
+      ]
+    },
+    {
+      "id": "claim_ca5058c7fbf848f086d786f8d0cc09e0",
+      "statement": "The documented minimal usage constructs a default agent and invokes it with a user message, after which the agent can plan, use filesystem tools, and manage longer tasks with sub-agents and filesystem-backed context.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/README.md#L24-L32",
+          "version": "repo-lines-v1:sha256:a5a85d8f30955bd0b171c4c6dce664ebb3f1eb7e06936894fa49b5207d83dad3:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMDE3M2YxZDZlZjY2NzY5ODQ3YWIwYTE0NTdlMjhjZTRjN2IwZDFhZDVmMmY4OGEwYjJiZDA1ODk2ODRlNjE3NSIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiZGVmYzQ4ZGU4NTBlMTQxY2Y3N2UwMDk2N2Q1ZWEyYjg0YWFkN2MzNzJmM2MxNGYyZDg1YWFkYjQyZTE5YTM3MCIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiYjdjOTM4Y2ZkMjBkOGNjZDUzYjk1ZDBkZDZlNDFjMjFhNDlkNjY5NTMyYzY0MDUxNzExMjU5NjJlNzE5NDBmNiIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMjFiYjZmMjUyOTc3NzhiNzI4MzdmMTE3YWU0ODQyOTFlYjQwNjFmOGQxNmU3ZDkyMzExMGFlZTkzMTAwNmY4NCJ9"
+        },
+        {
+          "resource": "repo://libs/deepagents/README.md#L37-L71",
+          "version": "repo-lines-v1:sha256:e31f7cd0214fcaf4f3a6224d1fd15a1224eb201586510dbd93b70d590732239f:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImZhYjRmODE0ZjU1YjUwOWY0M2I4ZDBjYzg0OWRlZDk5OTcxMTE0NzMxMzRjZmUyYzg2YjE2ZmYxZjc3ZTVlNmMiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdmMjFmN2U0M2NiNDYzNmI2Y2NkZjAwZDU3YjE1M2IyYWFjODQ5MThjYmRmYzM3MmU1ZTkyZWU3OTYzMGM3ZDciLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImZlNmQyOWUzNDcwNTQzMmZkODkzNDFjZjRhNzVjNDYxMzFjYzQwMzQ2NDA3ZGZiOTU2Zjk3M2IxZmJmMzliZTIiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6Ijg0ZjgwZjE2NTZlOTY5NjAwMjUyOWYxOTU0NjQ5ZDhkODU3NWQxYTFlMjM2OTZhODBmMjRkMzdlOTUwMzc0NTMifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_f7b7c76bcdfd4d248d35b1f2b842139b",
+      "statement": "The composite-backend example combines a `MemorySaver` checkpointer and `InMemoryStore` with a `CompositeBackend` whose default `StateBackend` handles ordinary paths and whose `/memories/` route delegates to `StoreBackend`.",
+      "evidence": [
+        {
+          "resource": "repo://examples/backends/composite-backend.ts#L7-L15",
+          "version": "repo-lines-v1:sha256:dbf92968e755bbda2c117f2cc6c961f2ca0bc38e3d2660b18cd4f015b473afb3:eyJzZWxlY3RlZExpbmVDb3VudCI6OSwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiOTY0ODA4MTQ4YzY4YzM1MWJkYzBhZDBiNGM3Yzg1M2U1YTM3Yjk3OTE1ZGRkNTRjY2RjZDgwZDNhMzVkZjZkZCIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOTY1ZjVmYzAxOWQwZmVjNGU5NmJiYzY1ZGEyYWI2MzhmOWQ4NTkyOWI0Yjc4NWJjNTVmY2NhMWFhYmE2OGVkYSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiMmRiZjhmNjgwOTczOWNjYzA5NDI5NmExZTk4NTA2NTJhNjU5OWViYmIxYmFlZmM3NTUyZTQxN2Y3NWE0MmE0YSIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiY2JjZDllNzNiMjVhNmI0NWMyNTI0MzE5NWE2MTA0YTM2NDVmMTNhN2ZmNzJiNTNhZGUzMTJhZGI3MmIzMGUxZSJ9"
+        },
+        {
+          "resource": "repo://examples/backends/composite-backend.ts#L70-L81",
+          "version": "repo-lines-v1:sha256:6e45ec90a940ea873a3f5e8462ecbafc6348261f738f66ef048edbefae96ce67:eyJzZWxlY3RlZExpbmVDb3VudCI6MTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3ZjBlMWViNjk3YWMxNmIyODUwNDY5MGVjYjQyMjFjZThkMmIwNGRkY2I1ZjkyNWNiYjIyMDVkM2VhZmFkN2YiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImQyZTZmY2RkNGQ3Mjc0ODdlOGI4ZDdhNDM3N2YwNjJjZDFiY2U1OTQ0NGQ2ZDczYWE4OGNhNTg0OGY5NGI0ZTEiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6Ijc1MThjOTEyMTg5MThmMmE2ODZmMjFiNjc3ZmQ4NTA3NDY1OTc1ODA4NjFhNzFkNTBjMDIzOTAyMzZhN2M2Y2IiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjQ5OWU4YTQxMTM5MjU0NWEwOWJhZjE0ZDUxY2MyZjc4ZjIwYWQ0YjgxNTFmNWI1ZGEzNTkzN2I1YzU1ZWMxYTIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_594f9c4423fb4e3085e663c868ac783f",
+      "statement": "The hierarchical example demonstrates that a compiled deep agent can be installed as a parent agent's `CompiledSubAgent`, while the parent model chooses between direct tools and delegation and nested agents can themselves have tools and sub-agents.",
+      "evidence": [
+        {
+          "resource": "repo://examples/hierarchical/hierarchical-agent.ts#L1-L23",
+          "version": "repo-lines-v1:sha256:58ae64aa9a325f9bbb239b5fa992092fc22eb1a8cd81e005fe9a45b2a6b07f91:eyJzZWxlY3RlZExpbmVDb3VudCI6MjMsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImVhZjIyY2YwNzMyNTkyYzI0NzE0MWNiZTYxZWZhMTEwMTI2MTJmNWEzMTIyYjlhZjliYmFmNTJmNTcyNGQxOTQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6Ijg1OWUyNDdlMjhmMmE4NTM4YzA4OTY0MDc1NjUxNDY0NTYwNDI2ZThjM2YwMDQ2OGUxYzg2NjIzMGViMzdhZTIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjowLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjhjYmZiZmNmMjEwZTI1MDk1YWM3ZWRiNDBlZWE1ZTVkNjRmZDc0YzQ0NDM3NjRmMDQwZmU4M2QxMGU2NWQ4MjgifQ"
+        },
+        {
+          "resource": "repo://examples/hierarchical/hierarchical-agent.ts#L108-L153",
+          "version": "repo-lines-v1:sha256:82e0997b72b2b11d36d6404fd1942dd69cc8053b8809c0ed7364c090e6769192:eyJzZWxlY3RlZExpbmVDb3VudCI6NDYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImViNjE3YTY1NjVlMjkzNWYxY2JlM2U5Y2Y4Zjk0MDUzYmFmN2YzMTk5ZjM3MGM1MzRlNzAyYmY1ZGM1MTQ3ZjgiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjAyNzFjNjRjZDk4NmRlZDAxZDc0NTI4ZTI3OGYzMzA5NGI1ZTcwMThkZmQ4NTRhZTA2MjdmNDYyODhhOWQ0MjkiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjU0NDEyNzI3MWM2Y2JjNjBmNWIwOTU1OWI2MDE2MTE5ODExNzdmODMwOTgyZGMwY2Q3NzBjZjRiYTg4NTE2YzUifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_79c2bbc5f07d4281960d1ab10ad1d37c",
+      "statement": "DeepAgents' default Vitest configuration excludes `**/*.int.test.ts` and includes `src/**/*.test.ts`; `--mode int` instead includes integration tests, raises the timeout, names the project `int`, and loads the LangSmith gateway setup.",
+      "evidence": [
+        {
+          "resource": "repo://libs/deepagents/package.json#L15-L20",
+          "version": "repo-lines-v1:sha256:208acd81fd2309df204001be6d378bbf6ecf467aa321a7a39ffa776fed6ce1b8:eyJzZWxlY3RlZExpbmVDb3VudCI6NiwiZmlyc3RTZWxlY3RlZExpbmVIYXNoIjoiMjQxZmMyNDllZmE3MWIwZTdhOTdmN2Y0ZWI4Yjg5NDk0YTU5Y2IzZjg3ZDcxYmU2YWFkNjNhYTNiYTVlM2QzYyIsImxhc3RTZWxlY3RlZExpbmVIYXNoIjoiOGI1MDk4YjQwYzkwYTNjZGI4OWFiY2E5YTI2MDk0MzI4YzliNjg2OWYyNmVkMzUyZjVlNjg1ZGRlYmRiYmUzNSIsInByZWNlZGluZ0NvbnRleHRMaW5lQ291bnQiOjMsInByZWNlZGluZ0NvbnRleHRIYXNoIjoiNjAzZTY3M2IxZjVkNjdlZTIwNWQ1ZGMwMzRmZWY4NGRjZTA0NzI4ZDVlYWZmNzI3MDNkMmNkYjQwZmRhNjFhNCIsImZvbGxvd2luZ0NvbnRleHRMaW5lQ291bnQiOjMsImZvbGxvd2luZ0NvbnRleHRIYXNoIjoiMTIzMWNiMDcwNTI3YWFmOTFjZmJkNDc1YTU4OGEwZjI4OTY1OTAxM2QzNmIxM2E2ZDI2NDU1YmYwMTU5ZjM2ZSJ9"
+        },
+        {
+          "resource": "repo://libs/deepagents/vitest.config.ts#L13-L48",
+          "version": "repo-lines-v1:sha256:94c78bee43945abeea4194a0e67c5989d3920558d7cc5fd0dce032edfc41342d:eyJzZWxlY3RlZExpbmVDb3VudCI6MzYsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImYzYTViZjcyYWRiNjhjNzMxZTA4ZjNkOGJjYzQ4NzY0OGNjMWE3OWU3M2ZhOGZkNjJhMDMyYjdlNGUxYzczZTAiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlkNTc3M2I0ZmM3ZjFlZGZlNmYzOThlZDgyNmM1OGMzYjRjY2ExOTNjNTEyNWFiYmQ3NzllMjQzOTU2M2E5N2EiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjE1YTMwZWVjNDc3OGM5OGI0MmU3Nzk0MWQyOGI4NzJlMmNkODY4YzJjNWQ2M2NhNzRjMDIxZmRkMmFhNzljYjciLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjoxLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImY2ZjViNDBiMTU4NDU3ZDE3ODY0ZjIxNzkwNzg2ZGQ1YTJlY2RiNjRiNjZhNjUxZjc4OGQ0ZTI1Y2QzMzAzZDIifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_628316f950484063b9ec9c4cf7dbb603",
+      "statement": "CI builds only after formatting, lint, README-spelling, and library-spelling checks, archives the build output, then reuses that archive for a cross-platform unit matrix and a separate integration job.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L110-L161",
+          "version": "repo-lines-v1:sha256:2c42c53d1c5cc183826a515d62eb3b2983870002d9528c841a195a9db1f49d84:eyJzZWxlY3RlZExpbmVDb3VudCI6NTIsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImIyMDA1Nzc3NzZjNjY4YjcwMWQ3MTY1YTk3MmNiYWJiNmVkZWQxMjhiYjg1ZmE3MGMzMjYwYjU4ZTBlOWIwNDQiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6ImFmOGNmMDAwZDc0NjJiZjI3OTJlMTExMDVjZDA3YWJmZjFiZTQzOTIxYmM2ODE5MjRhY2U0Zjk0NGI4NGI5MDgiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImJmNjM4NDI5NGQxNGUwY2YxYzE0MTVjMTE2ZDc1NjdlNWQ2MTllOWIxOTMzNjRhYWRlMzNlMzgxMGU0NWU2NDYiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImJhZjU2ZTBiYzI2ZjZlZGZlMzVlYjdiYmQxYzUxZWVkOWIzNTMwYmU5MWI3MTg2MjJmM2EwMmNmNzI4ZGVhOTcifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/ci.yml#L25-L41",
+          "version": "repo-lines-v1:sha256:a53bdda16c5b324abc02b1dc54cfd4cda6e01c3d9650bee72ed112f55a5f0095:eyJzZWxlY3RlZExpbmVDb3VudCI6MTcsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6ImU5ZDgwMTU0ZWQ0MmZjNWM3NzliMTMzMTU3OGI1OGI4OWM4MDFlYWNlNzRmMjRjZDQ4ZWI0YTIzNTc5NDBhOTUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjcxNjNkZjdkMTk0ODI3Njc5ZjAzYzZlZDVkODBmODM3NTNmZTgxZWIwZjQyYzVjYTRkMDgxOGI4ZDAwNjkyYjUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjIxNjdkNDFiY2IyOTQ1MmE0ZGUwODI5NTZhNjYyZGQ1ZDMyZWVjNzYwODRmZDAwZjE3MjE0MDg5ZDk1YTUzNDQiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6IjAxN2FiNTc0Y2MxNWY3YWRhN2VlYWE1YmMwZGM3Y2MzY2YyZDVjOTY5NGI1M2U3ZWM4NTcyYmM1M2RjOTNiZmYifQ"
+        },
+        {
+          "resource": "repo://.github/workflows/ci.yml#L80-L108",
+          "version": "repo-lines-v1:sha256:e19001c20ac89380b0bbe4af8ffecd96034a686b22153c9204fda851ca755aac:eyJzZWxlY3RlZExpbmVDb3VudCI6MjksImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjdlZTNjNjBkYjI1M2NiY2VhNzI0YWFkZDkxOGViOTQ2NjRmN2M2N2U3ODRmNzk2Zjc4NGNmMTAyMjA3ZDI2YmUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjlhZTZlNzI5MTZkNjM0MTM2YjkxNWI3YTVmY2Y5NTUxZDM4ZjE3YjY5ODk0ZGUwZTMxMmQ1NmRjMzMzNDkyOTQiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6IjU4ZmQ5YWIyYjVhYzAxNmQyOWIzMWE2OTAwOTgxM2QzYWEwM2E3NjI1YjBkOGM5NTg2MThlMTA1ZGU0YjJlMGUiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjozLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImMxM2VlOTI2NmYyOGZhNjVkZDI1YmQ5NDliYmJlMmI2ZGM1YzI3YzYwMjA4YWE2M2NkOGVkYzQ1YjJlNjg1NTEifQ"
+        }
+      ]
+    },
+    {
+      "id": "claim_8f1988b7050944c9a752afdae0abea39",
+      "statement": "The CI integration job is credentialed and conditionally withheld from fork pull requests and Dependabot pull requests; its environment includes LangSmith gateway or direct model credentials plus Deno, Daytona, and Modal sandbox credentials.",
+      "evidence": [
+        {
+          "resource": "repo://.github/workflows/ci.yml#L138-L172",
+          "version": "repo-lines-v1:sha256:3b5ce945950d4ef2cea3efe11429f6fae47a4fecc4d89e6734b6038a3172da36:eyJzZWxlY3RlZExpbmVDb3VudCI6MzUsImZpcnN0U2VsZWN0ZWRMaW5lSGFzaCI6IjNlNTJlZGY3YTc1ZDg1ZmQyZmM0Yjg5MTUyMGIwNjdkMzNkZGMzOTk5ZjNlNDc4OTI2MjYyZTc0YmNiYzhkMDUiLCJsYXN0U2VsZWN0ZWRMaW5lSGFzaCI6IjA3NjI4MmY3NzI1MGU3OTMxMTc4YzJjOWViN2ViMDZkMTQxNzBmNzQwODJjMGEyYTg4Njc5OTE0ZGUzZmM0ZGUiLCJwcmVjZWRpbmdDb250ZXh0TGluZUNvdW50IjozLCJwcmVjZWRpbmdDb250ZXh0SGFzaCI6ImVhM2I1ZGRmNDMzNjcyYmY1YWVmYjk0NDI3NDJkOTI5NGNjNDMyNThjODczYWI5MGYwMDhmZDM2ODZkMWU0NjgiLCJmb2xsb3dpbmdDb250ZXh0TGluZUNvdW50IjowLCJmb2xsb3dpbmdDb250ZXh0SGFzaCI6ImUzYjBjNDQyOThmYzFjMTQ5YWZiZjRjODk5NmZiOTI0MjdhZTQxZTQ2NDliOTM0Y2E0OTU5OTFiNzg1MmI4NTUifQ"
+        }
+      ]
+    }
+  ],
+  "verification": {
+    "by": "openwiki/0.5.2",
+    "at": "2026-09-17T22:06:29.984Z"
+  }
+}

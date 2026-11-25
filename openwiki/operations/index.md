@@ -1,0 +1,4 @@
+# Files
+
+- [CI, Integration Environments, and Release Operations](ci-release.md) - Explains the pnpm workspace command surface, CI quality and build gates, cross-platform unit matrix, credentialed integration tests, Changesets publication, CLI packaging, and scheduled OpenWiki refreshes. Use it to choose the right local command, understand what CI actually exercises, and troubleshoot release or documentation automation.
+- [Configuration, Credentials, and Security Boundaries](configuration-security.md) - Runtime configuration and security guidance for DeepAgents, including workspace and memory paths, filesystem permissions, local shell behavior, ACP logging, provider credentials, and sandbox boundaries. Use this page to choose safe defaults and understand which controls are enforced by DeepAgents versus delegated to an external tool or sandbox provider.
