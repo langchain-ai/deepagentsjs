@@ -355,6 +355,41 @@ describe("StateBackend", () => {
     });
   });
 
+  it("should report a read offset past EOF as an error, like the other backends", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
+
+    const content = "line1\nline2\nline3\nline4\nline5";
+    const writeRes = backend.write("/multiline.txt", content);
+    Object.assign(state.files, writeRes.filesUpdate!);
+
+    expect(backend.read("/multiline.txt", 5, 10).error).toBe(
+      "Line offset 5 exceeds file length (5 lines)",
+    );
+    expect(backend.read("/multiline.txt", 99, 10).error).toBe(
+      "Line offset 99 exceeds file length (5 lines)",
+    );
+  });
+
+  it("should still return an empty page for a zero limit and for an empty file", () => {
+    const { state, runtime } = makeConfig();
+    const backend = new StateBackend(runtime);
+
+    const content = "line1\nline2\nline3\nline4\nline5";
+    const writeRes = backend.write("/multiline.txt", content);
+    Object.assign(state.files, writeRes.filesUpdate!);
+    const emptyWrite = backend.write("/empty.txt", "");
+    Object.assign(state.files, emptyWrite.filesUpdate!);
+
+    const zeroLimit = backend.read("/multiline.txt", 0, 0);
+    expect(zeroLimit.error).toBeUndefined();
+    expect(zeroLimit.content).toBe("");
+
+    const emptyFile = backend.read("/empty.txt", 0, 10);
+    expect(emptyFile.error).toBeUndefined();
+    expect(emptyFile.content).toBe("");
+  });
+
   it("should handle edit with replace_all", () => {
     const { state, runtime } = makeConfig();
     const backend = new StateBackend(runtime);

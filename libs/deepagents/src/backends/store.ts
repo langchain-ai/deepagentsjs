@@ -565,17 +565,20 @@ export class StoreBackend implements BackendProtocolV2 {
       const lines = fileDataV2.content.split("\n");
       const totalLines =
         lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+      if (normalizedLimit === 0 || totalLines === 0) {
+        return { content: "", mimeType: fileDataV2.mimeType };
+      }
+      // Same EOF contract as the other backends: an offset past the last line
+      // is an error, not an empty page.
+      if (normalizedOffset >= totalLines) {
+        return {
+          error: `Line offset ${normalizedOffset} exceeds file length (${totalLines} lines)`,
+        };
+      }
       const selected = lines.slice(
         normalizedOffset,
         normalizedOffset + normalizedLimit,
       );
-      if (
-        selected.length === 0 ||
-        normalizedOffset >= totalLines ||
-        normalizedLimit === 0
-      ) {
-        return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
-      }
       const endOffset = Math.min(
         normalizedOffset + selected.length,
         totalLines,

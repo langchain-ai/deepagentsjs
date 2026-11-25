@@ -312,17 +312,22 @@ export class StateBackend implements BackendProtocolV2 {
     const lines = fileDataV2.content.split("\n");
     const totalLines =
       lines[lines.length - 1] === "" ? lines.length - 1 : lines.length;
+    if (normalizedLimit === 0 || totalLines === 0) {
+      return { content: "", mimeType: fileDataV2.mimeType };
+    }
+    // An offset past EOF is reported as an error, not as an empty page:
+    // `FilesystemBackend`, `ContextHubBackend` and the Python backend all
+    // return the same message, and a silent "" reads as an empty file to the
+    // model.
+    if (normalizedOffset >= totalLines) {
+      return {
+        error: `Line offset ${normalizedOffset} exceeds file length (${totalLines} lines)`,
+      };
+    }
     const selected = lines.slice(
       normalizedOffset,
       normalizedOffset + normalizedLimit,
     );
-    if (
-      selected.length === 0 ||
-      normalizedOffset >= totalLines ||
-      normalizedLimit === 0
-    ) {
-      return { content: selected.join("\n"), mimeType: fileDataV2.mimeType };
-    }
     const endOffset = Math.min(normalizedOffset + selected.length, totalLines);
     return {
       content: selected.join("\n"),

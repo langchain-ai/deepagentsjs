@@ -245,6 +245,37 @@ describe("StoreBackend", () => {
     });
   });
 
+  it("should report a read offset past EOF as an error, like the other backends", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    const content = "line1\nline2\nline3\nline4\nline5";
+    await backend.write("/multiline.txt", content);
+
+    expect((await backend.read("/multiline.txt", 5, 10)).error).toBe(
+      "Line offset 5 exceeds file length (5 lines)",
+    );
+    expect((await backend.read("/multiline.txt", 99, 10)).error).toBe(
+      "Line offset 99 exceeds file length (5 lines)",
+    );
+  });
+
+  it("should still return an empty page for a zero limit and for an empty file", async () => {
+    const { runtime } = makeConfig();
+    const backend = new StoreBackend(runtime);
+
+    await backend.write("/multiline.txt", "line1\nline2\nline3\nline4\nline5");
+    await backend.write("/empty.txt", "");
+
+    const zeroLimit = await backend.read("/multiline.txt", 0, 0);
+    expect(zeroLimit.error).toBeUndefined();
+    expect(zeroLimit.content).toBe("");
+
+    const emptyFile = await backend.read("/empty.txt", 0, 10);
+    expect(emptyFile.error).toBeUndefined();
+    expect(emptyFile.content).toBe("");
+  });
+
   it("should handle edit with replace_all", async () => {
     const { runtime } = makeConfig();
     const backend = new StoreBackend(runtime);
