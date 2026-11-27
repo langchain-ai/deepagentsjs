@@ -205,7 +205,7 @@ describe("LocalShellBackend", () => {
       expect(result.output).not.toContain("(custom timeout)");
     });
 
-    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    it.each([0, -1, 3_000_000, Number.NaN, Number.POSITIVE_INFINITY])(
       "should reject a per-call timeout of %s",
       async (timeout) => {
         const backend = new LocalShellBackend({
@@ -229,7 +229,7 @@ describe("LocalShellBackend", () => {
       const markerPath = path.join(tmpDir, "after-timeout.txt");
 
       const result = await backend.execute(
-        `sleep 3; echo late > "${markerPath}"`,
+        `sleep 3 && echo late > "${markerPath}"`,
         { timeout: 1 },
       );
       await new Promise((resolve) => setTimeout(resolve, 3000));

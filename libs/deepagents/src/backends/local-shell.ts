@@ -27,6 +27,8 @@ import type {
 } from "./protocol.js";
 import { SandboxError } from "./protocol.js";
 
+const MAX_TIMER_DELAY_SECONDS = Math.floor((2 ** 31 - 1) / 1000);
+
 function formatTimeoutMessage(
   timeoutSeconds: number,
   isCustomTimeout: boolean,
@@ -387,9 +389,13 @@ export class LocalShellBackend
 
     const customTimeout = options?.timeout;
     const effectiveTimeout = customTimeout ?? this.#timeout;
-    if (!Number.isFinite(effectiveTimeout) || effectiveTimeout <= 0) {
+    if (
+      !Number.isFinite(effectiveTimeout) ||
+      effectiveTimeout <= 0 ||
+      effectiveTimeout > MAX_TIMER_DELAY_SECONDS
+    ) {
       return {
-        output: `Error: timeout must be a positive number, got ${effectiveTimeout}.`,
+        output: `Error: timeout must be a positive number of at most ${MAX_TIMER_DELAY_SECONDS} seconds, got ${effectiveTimeout}.`,
         exitCode: 1,
         truncated: false,
       };
