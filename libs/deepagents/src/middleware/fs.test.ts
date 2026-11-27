@@ -2338,6 +2338,176 @@ describe("createFilesystemMiddleware", () => {
     });
   });
 
+  describe("execute tool timeout", () => {
+    function findExecuteTool(
+      middleware: ReturnType<typeof createFilesystemMiddleware>,
+    ) {
+      const executeTool = middleware.tools!.find(
+        (tool) => tool.name === "execute",
+      );
+      if (!executeTool) {
+        throw new Error("execute tool is not registered");
+      }
+      return executeTool;
+    }
+
+    function invokeExecute(
+      middleware: ReturnType<typeof createFilesystemMiddleware>,
+      args: Record<string, unknown>,
+    ) {
+      return findExecuteTool(middleware).invoke({
+        type: "tool_call",
+        id: "call-execute",
+        name: "execute",
+        args,
+      });
+    }
+
+    beforeEach(() => {
+      vi.mocked(getCurrentTaskInput).mockReturnValue({
+        messages: [],
+        files: {},
+      });
+    });
+
+    it("calls the backend without options when timeout is omitted", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+
+      await invokeExecute(middleware, { command: "ls" });
+
+      expect((backend as any).execute).toHaveBeenCalledWith("ls");
+    });
+
+    it("forwards a per-call timeout to the backend", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+
+      await invokeExecute(middleware, { command: "make build", timeout: 300 });
+
+      expect((backend as any).execute).toHaveBeenCalledWith("make build", {
+        timeout: 300,
+      });
+    });
+
+    it("coerces a stringified timeout to a number", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+
+      await invokeExecute(middleware, { command: "make", timeout: "60" });
+
+      expect((backend as any).execute).toHaveBeenCalledWith("make", {
+        timeout: 60,
+      });
+    });
+
+    it("forwards a zero timeout to the backend", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+
+      await invokeExecute(middleware, { command: "serve", timeout: 0 });
+
+      expect((backend as any).execute).toHaveBeenCalledWith("serve", {
+        timeout: 0,
+      });
+    });
+
+    it("rejects a negative timeout without calling the backend", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+
+      const result = await invokeExecute(middleware, {
+        command: "ls",
+        timeout: -1,
+      });
+
+      expect((backend as any).execute).not.toHaveBeenCalled();
+      expect(ToolMessage.isInstance(result)).toBe(true);
+      expect(result.status).toBe("error");
+      expect(result.content).toBe(
+        "Error: timeout must be non-negative, got -1.",
+      );
+    });
+
+    it("rejects a timeout above the default maximum", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({ backend });
+
+      const result = await invokeExecute(middleware, {
+        command: "ls",
+        timeout: 3601,
+      });
+
+      expect((backend as any).execute).not.toHaveBeenCalled();
+      expect(result.status).toBe("error");
+      expect(result.content).toBe(
+        "Error: timeout 3601s exceeds maximum allowed (3600s).",
+      );
+    });
+
+    it("honors a custom maxExecuteTimeout", async () => {
+      const backend = createMockSandboxBackend();
+      const middleware = createFilesystemMiddleware({
+        backend,
+        maxExecuteTimeout: 60,
+      });
+
+      const rejected = await invokeExecute(middleware, {
+        command: "ls",
+        timeout: 61,
+      });
+      await invokeExecute(middleware, { command: "ls", timeout: 60 });
+
+      expect(rejected.content).toBe(
+        "Error: timeout 61s exceeds maximum allowed (60s).",
+      );
+      expect((backend as any).execute).toHaveBeenCalledTimes(1);
+      expect((backend as any).execute).toHaveBeenCalledWith("ls", {
+        timeout: 60,
+      });
+    });
+
+    it.each([0, -5, 1.5, Number.NaN])(
+      "throws when maxExecuteTimeout is %s",
+      (maxExecuteTimeout) => {
+        expect(() =>
+          createFilesystemMiddleware({
+            backend: createMockSandboxBackend(),
+            maxExecuteTimeout,
+          }),
+        ).toThrow(/maxExecuteTimeout must be a positive integer/);
+      },
+    );
+
+    it("returns a timeout result from the backend to the model", async () => {
+      const backend = createMockSandboxBackend();
+      (backend as any).execute = vi.fn().mockResolvedValue({
+        output: "Error: Command timed out after 5.0 seconds (custom timeout).",
+        exitCode: 124,
+        truncated: false,
+      });
+      const middleware = createFilesystemMiddleware({ backend });
+
+      const result = await invokeExecute(middleware, {
+        command: "sleep 60",
+        timeout: 5,
+      });
+
+      expect(result.content).toContain("timed out after 5.0 seconds");
+      expect(result.content).toContain("[Command failed with exit code 124]");
+    });
+
+    it("mentions the timeout parameter in the tool description and schema", () => {
+      const middleware = createFilesystemMiddleware({
+        backend: createMockSandboxBackend(),
+      });
+      const executeTool = findExecuteTool(middleware) as any;
+
+      expect(executeTool.description).toContain("optional timeout");
+      expect(executeTool.schema.shape.timeout).toBeDefined();
+    });
+  });
+
   describe("beforeAgent - large HumanMessage eviction", () => {
     it("should return undefined when eviction is disabled", async () => {
       const middleware = createFilesystemMiddleware({

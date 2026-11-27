@@ -169,6 +169,7 @@ export {
   type EditResult,
   type DeleteResult,
   // Sandbox execution types
+  type ExecuteOptions,
   type ExecuteResponse,
   type FileData,
   type FileOperationError,

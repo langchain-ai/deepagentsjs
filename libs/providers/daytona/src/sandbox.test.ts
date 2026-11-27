@@ -182,6 +182,30 @@ describe("DaytonaSandbox", () => {
       });
     });
 
+    it("should use the default timeout when no per-call timeout is given", async () => {
+      const sandbox = await DaytonaSandbox.create({ timeout: 120 });
+      await sandbox.execute("ls");
+
+      expect(mockSandbox.process.executeCommand).toHaveBeenLastCalledWith(
+        "ls",
+        undefined,
+        undefined,
+        120,
+      );
+    });
+
+    it("should pass a per-call timeout to the SDK", async () => {
+      const sandbox = await DaytonaSandbox.create({ timeout: 120 });
+      await sandbox.execute("make build", { timeout: 600 });
+
+      expect(mockSandbox.process.executeCommand).toHaveBeenLastCalledWith(
+        "make build",
+        undefined,
+        undefined,
+        600,
+      );
+    });
+
     it("should handle non-zero exit codes", async () => {
       mockSandbox.process.executeCommand.mockResolvedValueOnce({
         result: "Command not found\n",

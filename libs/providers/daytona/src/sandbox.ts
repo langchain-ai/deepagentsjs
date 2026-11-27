@@ -357,6 +357,9 @@ export class DaytonaSandbox extends BaseSandbox {
    * Commands are run using the sandbox's shell.
    *
    * @param command - The shell command to execute
+   * @param options - Optional per-call options
+   * @param options.timeout - Timeout in seconds for this command. Overrides
+   *   the default timeout. In Daytona, `0` means wait indefinitely.
    * @returns Execution result with output, exit code, and truncation flag
    * @throws {DaytonaSandboxError} If the sandbox is not initialized
    *
@@ -365,9 +368,14 @@ export class DaytonaSandbox extends BaseSandbox {
    * const result = await sandbox.execute("echo 'Hello World'");
    * console.log(result.output); // "Hello World\n"
    * console.log(result.exitCode); // 0
+   *
+   * const build = await sandbox.execute("make build", { timeout: 600 });
    * ```
    */
-  async execute(command: string): Promise<ExecuteResponse> {
+  async execute(
+    command: string,
+    options?: { timeout?: number },
+  ): Promise<ExecuteResponse> {
     const sandbox = this.instance; // Throws if not initialized
 
     try {
@@ -375,7 +383,7 @@ export class DaytonaSandbox extends BaseSandbox {
         command,
         undefined,
         undefined,
-        this.#timeout,
+        options?.timeout ?? this.#timeout,
       );
 
       return {
