@@ -330,6 +330,10 @@ export class ModalSandbox extends BaseSandbox {
    * Uses sh instead of bash for compatibility with minimal images like Alpine.
    *
    * @param command - The shell command to execute
+   * @param options - Optional per-call options
+   * @param options.timeout - Timeout in seconds for this command. When
+   *   omitted, the command has no per-command timeout. In Modal, `0` means
+   *   wait indefinitely.
    * @returns Execution result with output, exit code, and truncation flag
    * @throws {ModalSandboxError} If the sandbox is not initialized
    *
@@ -338,9 +342,14 @@ export class ModalSandbox extends BaseSandbox {
    * const result = await sandbox.execute("echo 'Hello World'");
    * console.log(result.output); // "Hello World\n"
    * console.log(result.exitCode); // 0
+   *
+   * const build = await sandbox.execute("make build", { timeout: 600 });
    * ```
    */
-  async execute(command: string): Promise<ExecuteResponse> {
+  async execute(
+    command: string,
+    options?: { timeout?: number },
+  ): Promise<ExecuteResponse> {
     const sandbox = this.instance; // Throws if not initialized
 
     try {
@@ -348,6 +357,9 @@ export class ModalSandbox extends BaseSandbox {
       const process = await sandbox.exec(["sh", "-c", command], {
         stdout: "pipe",
         stderr: "pipe",
+        ...(options?.timeout !== undefined && {
+          timeoutMs: options.timeout * 1000,
+        }),
       });
 
       // Read both stdout and stderr

@@ -579,6 +579,19 @@ describe("ModalSandbox", () => {
       });
     });
 
+    it("should pass a per-call timeout to SDK exec in milliseconds", async () => {
+      const sandbox = await ModalSandbox.create();
+      const execSpy = vi.spyOn(mockState.sandboxInstance!, "exec");
+
+      await sandbox.execute("make build", { timeout: 300 });
+
+      expect(execSpy).toHaveBeenCalledWith(["sh", "-c", "make build"], {
+        stdout: "pipe",
+        stderr: "pipe",
+        timeoutMs: 300_000,
+      });
+    });
+
     it("should return combined stdout and stderr", async () => {
       const sandbox = await ModalSandbox.create();
       mockState.sandboxInstance!.setNextCommandResult("output", "error", 0);

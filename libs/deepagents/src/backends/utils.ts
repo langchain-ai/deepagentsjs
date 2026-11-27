@@ -13,6 +13,7 @@ import {
   applyGrepMaxCount,
   BackendProtocolV1,
   BackendProtocolV2,
+  ExecuteOptions,
   FileData,
   FileDataV1,
   FileDataV2,
@@ -1156,8 +1157,10 @@ export function adaptSandboxProtocol(
 
   // Preserve sandbox protocol properties (execute, id)
   // Both SandboxBackendProtocol and SandboxBackendProtocolV2 have these
-  (adapted as SandboxBackendProtocolV2).execute = (cmd: string) =>
-    sandbox.execute(cmd);
+  (adapted as SandboxBackendProtocolV2).execute = (
+    cmd: string,
+    options?: ExecuteOptions,
+  ) => (options ? sandbox.execute(cmd, options) : sandbox.execute(cmd));
   Object.defineProperty(adapted, "id", {
     value: sandbox.id,
     enumerable: true,

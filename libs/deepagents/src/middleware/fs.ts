@@ -447,6 +447,11 @@ function clipGrepLine(text: string, pattern: string): string {
  */
 export const DEFAULT_GREP_MAX_COUNT = 1000;
 
+/**
+ * Default maximum value in seconds for a per-call `execute` tool timeout.
+ */
+export const DEFAULT_MAX_EXECUTE_TIMEOUT = 3600;
+
 /** Path prefix offloaded binary content blobs are written under. */
 const BLOBS_PREFIX = "/blobs";
 
@@ -1359,7 +1364,7 @@ function getExecuteToolDescription(hasGrep: boolean, hasGlob: boolean): string {
     Usage:
     - Quote paths containing spaces (e.g. cd "/path/with spaces").
     - Chain commands with ';' or '&&' (use '&&' when a command depends on the previous); do not use newlines except inside quoted strings.
-    - Use absolute paths and avoid \`cd\` so the working directory stays stable.
+    - Use absolute paths and avoid \`cd\` so the working directory stays stable; use the optional timeout to override the default.
     - ${searchGuidance}Use read_file rather than cat/head/tail.${examples.length ? `\n${examples.join("\n")}` : ""}
   `;
 }
@@ -2119,11 +2124,26 @@ function createExecuteTool(
     permissions: FilesystemPermission[];
     hasGrep: boolean;
     hasGlob: boolean;
+    maxExecuteTimeout: number;
   },
 ) {
-  const { customDescription, permissions, hasGrep, hasGlob } = options;
+  const {
+    customDescription,
+    permissions,
+    hasGrep,
+    hasGlob,
+    maxExecuteTimeout,
+  } = options;
   return tool(
     async (input, runtime: ToolRuntime) => {
+      const { command, timeout } = input;
+      if (timeout != null) {
+        const timeoutError = validateExecuteTimeout(timeout, maxExecuteTimeout);
+        if (timeoutError !== null) {
+          return toolError(runtime, "execute", timeoutError);
+        }
+      }
+
       const resolvedBackend = await resolveBackend(backend, runtime);
 
       // Runtime check - fail gracefully if not supported
@@ -2149,7 +2169,10 @@ function createExecuteTool(
         );
       }
 
-      const result = await resolvedBackend.execute(input.command);
+      const result =
+        timeout != null
+          ? await resolvedBackend.execute(command, { timeout })
+          : await resolvedBackend.execute(command);
 
       // Format output for LLM consumption
       const parts = [result.output];
@@ -2171,9 +2194,31 @@ function createExecuteTool(
         customDescription || getExecuteToolDescription(hasGrep, hasGlob),
       schema: z.object({
         command: z.string().describe("The shell command to execute"),
+        timeout: z.coerce
+          .number()
+          .int()
+          .optional()
+          .nullable()
+          .default(null)
+          .describe(
+            "Optional timeout in seconds for this command. Overrides the default timeout.",
+          ),
       }),
     },
   );
+}
+
+function validateExecuteTimeout(
+  timeout: number,
+  maxExecuteTimeout: number,
+): string | null {
+  if (timeout < 0) {
+    return `Error: timeout must be non-negative, got ${timeout}.`;
+  }
+  if (timeout > maxExecuteTimeout) {
+    return `Error: timeout ${timeout}s exceeds maximum allowed (${maxExecuteTimeout}s).`;
+  }
+  return null;
 }
 
 /**
@@ -2251,6 +2296,15 @@ export interface FilesystemMiddlewareOptions {
    * argument overrides this default. Set to `null` to disable the cap.
    */
   grepMaxCount?: number | null;
+  /**
+   * Maximum allowed value in seconds for the per-call `timeout` argument of
+   * the `execute` tool (default: 3600).
+   *
+   * The model can pass `timeout` to override the backend's default timeout for
+   * one command. A value above this maximum is rejected with an error message.
+   * Must be a positive integer.
+   */
+  maxExecuteTimeout?: number;
   /**
    * Keep binary `read_file` content and inline `HumanMessage` media out of
    * message history (default: `false`).
@@ -2449,8 +2503,14 @@ export function createFilesystemMiddleware(
     permissions = [],
     tools: filesystemTools = null,
     grepMaxCount = DEFAULT_GREP_MAX_COUNT,
+    maxExecuteTimeout = DEFAULT_MAX_EXECUTE_TIMEOUT,
     offloadBinaryContent = false,
   } = options;
+  if (!Number.isInteger(maxExecuteTimeout) || maxExecuteTimeout <= 0) {
+    throw new Error(
+      `maxExecuteTimeout must be a positive integer, got ${maxExecuteTimeout}`,
+    );
+  }
   // Routing through a CompositeBackend can't be checked safely here (needs
   // the backend adapted first, which isn't possible synchronously for a
   // factory `backend`); this only catches the direct case.
@@ -2538,6 +2598,7 @@ export function createFilesystemMiddleware(
       permissions,
       hasGrep: configuredToolNames.has("grep"),
       hasGlob: configuredToolNames.has("glob"),
+      maxExecuteTimeout,
     }),
   } satisfies Record<FsToolName, unknown>;
   const allTools = FILESYSTEM_TOOL_NAMES.filter(

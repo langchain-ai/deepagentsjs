@@ -157,6 +157,85 @@ describe("LocalShellBackend", () => {
 
       expect(result.exitCode).toBe(124);
       expect(result.output).toContain("timed out");
+      expect(result.output).toContain("re-run using the timeout parameter");
+    });
+
+    it("should apply a per-call timeout shorter than the default", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        inheritEnv: true,
+      });
+
+      const started = performance.now();
+      const result = await backend.execute("sleep 5", { timeout: 1 });
+      const elapsedMs = performance.now() - started;
+
+      expect(result.exitCode).toBe(124);
+      expect(result.output).toContain("timed out after 1.0 seconds");
+      expect(result.output).toContain("(custom timeout)");
+      expect(elapsedMs).toBeLessThan(4000);
+    });
+
+    it("should apply a per-call timeout longer than the default", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        timeout: 1,
+        inheritEnv: true,
+      });
+
+      const result = await backend.execute("sleep 2 && echo finished", {
+        timeout: 10,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.output).toContain("finished");
+    });
+
+    it("should keep the default timeout for later calls after an override", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        timeout: 1,
+        inheritEnv: true,
+      });
+
+      await backend.execute("echo first", { timeout: 10 });
+      const result = await backend.execute("sleep 5");
+
+      expect(result.exitCode).toBe(124);
+      expect(result.output).not.toContain("(custom timeout)");
+    });
+
+    it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+      "should reject a per-call timeout of %s",
+      async (timeout) => {
+        const backend = new LocalShellBackend({
+          rootDir: tmpDir,
+          inheritEnv: true,
+        });
+
+        const result = await backend.execute("echo never", { timeout });
+
+        expect(result.exitCode).toBe(1);
+        expect(result.output).toContain("timeout must be a positive number");
+        expect(result.output).not.toContain("never");
+      },
+    );
+
+    it("should stop the command after a per-call timeout", async () => {
+      const backend = new LocalShellBackend({
+        rootDir: tmpDir,
+        inheritEnv: true,
+      });
+      const markerPath = path.join(tmpDir, "after-timeout.txt");
+
+      const result = await backend.execute(
+        `sleep 3; echo late > "${markerPath}"`,
+        { timeout: 1 },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      expect(result.exitCode).toBe(124);
+      expect(fsSync.existsSync(markerPath)).toBe(false);
     });
 
     it("should truncate large output", async () => {

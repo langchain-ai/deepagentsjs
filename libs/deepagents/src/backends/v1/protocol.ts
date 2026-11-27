@@ -9,6 +9,7 @@
 import type {
   DeleteResult,
   EditResult,
+  ExecuteOptions,
   ExecuteResponse,
   FileData,
   FileDownloadResponse,
@@ -157,9 +158,13 @@ export interface SandboxBackendProtocolV1 extends BackendProtocolV1 {
    * Execute a command in the sandbox.
    *
    * @param command - Full shell command string to execute
+   * @param options - Optional per-call options such as `timeout` in seconds
    * @returns ExecuteResponse with combined output, exit code, and truncation flag
    */
-  execute(command: string): MaybePromise<ExecuteResponse>;
+  execute(
+    command: string,
+    options?: ExecuteOptions,
+  ): MaybePromise<ExecuteResponse>;
 
   /** Unique identifier for the sandbox backend instance */
   readonly id: string;

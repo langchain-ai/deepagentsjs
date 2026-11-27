@@ -320,6 +320,21 @@ export interface ExecuteResponse {
 }
 
 /**
+ * Per-call options for {@link SandboxBackendProtocolV2.execute}.
+ */
+export interface ExecuteOptions {
+  /**
+   * Maximum time in seconds to wait for the command to complete.
+   *
+   * When omitted, the backend uses its default timeout. Use non-negative
+   * integers for portable behavior across backends. A value of `0` may
+   * disable the timeout on backends that support no-timeout execution.
+   * Backends that do not support per-call timeouts ignore this value.
+   */
+  timeout?: number;
+}
+
+/**
  * Standardized error codes for file upload/download operations.
  */
 export type FileOperationError =

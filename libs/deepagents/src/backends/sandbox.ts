@@ -16,6 +16,7 @@
 import type {
   DeleteResult,
   EditResult,
+  ExecuteOptions,
   ExecuteResponse,
   FileDownloadResponse,
   FileInfo,
@@ -353,8 +354,14 @@ export abstract class BaseSandbox implements SandboxBackendProtocolV2 {
   /**
    * Execute a command in the sandbox.
    * This is the only method concrete implementations must provide.
+   *
+   * @param command - Full shell command string to execute
+   * @param options - Optional per-call options such as `timeout` in seconds
    */
-  abstract execute(command: string): MaybePromise<ExecuteResponse>;
+  abstract execute(
+    command: string,
+    options?: ExecuteOptions,
+  ): MaybePromise<ExecuteResponse>;
 
   /**
    * Upload multiple files to the sandbox.

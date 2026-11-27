@@ -7,6 +7,7 @@ import type {
   BackendProtocolV2,
   DeleteResult,
   EditResult,
+  ExecuteOptions,
   ExecuteResponse,
   FileDownloadResponse,
   FileInfo,
@@ -633,17 +634,22 @@ export class CompositeBackend implements BackendProtocolV2 {
    * Execution is not path-specific, so it always delegates to the default backend.
    *
    * @param command - Full shell command string to execute
+   * @param options - Optional per-call options such as `timeout` in seconds
    * @returns ExecuteResponse with combined output, exit code, and truncation flag
    * @throws Error if the default backend doesn't support command execution
    */
-  execute(command: string): Promise<ExecuteResponse> {
+  execute(command: string, options?: ExecuteOptions): Promise<ExecuteResponse> {
     if (!isSandboxBackend(this.default)) {
       throw new Error(
         "Default backend doesn't support command execution (SandboxBackendProtocol). " +
           "To enable execution, provide a default backend that implements SandboxBackendProtocol.",
       );
     }
-    return Promise.resolve(this.default.execute(command));
+    return Promise.resolve(
+      options
+        ? this.default.execute(command, options)
+        : this.default.execute(command),
+    );
   }
 
   /**

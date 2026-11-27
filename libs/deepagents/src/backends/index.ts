@@ -25,6 +25,7 @@ export type {
   DeleteResult,
   StateAndStore,
   // Sandbox execution types
+  ExecuteOptions,
   ExecuteResponse,
   FileOperationError,
   FileDownloadResponse,

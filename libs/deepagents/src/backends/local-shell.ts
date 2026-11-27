@@ -17,6 +17,7 @@ import fg from "fast-glob";
 import { FilesystemBackend } from "./filesystem.js";
 import type {
   EditResult,
+  ExecuteOptions,
   ExecuteResponse,
   FileInfo,
   GlobResult,
@@ -25,6 +26,16 @@ import type {
   SandboxBackendProtocolV2,
 } from "./protocol.js";
 import { SandboxError } from "./protocol.js";
+
+function formatTimeoutMessage(
+  timeoutSeconds: number,
+  isCustomTimeout: boolean,
+): string {
+  const base = `Error: Command timed out after ${timeoutSeconds.toFixed(1)} seconds`;
+  return isCustomTimeout
+    ? `${base} (custom timeout). The command may be stuck or require more time.`
+    : `${base}. For long-running commands, re-run using the timeout parameter.`;
+}
 
 /**
  * Options for creating a LocalShellBackend instance.
@@ -50,6 +61,7 @@ export interface LocalShellBackendOptions {
   /**
    * Maximum time in seconds to wait for shell command execution.
    * Commands exceeding this timeout will be terminated.
+   * Can be overridden per command via `execute(command, { timeout })`.
    * @defaultValue `120`
    */
   timeout?: number;
@@ -123,6 +135,9 @@ export interface LocalShellBackendOptions {
  * const result = await backend.execute("ls -la");
  * console.log(result.output);
  * console.log(result.exitCode);
+ *
+ * // Override the default timeout for a long-running command
+ * const build = await backend.execute("make build", { timeout: 300 });
  *
  * // Use filesystem operations (inherited from FilesystemBackend)
  * const content = await backend.read("/README.md");
@@ -353,12 +368,28 @@ export class LocalShellBackend
    * output stream, with stderr lines prefixed with `[stderr]`.
    *
    * @param command - Shell command string to execute
+   * @param options - Optional per-call options
+   * @param options.timeout - Maximum time in seconds for this command.
+   *   Overrides the default timeout set in the constructor. Must be positive.
    * @returns ExecuteResponse containing output, exit code, and truncation flag
    */
-  async execute(command: string): Promise<ExecuteResponse> {
+  async execute(
+    command: string,
+    options?: ExecuteOptions,
+  ): Promise<ExecuteResponse> {
     if (!command || typeof command !== "string") {
       return {
         output: "Error: Command must be a non-empty string.",
+        exitCode: 1,
+        truncated: false,
+      };
+    }
+
+    const customTimeout = options?.timeout;
+    const effectiveTimeout = customTimeout ?? this.#timeout;
+    if (!Number.isFinite(effectiveTimeout) || effectiveTimeout <= 0) {
+      return {
+        output: `Error: timeout must be a positive number, got ${effectiveTimeout}.`,
         exitCode: 1,
         truncated: false,
       };
@@ -378,7 +409,7 @@ export class LocalShellBackend
       const timer = setTimeout(() => {
         timedOut = true;
         child.kill("SIGTERM");
-      }, this.#timeout * 1000);
+      }, effectiveTimeout * 1000);
 
       child.stdout.on("data", (data: Buffer) => {
         stdout += data.toString();
@@ -402,7 +433,10 @@ export class LocalShellBackend
 
         if (timedOut || signal === "SIGTERM") {
           resolve({
-            output: `Error: Command timed out after ${this.#timeout.toFixed(1)} seconds.`,
+            output: formatTimeoutMessage(
+              effectiveTimeout,
+              customTimeout !== undefined,
+            ),
             exitCode: 124,
             truncated: false,
           });
