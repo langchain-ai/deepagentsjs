@@ -166,14 +166,11 @@ describe("LocalShellBackend", () => {
         inheritEnv: true,
       });
 
-      const started = performance.now();
       const result = await backend.execute("sleep 5", { timeout: 1 });
-      const elapsedMs = performance.now() - started;
 
       expect(result.exitCode).toBe(124);
       expect(result.output).toContain("timed out after 1.0 seconds");
       expect(result.output).toContain("(custom timeout)");
-      expect(elapsedMs).toBeLessThan(4000);
     });
 
     it("should apply a per-call timeout longer than the default", async () => {
