@@ -124,6 +124,7 @@ export function getModelProvider(
     ChatAnthropic: "anthropic",
     ChatOpenAI: "openai",
     ChatGoogleGenerativeAI: "google",
+    ChatGoogle: "google",
   };
   return nameMap[model.getName()];
 }
