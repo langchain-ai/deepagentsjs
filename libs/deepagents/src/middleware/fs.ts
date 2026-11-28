@@ -2870,7 +2870,8 @@ export function createFilesystemMiddleware(
           return result;
         }
 
-        let hasLargeResults = false;
+        let hasFileUpdates = false;
+        let hasReplacedMessages = false;
         const accumulatedFiles: Record<string, FileData> = update.files
           ? { ...update.files }
           : {};
@@ -2885,9 +2886,10 @@ export function createFilesystemMiddleware(
               request.toolCall?.id,
             );
             processedMessages.push(processed.message);
+            hasReplacedMessages ||= processed.message !== msg;
 
             if (processed.filesUpdate) {
-              hasLargeResults = true;
+              hasFileUpdates = true;
               Object.assign(accumulatedFiles, processed.filesUpdate);
             }
           } else {
@@ -2895,12 +2897,16 @@ export function createFilesystemMiddleware(
           }
         }
 
-        if (hasLargeResults) {
+        // Backends that store files outside the graph state (StateBackend,
+        // FilesystemBackend) write the eviction file but return no filesUpdate,
+        // so the replaced message must still be returned in a new Command.
+        if (hasReplacedMessages) {
           return new Command({
+            ...result,
             update: {
               ...update,
               messages: processedMessages,
-              files: accumulatedFiles,
+              ...(hasFileUpdates ? { files: accumulatedFiles } : {}),
             },
           });
         }
